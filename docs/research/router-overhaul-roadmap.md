@@ -200,6 +200,34 @@ is the wrong place.
 - An MCP tool and a REST endpoint that return the guide.
 - A unit test that fails when a flag named in the guide does not exist in the settings, so the guide cannot drift.
 
+**How agents discover it,** by the way they meet Freerouting:
+
+| Entry point | Pointer |
+|---|---|
+| Browsing the repo | A "For AI agents and scripts" section in the README, after the MCP section; `llms.txt` at the root; one line in `AGENTS.md`: "Using Freerouting rather than developing it? See docs/AGENT_GUIDE.md" |
+| Only the jar | First line of `--help`; `--agent-guide` prints the full guide; one startup log line in headless runs; `AGENT_GUIDE.md` next to the jar in the release zip and installers |
+| A bad or missing argument | The usage message ends with the same pointer |
+| MCP | The `instructions` field of the `initialize` reply, which clients pass to the model, plus a `get_agent_guide` tool |
+| REST | `GET /v1/agent-guide`, linked from the OpenAPI description |
+
+**Human documentation.** The README is upstream's general one, and the existing human docs are reference lists
+(`docs/command_line_arguments.md`, `docs/settings.md`). Add:
+
+- **`docs/headless-and-automation.md`**, a narrative guide:
+  - running headless (WSL, remote sessions, CI);
+  - recommended settings by board size;
+  - reading the status file and the estimate, and when to stop;
+  - the stop file;
+  - where the best session goes;
+  - script examples in bash, PowerShell and Python.
+- **New flags in `docs/command_line_arguments.md`**, added in the same commit as each feature.
+- **A README pointer** to the human guide, beside the agent one.
+- **A one-line fork note at the top of the README**, linking to this roadmap. It stays in the fork and is not
+  upstreamed.
+
+The drift test covers every `--router.*` flag named in the agent guide, the human guide and
+`command_line_arguments.md`.
+
 **When.** Phase 2, with step 10. Each later feature updates the guide in the same commit.
 
 ### 6.2 Changing rules mid-run: only at pass boundaries, and only strategy settings
