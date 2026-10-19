@@ -310,6 +310,7 @@ final class AutorouteBatchLoop {
     boolean fanoutRecoveryApplied = false;
     int lastMileAttempts = 0;
     float lastBestScore = Float.NEGATIVE_INFINITY; // score at last board-restore or improvement
+    int lastBestIncomplete = Integer.MAX_VALUE; // incomplete count at lastBestScore
     float globalBestScore = Float.NEGATIVE_INFINITY; // best score seen across all passes
     int passOfBestScore = 0; // pass where globalBestScore was achieved
     int incompleteCountAtBestScore = 0; // incomplete count when globalBestScore was recorded
@@ -397,6 +398,7 @@ final class AutorouteBatchLoop {
             boardStatisticsAfter = boardStatistics;
             boardScoreAfter = boardStatisticsAfter.getRouterScore(job.routerSettings);
             lastBestScore = boardScoreAfter;
+            lastBestIncomplete = boardStatisticsAfter.connections.incompleteCount;
             currentBoardHash = router.board.getHash();
             // Reset the same-hash set after a board restore: the restored board will be
             // routed with a higher ripup budget on subsequent passes, so earlier routing
@@ -492,9 +494,14 @@ final class AutorouteBatchLoop {
       if (currentPass >= STOP_AT_PASS_MINIMUM && continueAutorouting) {
 
         // --- Pass-local counter (resets after board restores) ---
-        if (boardScoreAfter > lastBestScore + STAGNATION_SCORE_THRESHOLD) {
+        if (isProgress(
+            boardScoreAfter,
+            boardStatisticsAfter.connections.incompleteCount,
+            lastBestScore,
+            lastBestIncomplete)) {
           consecutiveNoImprovementPasses = 0;
           lastBestScore = boardScoreAfter;
+          lastBestIncomplete = boardStatisticsAfter.connections.incompleteCount;
         } else {
           consecutiveNoImprovementPasses++;
 
@@ -511,6 +518,7 @@ final class AutorouteBatchLoop {
             boardStatisticsAfter = new BoardStatistics(router.board);
             boardScoreAfter = boardStatisticsAfter.getRouterScore(job.routerSettings);
             lastBestScore = boardScoreAfter;
+            lastBestIncomplete = boardStatisticsAfter.connections.incompleteCount;
             consecutiveNoImprovementPasses = 0;
             fanoutRecoveryApplied = true;
             alreadyRoutedBoardHashes.clear();
@@ -534,6 +542,7 @@ final class AutorouteBatchLoop {
               boardStatisticsAfter = new BoardStatistics(router.board);
               boardScoreAfter = boardStatisticsAfter.getRouterScore(job.routerSettings);
               lastBestScore = boardScoreAfter;
+              lastBestIncomplete = boardStatisticsAfter.connections.incompleteCount;
               consecutiveNoImprovementPasses = 0;
               alreadyRoutedBoardHashes.clear();
               job.logInfo(
@@ -552,7 +561,7 @@ final class AutorouteBatchLoop {
                     + FRLogger.defaultFloatFormat.format(boardScoreAfter)
                     + ") has not improved by more than "
                     + STAGNATION_SCORE_THRESHOLD
-                    + " points in the last "
+                    + " points, nor routed another connection, in the last "
                     + STAGNATION_PASS_LIMIT
                     + " passes ("
                     + boardStatisticsAfter.connections.incompleteCount
@@ -571,7 +580,11 @@ final class AutorouteBatchLoop {
         // --- Global best tracker (not reset by board restores) ---
         // Stops the router if no pass anywhere has meaningfully improved the score
         // in the last STAGNATION_PASS_LIMIT passes, even across board-restore cycles.
-        if (boardScoreAfter > globalBestScore + STAGNATION_SCORE_THRESHOLD) {
+        if (isProgress(
+            boardScoreAfter,
+            boardStatisticsAfter.connections.incompleteCount,
+            globalBestScore,
+            passOfBestScore == 0 ? Integer.MAX_VALUE : incompleteCountAtBestScore)) {
           globalBestScore = boardScoreAfter;
           passOfBestScore = currentPass;
           incompleteCountAtBestScore = boardStatisticsAfter.connections.incompleteCount;
@@ -582,7 +595,7 @@ final class AutorouteBatchLoop {
                   + FRLogger.defaultFloatFormat.format(globalBestScore)
                   + ") has not improved by more than "
                   + STAGNATION_SCORE_THRESHOLD
-                  + " points since pass #"
+                  + " points, nor routed another connection, since pass #"
                   + passOfBestScore
                   + ". Stopping the auto-router after "
                   + currentPass
@@ -606,6 +619,7 @@ final class AutorouteBatchLoop {
         // accumulating until the global tracker fires.
         consecutiveNoImprovementPasses = 0;
         lastBestScore = boardScoreAfter;
+        lastBestIncomplete = boardStatisticsAfter.connections.incompleteCount;
       }
 
       // check if there are still unrouted items
@@ -726,6 +740,17 @@ final class AutorouteBatchLoop {
 
   private int calculateIncompleteCount(RoutingBoard board) {
     return router.calculateIncompleteCount(board);
+  }
+
+  /**
+   * A pass made progress if the score rose by more than the stagnation threshold, or if it routed
+   * more connections than the best so far without lowering the score. On a board with more than
+   * about 1300 connections one routed connection moves the score by less than the threshold, so the
+   * score test alone stopped such boards while they were still routing.
+   */
+  static boolean isProgress(float score, int incomplete, float bestScore, int bestIncomplete) {
+    return score > bestScore + STAGNATION_SCORE_THRESHOLD
+        || (incomplete < bestIncomplete && score > bestScore);
   }
 
   private void removeTails(Item.StopConnectionOption option) {
