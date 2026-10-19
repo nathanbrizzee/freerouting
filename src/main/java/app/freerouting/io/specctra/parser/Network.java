@@ -661,6 +661,14 @@ public class Network extends ScopeKeyword {
         clearanceMatrix.setValue(firstClassNo, secondClassNo, layerIndex, currentClearance);
         clearanceMatrix.setValue(secondClassNo, firstClassNo, layerIndex, currentClearance);
       }
+      raiseItemClassClearances(
+          clearanceMatrix,
+          firstClassNo,
+          itemClearanceClasses(firstClass, firstClassNo),
+          secondClassNo,
+          itemClearanceClasses(secondClass, secondClassNo),
+          currentClearance,
+          layerIndex);
     } else {
       for (String currentString : clearanceRule.clearanceClassPairs) {
         String[] currentPair = currentString.split("_");
@@ -688,6 +696,62 @@ public class Network extends ScopeKeyword {
                 currentSecondClassNo, currentFirstClassNo, layerIndex, currentClearance);
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Returns every clearance class the items of a net class use, including the class named after it.
+   * The default net class, for example, puts its SMD pads in the shared "smd" class when the
+   * structure has a (type default_smd) rule.
+   */
+  private static Set<Integer> itemClearanceClasses(
+      app.freerouting.rules.NetClass netClass, int ownClassNo) {
+    Set<Integer> result = new TreeSet<>();
+    result.add(ownClassNo);
+    result.add(netClass.getTraceClearanceClass());
+    for (DefaultItemClearanceClasses.ItemClass itemClass :
+        DefaultItemClearanceClasses.ItemClass.values()) {
+      if (itemClass != DefaultItemClearanceClasses.ItemClass.NONE) {
+        result.add(netClass.defaultItemClearanceClasses.get(itemClass));
+      }
+    }
+    result.remove(0); // the null class
+    return result;
+  }
+
+  /**
+   * Applies an untyped class_class clearance to every pair of item clearance classes of the two net
+   * classes. Item classes can be shared with other net classes, so the value only ever raises them.
+   * The pair of classes named after the net classes keeps the exact value the caller set, which may
+   * be lower (for example 0 between held classes).
+   */
+  private static void raiseItemClassClearances(
+      ClearanceMatrix clearanceMatrix,
+      int firstOwnClassNo,
+      Set<Integer> firstItemClasses,
+      int secondOwnClassNo,
+      Set<Integer> secondItemClasses,
+      int clearance,
+      int layerIndex) {
+    for (int first : firstItemClasses) {
+      for (int second : secondItemClasses) {
+        if (first == firstOwnClassNo && second == secondOwnClassNo) {
+          continue;
+        }
+        raiseClearance(clearanceMatrix, first, second, clearance, layerIndex);
+      }
+    }
+  }
+
+  private static void raiseClearance(
+      ClearanceMatrix clearanceMatrix, int first, int second, int clearance, int layerIndex) {
+    int fromLayer = layerIndex < 0 ? 0 : layerIndex;
+    int toLayer = layerIndex < 0 ? clearanceMatrix.getLayerCount() - 1 : layerIndex;
+    for (int layer = fromLayer; layer <= toLayer; layer++) {
+      if (clearanceMatrix.getValue(first, second, layer, false) < clearance) {
+        clearanceMatrix.setValue(first, second, layer, clearance);
+        clearanceMatrix.setValue(second, first, layer, clearance);
       }
     }
   }

@@ -292,3 +292,4 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 |---|---|---|---|
 | 2026-10-19 | (this document) | Roadmap and brief | — |
 | 2026-10-19 | phase 1.1 | Final tail and via cleanup runs on every pass-loop exit, repeated until nothing is removed | New `DanglingTailCleanupTest` (bm01, 1 pass, 20 items) fails before the change with dangling items left and passes after it. |
+| 2026-10-19 | phase 1.2 | Untyped `class_class` rules reach every clearance class both net classes use (shared ones only raised) | New `ClassClassClearanceTest`: before, HV trace, via and pad against a default-class SMD pad got 0.20 mm instead of 0.51 mm (the `smd` class from `(type default_smd)` was never updated); after, all nine pairs get 0.51 mm. A 0 rule stays exact between the own classes and does not lower `smd`. Applies to tracks as well as vias. |
