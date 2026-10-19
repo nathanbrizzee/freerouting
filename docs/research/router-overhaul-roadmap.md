@@ -28,8 +28,10 @@ output.
 ## 2. Conclusions
 
 1. **The routing loop has bugs that cost completion and leave danglers.** These are cheap to fix and come first.
-2. **The search does whole-board work for every room** and rebuilds everything for every connection. Fixing that is
-   the largest speed gain, and it does not change routes.
+2. **The search rebuilds its rooms and via sites for every connection** (reuse exists but is off by default), and
+   start rooms begin board-sized. An earlier draft said every room did whole-board work; that holds only for the
+   free-angle tree. The default 45-degree tree prunes as the room shrinks (`board/searchtree/ShapeSearchTree45Degree.java:148-219`),
+   so the remaining wins there are smaller and need a profile before they are ranked (section 11).
 3. **Rip-up has no memory and destroys its own work.** That is why later passes are worse than pass 1.
 4. **The fallback stage reruns the whole board up to five times.** Fallbacks should work on the leftovers only.
 5. **Agents can only submit a whole board and wait.** Region- and net-limited routing, graceful stop, structured
@@ -260,10 +262,10 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 
 | Phase | Steps |
 |---|---|
-| 0. Harness | Benchmark script (one CSV row per run), SES diff tool, baseline. |
-| 1. Bugs | (1) dangler cleanup on every exit, minimum neck width; (2) `class_class` for vias and pads, with a test board; (3) hangs; (4) rip-up victims restored, 2-pin self-rip, dead randomization; (5) stagnation on unrouted count, best-session write, start later passes from the best board as an option; (6) plane targets, fixed-track targets, overlapping pads, board-bounds wires. |
-| 2. Speed and control | (1) room-building pruning (no route change); (2) per-layer filtering, freeing unused clearance trees; (3) room and via-site reuse between connections, adopted if routes match or improve; (4) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (5) a work budget in search steps instead of time; (6) route only these nets or this region; (7) fallback on the leftovers only; (8) parallel fallback portfolio (section 7.4); (9) graceful finish, sub-logs and `status.json`. Everything must work headless (`--gui.enabled=false`), which is how WSL and remote sessions run it. |
-| 3. Finisher | Fine-grid local finisher (section 5.3). |
+| 0. Harness | Benchmark script (one row per run), SES diff, baseline. The user's stage DSNs are the goal set, so they join as soon as they arrive. KiCad DRC as the clearance oracle in the harness, because Freerouting's own count rests on the octagon DRC. |
+| 1. Bugs | (1) dangler cleanup on every exit, minimum neck width; (2) `class_class` for vias and pads, with a test board; (3) hangs; (4) a failed attempt (failed insert or strict-DRC rejection) restores the board, including ripped victims and partial copper; (5) 2-pin self-rip; dead randomization as its own measured commit; (6) stagnation on unrouted count, best-session write; starting later passes from the best board as an option that is off by default and benchmarked against the recoveries upstream documented; (7) plane targets (target doors open on the plane layer, expansion stays closed), fixed-track targets, overlapping pads, board-bounds wires; (8) the optimizer, or a cleanup subset, on partial boards. |
+| 2. Speed and control | (1) a work budget in search steps instead of time, first, because every later measurement depends on it and it makes results the same on every machine; (2) profile, then rank the search costs (start-room size, layer test order, per-layer filtering, unused clearance trees); (3) per-layer-pair via cost and an admissible heuristic, the likeliest cause of long runs left open on empty layers; (4) shove before rip; (5) deterministic net ordering (airline length, pin density, bounding box); (6) a tolerance in `enforceStrictDrc` so it stops rejecting routes over 2-4 um octagon artefacts; (7) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (8) route only these nets or this region; (9) fallback on the leftovers only; (10) graceful finish, sub-logs and `status.json`, with pause and stop at connection boundaries as well as pass boundaries; (11) parallel fallback portfolio, only if (9) leaves enough fallback time to matter. Everything must work headless (`--gui.enabled=false`), which is how WSL and remote sessions run it. |
+| 3. Finisher and escapes | Fine-grid local finisher (section 5.3) with a window of the connection's bounding box plus margin, coarse then fine as `pcb_link.py` does, and the exact check after pull-tight. Escape planner per component (section 7.3): fanout is the first stage, the 45-minute hang and the 44.6% escape rate live there, and a prototype exists. Room and via-site reuse between connections is measured here, since it likely changes routes. |
 | 4. Agent API | Session API and MCP tools (section 6.3); pause, patch, resume. |
 | 5. Engine | Global router with negotiation; soft corridors with feedback; escape planner; parallel global routing. |
 | 6. Geometry | Exact circle clearance and DRC; preferred direction in the final geometry; thermal-spoke room. |
@@ -286,7 +288,29 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 - Why do cropped windows report 11-27 unrouted for 1-2 open connections?
 - Why do long runs stay open on empty layers (brief case C7)? Retest after the phase 1 fixes.
 
-## 11. Progress log
+## 11. Independent review (2026-10-19)
+
+A separate reviewer (Claude Fable 5.1, fresh context, reading this document and spot-checking the code) found the
+following. Accepted points are already reflected in sections 2 and 8.
+
+| Point | Response |
+|---|---|
+| "Whole-board work for every room" is wrong for the default 45-degree tree, which prunes progressively; the upstream profile puts room completion at 14.8% | Accepted and corrected. Profile before ranking search costs. |
+| Strict-DRC rejection and failed inserts leave victims ripped; failed inserts also leave their partial copper | Confirmed. Phase 1.4 restores the whole board state, not only the victims. |
+| `enforceStrictDrc` judges with the octagon DRC, so from pass 3 it rejects valid routes over micrometre artefacts | Accepted: a tolerance there moves into phase 2. |
+| Wiring the dead randomization changes routes on every board from pass 4 | Accepted: its own measured commit. |
+| Fallback attempts are only partly independent (a cross-attempt memo, sequential early stops, continuations chained on the best board); the 7-minute saving was not shown from the log | Accepted: the portfolio moves after "fallback on leftovers only", and continuations stay serial. |
+| Plane fix is more than activating the layer; check what KiCad exports | Accepted into phase 1.7. |
+| Work budget first; exact DRC, escape planner, via-pair costs and heuristic earlier; optimizer on partial boards missing; user DSNs into phase 0 | Accepted into section 8. |
+| Room reuse later; "start from best board" off by default | Accepted. |
+| Finisher window must follow the connection's bounding box, two-level grid | Accepted (section 8, phase 3). |
+| The global router fixes congested boards; the user's boards fail for other reasons (inner layers 98% empty) | Accepted. Phases 1-3 target the user's boards; phase 5 targets dense boards. |
+| `start_ripup_costs` 100 against 1000 (96 against 65 unrouted) says the default is wrong; a density-based default beats K board copies | Noted. Test a density-based default before building the portfolio. |
+| Pause and stop should also work at connection boundaries; log applied patches | Accepted (section 8, phase 2.10). |
+| The Vector API is still incubating in JDK 25, which complicates the native image | Noted for the GPU and SIMD question. |
+| Missing: shove before rip, deterministic net ordering, a KiCad DRC oracle, determinism that today holds only per machine | Accepted into sections 8 and 10. |
+
+## 12. Progress log
 
 | Date | Commit | Change | Result |
 |---|---|---|---|
