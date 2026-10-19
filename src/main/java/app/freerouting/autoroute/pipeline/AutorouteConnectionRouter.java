@@ -27,7 +27,40 @@ final class AutorouteConnectionRouter {
     this.router = router;
   }
 
+  /**
+   * Routes one connection. A failed attempt leaves the board as it was before the attempt: the maze
+   * rips its victims before inserting, and a failed insert or a strict-DRC rejection used to leave
+   * those victims ripped (and a failed insert left its partial copper), creating new opens on every
+   * pass. An undo snapshot around the attempt restores them. Runs with strict_drc enabled keep
+   * their full-board snapshot instead.
+   */
   AutorouteAttemptResult route(
+      Item item,
+      int routeNetNo,
+      SortedSet<Item> rippedItemList,
+      Map<Item, Integer> ripupCosts,
+      int ripupPassNo) {
+    if (router.settings.isStrictDrc()) {
+      return routeOnce(item, routeNetNo, rippedItemList, ripupCosts, ripupPassNo);
+    }
+    RoutingBoard board = router.board;
+    int maxItemIdBefore = board.communication.idGenerator.maxGeneratedId();
+    board.generateSnapshot();
+    AutorouteAttemptResult result =
+        routeOnce(item, routeNetNo, rippedItemList, ripupCosts, ripupPassNo);
+    boolean changed =
+        !rippedItemList.isEmpty()
+            || board.communication.idGenerator.maxGeneratedId() != maxItemIdBefore;
+    if (result.state != AutorouteAttemptState.ROUTED && changed) {
+      board.undo(null);
+      rippedItemList.clear();
+    } else {
+      board.popSnapshot();
+    }
+    return result;
+  }
+
+  private AutorouteAttemptResult routeOnce(
       Item item,
       int routeNetNo,
       SortedSet<Item> rippedItemList,
