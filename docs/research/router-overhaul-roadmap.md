@@ -38,6 +38,41 @@ output.
    output and a session API turn Freerouting into a routing kernel an agent can steer.
 6. **A grid router helps in two specific places, not as a replacement** (section 5).
 7. **Stay on Java** (section 9).
+8. **Every change must work for every kind of board** (section 2.1). The user's boards carry high-voltage buses, but
+   most Freerouting users route dense low-voltage boards, and the changes are meant for PCB routing in general.
+
+### 2.1 Every kind of board: dense low-voltage and high-voltage
+
+**The user's direction (2026-10-19):** "These are my 4 boards that have high voltage on them. Other people route low
+voltage high density boards and they need to work also. Whatever changes we make need to work for all types of boards
+and for the greater good of PCB routing in general." The user also noted that the original author does not seem to
+have planned for buses of 72 V, 120 V or even 1000 V, which need much wider gaps to keep from arcing.
+
+**Rules for every change:**
+- **No special cases for one kind of board.** Nothing in the router knows about voltage. Spacing comes only from the
+  design rules: net-class clearance, `class_class` pairs and per-layer rules. A high-voltage board is a board with
+  some very large clearances, and a dense board is one with small clearances and fine pitch. A change that helps one
+  by hard-coding for it is rejected.
+- **Two benchmark groups, both measured for every routing change.** A change is accepted only when neither group gets
+  worse; a trade-off between them goes to the user.
+  - *Dense low-voltage* (upstream fixtures): DAC2020 bm01 and bm05, FastTest, Issue070 (688 nets, 2 layers), the
+    Coldfire kit (Issue690) and a tomu FPGA board (Issue756) for fine-pitch BGA escape.
+  - *High-voltage*: the user's four probe-etcher cards (KiCad 10 boards, exported with `bench/overhaul/export_dsn.py`;
+    voltage-group rules added with `dsn_hv.py`, see section 12) and the PCBench `Box0-hv-analog-breakout` fixture.
+- **Each new engine part takes its spacing from the same clearance matrix** as the maze search: the fine-grid
+  finisher, the global planner's capacity model, shove and escape planning. A grid sized for 0.2 mm gaps must not
+  assume every gap is small, so the finisher's cell size and the planner's capacity both come from the rules of the
+  nets involved.
+
+**What high voltage needs from a router, and where it belongs:**
+
+| Need | In Freerouting today | Plan |
+|---|---|---|
+| Wide gaps between voltage groups, for every item kind | `class_class` reached traces only, not vias or pads, until phase 1.2 | Done in phase 1.2. The user's pipeline grew via padstacks as a workaround; it can be dropped after a check on their boards. |
+| Gaps that differ by layer (IPC-2221B allows less on inner layers than on uncoated outer ones) | The DSN parser reads layer-dependent rules in the structure and in net classes, and the clearance matrix is per layer. Not yet verified end to end, and KiCad's exporter does not write them. | A test board in phase 1, then document how an agent writes them into the DSN. This is often the difference between fitting and not fitting on a dense HV card. |
+| Speed with very large clearances | Each clearance class gets its own compensated search tree, and wide gaps shrink every free-space room. | Profile a high-voltage board in phase 2.2 next to the dense ones, so a fix for one does not slow the other. |
+| Creepage (distance along the board surface, slots that lengthen it) | Not a routing concept here; KiCad 10's DRC checks it | Out of scope for routing. KiCad DRC stays the final check (phase 0). |
+| Voltage to clearance (an IPC table) | Not Freerouting's job | The design tool or the agent sets net classes and `class_class` rules. The agent guide (section 6.1b) shows how to express voltage groups. |
 
 ## 3. The chat AI claims, checked against the code
 
@@ -365,7 +400,7 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 
 | Phase | Steps |
 |---|---|
-| 0. Harness | Benchmark script (one row per run), SES diff, baseline. The user's stage DSNs are the goal set, so they join as soon as they arrive. KiCad DRC as the clearance oracle in the harness, because Freerouting's own count rests on the octagon DRC. |
+| 0. Harness | Benchmark script (one row per run), SES diff, baseline. Two board groups, dense low-voltage and high-voltage, both measured for every routing change (section 2.1); the user's four cards are in the high-voltage group. KiCad DRC as the clearance oracle in the harness, because Freerouting's own count rests on the octagon DRC. |
 | 1. Bugs | (1) dangler cleanup on every exit, minimum neck width; (2) `class_class` for vias and pads, with a test board; (3) hangs; (4) a failed attempt (failed insert or strict-DRC rejection) restores the board, including ripped victims and partial copper; (5) 2-pin self-rip; dead randomization as its own measured commit; (6) stagnation on unrouted count, best-session write; starting later passes from the best board as an option that is off by default and benchmarked against the recoveries upstream documented; (7) plane targets (target doors open on the plane layer, expansion stays closed), fixed-track targets, overlapping pads, board-bounds wires; (8) the optimizer, or a cleanup subset, on partial boards. |
 | 2. Speed and control | (1) a work budget in search steps instead of time, first, because every later measurement depends on it and it makes results the same on every machine; (2) profile, then rank the search costs (start-room size, layer test order, per-layer filtering, unused clearance trees); (3) per-layer-pair via cost and an admissible heuristic, the likeliest cause of long runs left open on empty layers; (4) shove before rip; (5) deterministic net ordering (airline length, pin density, bounding box); (6) a tolerance in `enforceStrictDrc` so it stops rejecting routes over 2-4 um octagon artefacts; (7) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (8) route only these nets or this region; (9) fallback on the leftovers only; (10) live status file with an estimated finish time, best session on improvement, an agent-triggered stop file (section 6.1a), sub-logs, and pause and stop at connection boundaries as well as pass boundaries; (11) parallel fallback portfolio, only if (9) leaves enough fallback time to matter. Everything must work headless (`--gui.enabled=false`), which is how WSL and remote sessions run it. |
 | 3. Finisher and escapes | Fine-grid local finisher (section 5.3) with a window of the connection's bounding box plus margin, coarse then fine as `pcb_link.py` does, and the exact check after pull-tight. Escape planner per component (section 7.3): fanout is the first stage, the 45-minute hang and the 44.6% escape rate live there, and a prototype exists. Room and via-site reuse between connections is measured here, since it likely changes routes. |
