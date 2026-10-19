@@ -116,6 +116,7 @@ have planned for buses of 72 V, 120 V or even 1000 V, which need much wider gaps
 | False clearance violations | Octagon geometry and binary-search DRC (`Item.java:446-563`). | Exact circle and segment distance, in a later phase. |
 | Possible hidden cost in every headless run | Every board-updated event rebuilds the whole SES in memory (`RoutingJobSchedulerActionThread.java:127`, `:358-369`). The event fires up to four times a second during a pass (`BatchAutorouter.shouldFireBoardUpdate`). Not yet measured. | Profile in phase 2.2. Build the SES only when it is asked for, at the end, and when the best result improves. |
 | The autorouter rips where KiCad would shove | The maze can shove a trace only when it has the same half-width and the same clearance class as the net being routed (`autoroute/maze/MazeTraceShover.java:27-31`), only through a door that is not small and into a thick room (`MazeSearchEngine.java:524-530`). On a board that mixes power widths, high-voltage classes and signals the test almost never passes, so the search falls back to rip-up, which destroys work. The interactive shover (`board/optimize/TraceShover.java`) is not limited this way. Locked traces are fixed and must stay unshoveable. | Phase 2.4, moved up (see section 8): shove any unfixed trace or via, of any width and class, with clearances from the clearance matrix, before ripping. Constraints, from the user (2026-10-19: "impedance matched traces need to stay the same length when a push and shove moves them"): (a) fixed and locked copper never moves; (b) a net with a length rule (DSN min/max length, already parsed into `rules/NetLengthConstraint`) may be shoved or rerouted only if its length stays inside the window, rechecked after the move, otherwise the move is rejected; (c) impedance comes from width and spacing to the reference plane, so a shove never changes width or layer, and never necks a controlled net; (d) Freerouting has no differential-pair model, so a net in a pair or matched group is not shoved unless both members move together, which needs a pair rule; until then such nets are locked or marked no-shove. The same rule (b) applies to rip-up: today the autorouter ignores length rules (only DRC and interactive routing check them), so ripping and rerouting a tuned net can already break it. |
+| KiCad pours look like solid copper to Freerouting | KiCad exports each zone as a `(plane ...)` polygon with the zone outline, not the filled copper. Every other-net pad inside the outline then counts as a pre-existing clearance violation: 192 on StickHub, 845-991 on the user's cards ("pin-to-keepout" in the load warning). Pours are not obstacles by default (`plane_as_obstacle=false`), so routes may cross them and KiCad's refill flows around those tracks. Likely, to verify: a pin inside a pour outline counts as connected to it even where the real fill will not reach after routing cuts it. | Exclude pre-existing violations from scores and comparisons. Check pour connectivity against KiCad DRC after refill (phase 0 oracle). If it is false, count a pour only as a connection target, not as copper that already connects. |
 | GUI freezes for seconds on zoom or layer toggle while routing a large board (the user, on the carrier, every time) | Not a lock: painting takes no board lock (checked). Every repaint copies all items and loops priority x draw step x all items, about 10-16 passes over every item on 6 layers, with no cached image (`gui/rendering/BoardRenderer.java:42-78`); pad and via bounding boxes are rebuilt per call (`DrillItem.java:191-199`). The router asks for a full repaint up to four times a second (`WorkspacePortAdapter.publishProgress`, through `runOnEdt`), so a paint longer than 250 ms keeps the event queue full and a zoom waits behind it. The GUI worker also rebuilds the whole SES on every board update, on the router thread (`GuiRoutingJobWorker.java:244-256`). | Phase 2.12: (1) at most one pending repaint, about 1 per second while routing, and none when only the status text changed; (2) draw the board into a cached image and blit it on zoom or layer change, redrawing in the background and showing the scaled old image meanwhile; (3) select items through the spatial index for the clip box instead of scanning all of them per step, and cache drill bounding boxes; (4) build the SES only at pass end or on request. Measure first: time one render of the carrier into an off-screen image. |
 | `save_intermediate_stages` does nothing | `fireBoardSnapshotEvent` has no listener anywhere (`NamedAlgorithm.java:83-92`). | Replace it with the best-session write (section 6.1a). |
 
@@ -442,11 +443,32 @@ later phase wants to check it.
    - Vias are placed as a via pair at the via gap.
    - Corners keep the gap at 45 degrees.
    - The finisher and escape planner learn the pair form too.
-4. **Tests.**
-   - A small board with USB and Ethernet pairs and a matched parallel bus: the CM5 carrier fixture (`Issue732`)
-     is a candidate, to confirm.
-   - Pairs injected into a dense low-voltage fixture.
-   - Both checked with KiCad DRC, which knows pair gap and skew.
+4. **Tests.** The user asked for a demo board, or one made up, to test against the Specctra spec. Both are set up:
+   - **Real boards from KiCad's own demos** (`kicad-demos` 10.0.6 is installed in WSL):
+     - StickHub: 2 layers, 47 nets, 8 USB pairs.
+     - CM5_MINIMA: 6 layers, 220 nets, 32 pairs. It has impedance net classes for 100, 90 and 50 ohm, each with
+       its own pair width and gap. It is the same design as the upstream `Issue732` fixture.
+     - jetson-agx-thor-baseboard: 10 layers, 1387 nets, about 180 pairs, as the stretch test.
+     - `bench/overhaul/dsn_pairs.py` adds `(pair (nets P N (gap um)))` from the board's net classes, since
+       KiCad's export drops them.
+     - Checked: today's parser loads these DSNs and ignores the pair rules without a warning.
+   - **Made-up fixtures** for unit tests: small hand-written DSNs that use each construct once, written to the
+     v10 syntax below. They cover a pair with a per-layer gap, a matched class, a min and max length, and a ratio
+     length.
+   - KiCad DRC, which knows pair gap and skew, checks the routed results.
+
+**Specctra syntax, from the reference in `docs/reference/` (v10, May 2000):**
+- `(network (pair (nets <net> <net> (gap <dim> (layer <layer>)))))`. The gap can be set per layer; with no gap,
+  the wire-to-wire clearance applies. `?` wildcards pair several nets at once.
+- `(pair (wires ...))` pairs two from-tos instead of two whole nets.
+- `(circuit (length <max> [<min>] [(type ratio|actual)]))` on a net or class; -1 means unset.
+- `(circuit (match_net_length on (tolerance <dim>)))` on a class. The default tolerance is one inch.
+- `match_fromto_length` and `match_fromto_delay` do the same for from-tos.
+- `length_gap` and `length_amplitude` shape the meanders used for tuning, and `length_factor` weights length by layer.
+- `parallel_segment`, `parallel_noise` and `tandem_noise` are crosstalk rules, later if ever.
+
+Newer tool versions (Allegro PCB Router 16 and 17) may add keywords. Sample exports from Allegro, Altium or
+Pulsonix with pairs would show what they write.
 
 ### 7.5 Learning
 
