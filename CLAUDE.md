@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a fork (`origin` = nathanbrizzee/freerouting, `upstream` = freerouting/freerouting). The `perf-fixes` branch is for applying and testing the performance changes described in `../freerouting-issues.md`. Keep `master` identical to upstream as the unmodified baseline for comparison. The findings were measured against the v2.5.0 release jar built from `b647a2f`, while this clone's master is at `5aa1b24`.
 
+The `router-overhaul` branch (from `perf-fixes`) carries the larger plan in `docs/research/router-overhaul-roadmap.md`: bug fixes first, then speed, then a grid finisher, an agent API and a global router. One commit per fix, each logged in the roadmap's progress table. The user's hardware-board requirements and the answers to their questions are in `docs/research/hardware-board-routing-brief.md`. Benchmark with default settings (fallbacks on); run the board set only at milestones, and use an SES diff for changes meant to keep routes identical.
+
 ## Commands
 
 Java 25 and Gradle 9 (use the wrapper). Run from the repo root.
