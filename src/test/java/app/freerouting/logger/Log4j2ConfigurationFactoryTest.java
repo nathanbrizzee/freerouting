@@ -34,6 +34,7 @@ class Log4j2ConfigurationFactoryTest {
     System.clearProperty("freerouting.logging.file.enabled");
     System.clearProperty("freerouting.logging.file.level");
     System.clearProperty("freerouting.logging.file.location");
+    System.clearProperty("freerouting.logging.trace.enabled");
   }
 
   @Test
@@ -122,5 +123,52 @@ class Log4j2ConfigurationFactoryTest {
     assertTrue(
         rootLogger.getAppenderRefs().stream()
             .anyMatch(ref -> "Console".equals(ref.getRef()) && Level.WARN.equals(ref.getLevel())));
+  }
+
+  // The root level decides what Logger.isTraceEnabled() returns, so it must follow the most
+  // verbose appender instead of being fixed at ALL (which opens every FRLogger.isTraceEnabled()
+  // guard even when no appender would write the output).
+  @Test
+  void rootLevelFollowsTheMostVerboseAppender() {
+    System.setProperty("freerouting.logging.console.level", "INFO");
+    System.setProperty("freerouting.logging.file.enabled", "false");
+    assertEquals(Level.INFO, rootLevelOfNewConfiguration());
+
+    System.setProperty("freerouting.logging.console.level", "TRACE");
+    assertEquals(Level.TRACE, rootLevelOfNewConfiguration());
+
+    System.setProperty("freerouting.logging.console.enabled", "false");
+    assertEquals(Level.ERROR, rootLevelOfNewConfiguration());
+  }
+
+  @Test
+  void rootLevelIsDebugWithDefaultFileLevel() {
+    String logFile =
+        System.getProperty("java.io.tmpdir") + "/freerouting_level_" + System.nanoTime() + ".log";
+    try {
+      System.setProperty("freerouting.logging.console.level", "INFO");
+      System.setProperty("freerouting.logging.file.enabled", "true");
+      System.setProperty("freerouting.logging.file.location", logFile);
+
+      assertEquals(Level.DEBUG, rootLevelOfNewConfiguration());
+    } finally {
+      new java.io.File(logFile).delete();
+    }
+  }
+
+  @Test
+  void traceSwitchKeepsTraceGuardsOpenRegardlessOfAppenderLevels() {
+    System.setProperty("freerouting.logging.console.level", "INFO");
+    System.setProperty("freerouting.logging.file.enabled", "false");
+    System.setProperty("freerouting.logging.trace.enabled", "true");
+
+    assertEquals(Level.ALL, rootLevelOfNewConfiguration());
+  }
+
+  private Level rootLevelOfNewConfiguration() {
+    return factory
+        .getConfiguration(null, "TestConfig", URI.create("test"))
+        .getRootLogger()
+        .getLevel();
   }
 }
