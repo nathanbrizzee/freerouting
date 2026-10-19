@@ -334,6 +334,24 @@ turned on and off and sent elsewhere. The same events are served on the existing
 what a CLI user gets in files. The cost: JSON lines are written only when their logger is enabled, behind
 `isEnabled` guards, which is the lesson of the `isTraceEnabled` fix on `perf-fixes`.
 
+### 6.5 Logging and agent hooks found while working
+
+The user (2026-10-19): while going through the fixes, add logging that helps, and more ways for AI to interact
+with the router, wherever we spot them. This list collects them as they come up, and they are built with phase 2.10
+(status file, events, best session) unless they are small enough to ride along with the fix that found them.
+
+| Found | Gap | Add |
+|---|---|---|
+| P4 board fallbacks | Nothing says how the time split between the default run and the fallback stage, or whether a fallback attempt could still win | One summary line and manifest block: time in fanout, default passes, each fallback attempt, optimizer; per attempt its best result against the incumbent |
+| P4 board stuck passes | Ten passes at 25 unrouted look like progress in the log; the board kept changing or cycled through 3 states | Per pass: whether the board changed, whether its hash was seen before, and the passes since the last routed connection, in the status file and events |
+| Pour outlines as violations | The load warning lists 845-991 "pre-existing" violations on the HV boards, and the fallback lines count them inconsistently ("0 new violations (988 total)" in one run, "991 new violations (991 total)" in the other) | Keep pre-existing and new violations apart everywhere, and name the cause (pour outline against pad) so an agent does not chase them |
+| Result manifest | `phases.autorouter.passes_completed` reports the last fallback attempt (2 on the P4 board after 20 default passes), and `phases.fallback` was empty | Report the default run and every attempt separately, with the chosen one marked |
+| Persistent failures | The unrouted report lists open connections only at the stagnation stop | Per connection: attempts, the failure reason each time, the blocking items, and coordinates of both ends, in JSON, so an agent can crop a window or relax a rule for exactly those |
+| Optimizer gate | Skipped silently on partial boards unless the agent knows `enable_preflight_guards=false` | Name the option in the skip log line and in the agent guide |
+| Pair and length rules (section 7.4a) | Ignored without a word | Log the count read, and report pair gap, skew and length violations in the manifest |
+| GUI responsiveness | No way to see the cost of drawing | Log the render time of a frame when it exceeds the repaint interval |
+| Shove (phase 2.4) | Not visible today | Per pass, counts of shoves, rips and rip-backs, so a run that rips its own work shows it |
+
 ## 7. The new engine (later phases)
 
 ### 7.1 Global router with negotiated congestion
