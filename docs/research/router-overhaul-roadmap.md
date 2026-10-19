@@ -205,13 +205,42 @@ Candidate via sites outside the pad field, pin-to-site assignment as min-cost ma
 pin), layers from the global plan. This removes fanout oscillation by construction. The user's `plan_fanout()` is a
 working prototype of the policy.
 
-### 7.4 Parallelism where it works
+### 7.4 Parallelism and GPU
 
-- **Global routing.** Each negotiation iteration routes all nets against the previous iteration's costs, so nets run
-  in parallel and merge deterministically by net id.
-- **Detailed routing.** Connections whose corridors and halos do not touch can search in parallel and commit in
-  fixed order with a conflict check. Speculative; needs measurement.
-- **Fallback candidates.** These run on board copies and can run concurrently with a deterministic pick.
+**Why the maze is single-threaded.** One detailed maze search reads the whole board and writes expansion rooms into
+the board's shared search tree. A search on another net sees that copper through clearance, and rip-up changes other
+nets. Two searches on one board therefore conflict, and a result that depends on which thread finished first breaks
+determinism. Upstream measured two parallel designs and removed both (section 3). Running one search with several
+threads does not pay either: the work per room is small and irregular.
+
+**The approach that works: race independent attempts on board copies, then pick deterministically.** Every attempt
+must be deterministic on its own, and the pick must depend only on the results and a fixed order, never on finish
+time. Budgets are counted in work, not seconds. Under those rules the output is the same on 1 core or 22.
+
+| Where | What runs in parallel | Expected gain | Notes |
+|---|---|---|---|
+| Fallback portfolio | The five fallback strategies, each on its own copy of the input board | Fallback time drops from the sum of the attempts to about the longest one. On Issue070 that is roughly 7 minutes down to under 2. | Attempts already deserialize their own board and clone settings (`autoroute/pipeline/RoutingFallbackRunner.java:258`). What blocks it is `runPrepared` swapping `job.board`, `job.routerSettings` and the stop flag on the shared job, so each attempt needs its own job context. The winner is picked with the existing `replaces` rule in strategy order, which gives the same result as the sequential loop. Phase 2. |
+| Strategy portfolio from the start | K default-pass runs with different rip-up costs or item-order seeds | The brief measured 96 against 65 unrouted from `start_ripup_costs` alone (100 against 1000), and its scripts already run 4 variants as separate processes. In-process sharing of the loaded board and a fixed ranking make this one command. | CPU cost is K times. Memory is K board copies (peak heap 0.3-1 GB each on the measured boards). An option, not the default. |
+| Leftover windows | The grid finisher or a windowed maze on disjoint windows | Close many leftover connections at once | Windows whose boxes plus a clearance halo do not overlap are independent. Each one is solved on a copy, and results commit in a fixed order with a conflict recheck; a conflict reruns serially. Phase 3. |
+| Hard connections | Several searches with different costs on one connection, best result kept | Only for connections that already failed or used their budget | Upstream found that copying a board costs more than an easy search, so this is not for every connection. |
+| Global router | All nets within one negotiation iteration | Near-linear in cores | Each iteration reads the previous iteration's costs (Jacobi style), so nets are independent; costs merge by net id. Phase 5. |
+| Escape planning | One component's matching problem per thread | Planning is pure computation | Only the insertion is serial. |
+| Checks | Full DRC and statistics at pass boundaries | Small | Read-only scans. |
+| Optimizer | Already parallel | — | `board/optimize/BatchOptimizer.java:697-777`. It keeps only one improvement per chunk and discards the rest; merging non-overlapping improvements is a separate gain. |
+
+**GPU.** The gridless shape router does not map onto a GPU: its work is pointer-chasing through irregular polygon
+geometry, branchy, with very little arithmetic per step. Grid workloads do map well: wavefront or delta-stepping
+search on the global router's cell graph, congestion maps, and the fine-grid finisher's windows. Even there, CPU
+threads come first, for three reasons:
+
+- **The grids are small.** A 1 mm global grid is tens of thousands of cells, and CPUs handle that in milliseconds.
+- **Headless installs.** Freerouting must run headless on WSL and remote sessions, where a usable GPU is often absent.
+- **Vendor lock-in.** Any GPU path in Java means TornadoVM, OpenCL or CUDA through the foreign-function API, and that
+  ties the build to a vendor.
+
+A GPU backend is worth building only if a profile of the global router or the finisher shows grid search dominating
+on large boards. If it is built, it must be optional, with the CPU path as the reference result. The Java Vector API
+(SIMD on the CPU) is the cheaper first step for grid kernels.
 
 ### 7.5 Learning
 
@@ -233,7 +262,7 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 |---|---|
 | 0. Harness | Benchmark script (one CSV row per run), SES diff tool, baseline. |
 | 1. Bugs | (1) dangler cleanup on every exit, minimum neck width; (2) `class_class` for vias and pads, with a test board; (3) hangs; (4) rip-up victims restored, 2-pin self-rip, dead randomization; (5) stagnation on unrouted count, best-session write, start later passes from the best board as an option; (6) plane targets, fixed-track targets, overlapping pads, board-bounds wires. |
-| 2. Speed and control | (1) room-building pruning (no route change); (2) per-layer filtering, freeing unused clearance trees; (3) room and via-site reuse between connections, adopted if routes match or improve; (4) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (5) a work budget in search steps instead of time; (6) route only these nets or this region; (7) fallback on the leftovers only; (8) graceful finish, sub-logs and `status.json`. |
+| 2. Speed and control | (1) room-building pruning (no route change); (2) per-layer filtering, freeing unused clearance trees; (3) room and via-site reuse between connections, adopted if routes match or improve; (4) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (5) a work budget in search steps instead of time; (6) route only these nets or this region; (7) fallback on the leftovers only; (8) parallel fallback portfolio (section 7.4); (9) graceful finish, sub-logs and `status.json`. Everything must work headless (`--gui.enabled=false`), which is how WSL and remote sessions run it. |
 | 3. Finisher | Fine-grid local finisher (section 5.3). |
 | 4. Agent API | Session API and MCP tools (section 6.3); pause, patch, resume. |
 | 5. Engine | Global router with negotiation; soft corridors with feedback; escape planner; parallel global routing. |
