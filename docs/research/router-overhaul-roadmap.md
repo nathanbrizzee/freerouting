@@ -8,6 +8,10 @@ Goal, from the user: speed and completion. Simple and medium boards must not tak
 every connection without leaving danglers. AI agents should be able to steer the router through APIs and read its
 output.
 
+Why it matters, from the user (2026-10-19): routing their four boards took over a week, and about 90% of that time was
+waiting for the router, which often spun for hours or got stuck. Modern routers, and even OrCAD's old grid router,
+finish such boards far faster. The measure of success is wall time to a finished, clean board, not points of score.
+
 ## 1. Inputs
 
 - **Chat AI answers.** Four chat AIs answered the question "how can Freerouting compete with proprietary routers,
