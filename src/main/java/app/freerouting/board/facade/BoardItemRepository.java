@@ -220,7 +220,15 @@ public final class BoardItemRepository {
 
   /** Removes an item and performs the existing tree, observer, and revision updates. */
   void removeItem(Item item) {
-    removeItem(item, false);
+    removeItem(item, false, false);
+  }
+
+  /**
+   * Removes a fixed trace that is being replaced by its split pieces. The pieces keep its geometry
+   * and fixed state, so nothing that was fixed becomes movable.
+   */
+  void removeTraceForSplit(Trace trace) {
+    removeItem(trace, false, true);
   }
 
   /** A move detaches component items without granting ordinary deletion permission. */
@@ -230,10 +238,10 @@ public final class BoardItemRepository {
             && board.components.get(item.getComponentId()).positionFixed)) {
       throw new IllegalArgumentException("Fixed items cannot be detached for a move");
     }
-    removeItem(item, true);
+    removeItem(item, true, false);
   }
 
-  private void removeItem(Item item, boolean forMove) {
+  private void removeItem(Item item, boolean forMove, boolean forSplit) {
     if (item == null) {
       return;
     }
@@ -252,7 +260,7 @@ public final class BoardItemRepository {
     if (item instanceof Trace trace && trace.netNumbers.length > 0 && trace.netNumbers[0] == 94) {
       logTraceRemoval(trace);
     }
-    if (item.isDeletionForbidden() && !(forMove && item.getComponentId() > 0)) {
+    if (item.isDeletionForbidden() && !(forMove && item.getComponentId() > 0) && !forSplit) {
       return;
     }
     board.additionalUpdateAfterChange(item);

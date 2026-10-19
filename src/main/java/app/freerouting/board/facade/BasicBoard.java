@@ -695,6 +695,11 @@ public class BasicBoard implements Serializable {
     }
   }
 
+  /** Removes a fixed trace that is being replaced by split pieces with its geometry and state. */
+  public void removeTraceForSplit(Trace trace) {
+    getItemRepository().removeTraceForSplit(trace);
+  }
+
   /** Detaches a movable item, including a component pin, within an existing move snapshot. */
   public void detachItemForMove(Item item) {
     getItemRepository().detachItemForMove(item);
