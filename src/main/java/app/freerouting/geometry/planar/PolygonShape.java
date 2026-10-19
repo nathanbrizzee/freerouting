@@ -25,6 +25,12 @@ public class PolygonShape extends PolylineShape {
   private transient IntOctagon precalculatedBoundingOctagon;
   private transient TileShape[] precalculatedConvexPieces;
 
+  /**
+   * Set when splitToConvex failed. The split is deterministic, so a retry fails the same way; this
+   * stops callers from redoing the recursion and logging the same warning on every query.
+   */
+  private transient boolean convexSplitFailed;
+
   /** Creates a new instance of PolygonShape. */
   public PolygonShape(Polygon polygon) {
     Polygon currentPolygon = polygon;
@@ -551,12 +557,16 @@ public class PolygonShape extends PolylineShape {
   @Override
   public TileShape[] splitToConvex() {
     if (this.precalculatedConvexPieces == null) {
+      if (this.convexSplitFailed) {
+        return null;
+      }
       // not yet precalculated
       // use a fixed seed to get reproducible result
       randomGenerator.setSeed(seed);
       Collection<PolygonShape> convexPieces = splitToConvexRecu();
       if (convexPieces == null) {
         // split failed, maybe the polygon has selfontersections
+        this.convexSplitFailed = true;
         return null;
       }
       precalculatedConvexPieces = new TileShape[convexPieces.size()];

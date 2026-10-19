@@ -10,6 +10,7 @@ import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.searchtree.ShapeSearchTree;
 import app.freerouting.datastructures.ShapeTree.TreeEntry;
+import app.freerouting.datastructures.Stoppable;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.PolylineArea;
@@ -100,8 +101,16 @@ public class DrillPage implements ExpandableObject {
         holes[i] = it.next();
       }
       PolylineArea shapeWithHoles = new PolylineArea(this.shape, holes);
-      TileShape[] drillShapes = shapeWithHoles.splitToConvex(autorouteEngine.stoppableThread);
+      // Use the engine's stop check, which includes the per-connection time limit. The split
+      // has no work cap, and a page with many holes (a footprint full of drill holes) could
+      // otherwise run far past the connection's budget.
+      TileShape[] drillShapes = shapeWithHoles.splitToConvex(new EngineStop(autorouteEngine));
       if (drillShapes == null) {
+        if (autorouteEngine.isStopRequested()) {
+          // Interrupted, not failed: do not cache an empty page for later searches.
+          this.drills = null;
+          return new LinkedList<>();
+        }
         return this.drills;
       }
 
@@ -205,5 +214,20 @@ public class DrillPage implements ExpandableObject {
   public int getId() {
     // Stable hash of shape and netNumber
     return 31 * shape.getId() + netNumber;
+  }
+
+  /** Adapts the engine's stop check, which includes its time limit, to the Stoppable interface. */
+  private record EngineStop(AutorouteEngine engine) implements Stoppable {
+    @Override
+    public void requestStop() {
+      if (engine.stoppableThread != null) {
+        engine.stoppableThread.requestStop();
+      }
+    }
+
+    @Override
+    public boolean isStopRequested() {
+      return engine.isStopRequested();
+    }
   }
 }
