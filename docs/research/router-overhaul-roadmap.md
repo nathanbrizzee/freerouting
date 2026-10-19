@@ -291,3 +291,4 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 | Date | Commit | Change | Result |
 |---|---|---|---|
 | 2026-10-19 | (this document) | Roadmap and brief | — |
+| 2026-10-19 | phase 1.1 | Final tail and via cleanup runs on every pass-loop exit, repeated until nothing is removed | New `DanglingTailCleanupTest` (bm01, 1 pass, 20 items) fails before the change with dangling items left and passes after it. |

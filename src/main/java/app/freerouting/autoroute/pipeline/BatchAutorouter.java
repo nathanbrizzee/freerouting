@@ -62,6 +62,7 @@ public final class BatchAutorouter extends NamedAlgorithm {
   // Minimum score gain (on the 0–1000 normalized scale) that counts as a
   // meaningful improvement; gains smaller than this are treated as stagnation.
   static final float STAGNATION_SCORE_THRESHOLD = 0.5F;
+  static final int MAX_TAIL_REMOVAL_SWEEPS = 100;
   private static final boolean BENCHMARK_PROFILE_ENABLED =
       Boolean.getBoolean("freerouting.benchmark.profile");
   private static final boolean BENCHMARK_RETAIN_AUTOROUTE_DATABASE =
@@ -607,9 +608,22 @@ public final class BatchAutorouter extends NamedAlgorithm {
   }
 
   void removeTails(Item.StopConnectionOption stopConnectionOption) {
+    removeTails(stopConnectionOption, false);
+  }
+
+  /**
+   * Removes trace tails and dangling vias. With {@code untilStable}, the sweep repeats until it
+   * removes nothing, because removing one tail can expose the next one in the same chain.
+   */
+  void removeTails(Item.StopConnectionOption stopConnectionOption, boolean untilStable) {
     final long tailRemovalStart = BENCHMARK_PROFILE_ENABLED ? System.nanoTime() : 0;
     board.startMarkingChangedArea();
-    board.removeTraceTails(-1, stopConnectionOption);
+    int sweeps = 0;
+    while (board.removeTraceTails(-1, stopConnectionOption)
+        && untilStable
+        && ++sweeps < MAX_TAIL_REMOVAL_SWEEPS) {
+      // Each sweep removes at least one item, so the loop ends; the cap is a safety net.
+    }
     long pullTightStart = BENCHMARK_PROFILE_ENABLED ? System.nanoTime() : 0;
     board.optChangedArea(
         new int[0],

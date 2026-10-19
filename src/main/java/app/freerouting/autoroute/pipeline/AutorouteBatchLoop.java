@@ -658,11 +658,11 @@ final class AutorouteBatchLoop {
         router.settings.getRunRouter()
             && (router.settings.autorouter.maxPasses == null
                 || router.settings.autorouter.maxPasses >= 0);
-    if (wasRouterRun
-        && !router.thread.isStopAutoRouterRequested()
-        && router.lastStopReason != BatchAutorouter.StopReason.REPEATED) {
-      // clean up dangling tails and unused orphan fanout vias when autorouting finishes normally.
-      removeTails(Item.StopConnectionOption.NONE);
+    if (wasRouterRun && router.lastStopReason != BatchAutorouter.StopReason.REPEATED) {
+      // Clean up dangling tails and unused orphan fanout vias however the pass loop ended.
+      // Stagnation, no-improvement and max-pass stops all set the stop flag through stopFor(),
+      // so gating on that flag skipped this cleanup on every board that ended incomplete.
+      router.removeTails(Item.StopConnectionOption.NONE, true);
     }
 
     if (isRouterEnabled && autorouterBeforeStats != null) {
