@@ -452,6 +452,19 @@ later phase wants to check it.
      - `bench/overhaul/dsn_pairs.py` adds `(pair (nets P N (gap um)))` from the board's net classes, since
        KiCad's export drops them.
      - Checked: today's parser loads these DSNs and ignores the pair rules without a warning.
+   - **Open boards from GitHub** (cloned 2026-10-19 into `bench/external/`, outside git; licenses read from each
+     repo's LICENSE file):
+     - Antmicro SDI-MIPI bridge: 6 layers, 175 nets, 13 MIPI pairs, and an inner-layer pair class. Apache-2.0.
+     - Antmicro Jetson Orin baseboard: 8 layers, 799 nets, 104 pairs. Its 100 and 85 ohm classes cover HDMI,
+       Ethernet, CSI, PCIe and USB, and its `.kicad_dru` has 12 pair-gap rules. Apache-2.0.
+     - Antmicro DDR5 testbed: 6 layers, 224 nets, clock and strobe pairs, and data groups for matched-length tests.
+       It has no length rules of its own. Apache-2.0.
+     - InverterGen5 gate driver: 6 layers, 97 nets, a 200-450 V traction inverter. Its isolation is in the
+       layout, not in net classes (one 0.2 mm class). CERN-OHL-W-2.0.
+     - The Apache-2.0 boards may become repo fixtures with their LICENSE and NOTICE files. The CERN-OHL-W board
+       stays in `bench/` until the user decides.
+     - The search found no Allegro, Altium, Pulsonix or PADS export with pair rules. Freerouting issue #358 shows
+       pair nets from an unnamed tool.
    - **Made-up fixtures** for unit tests: small hand-written DSNs that use each construct once, written to the
      v10 syntax below. They cover a pair with a per-layer gap, a matched class, a min and max length, and a ratio
      length.
