@@ -392,6 +392,62 @@ A GPU backend is worth building only if a profile of the global router or the fi
 on large boards. If it is built, it must be optional, with the CPU path as the reference result. The Java Vector API
 (SIMD on the CPU) is the cheaper first step for grid kernels.
 
+### 7.4a Differential pairs, matched lengths and impedance
+
+**Why.** The user (2026-10-19): "Impedance and differential pairs would be huge. That's a major miss for this app."
+Every modern router handles them, and without them Freerouting cannot route USB, Ethernet, LVDS, HDMI, PCIe, DDR or
+fast DSP buses, or differential analog sensing, without the user hand-routing and locking those nets first.
+
+**Which signals need what.** Not every bus needs all of it:
+
+| Signals | Needs |
+|---|---|
+| I2C, slow SPI, GPIO | Nothing special |
+| Fast SPI, parallel buses, DDR data groups | Length matching within a group (clock against data), sometimes impedance |
+| USB, Ethernet, LVDS, HDMI, PCIe, fast ADC/DAC links | Differential pairs at a set width and gap (impedance), skew inside the pair, length matching between pairs |
+| Differential analog sensing | Pairs routed together, symmetric, sometimes guarded |
+
+**What Freerouting has today:**
+- min and max net length from the DSN class `(length ...)` rule (`rules/NetLengthConstraint.java`), reported by DRC
+  and interactive routing; the autorouter ignores it;
+- no differential pairs, no matched-length groups, no skew rule, no notion of impedance beyond each class's trace
+  width (per-layer widths are possible through layer rules).
+
+**The file format.** Specctra DSN is Cadence's format, defined in the *Specctra Design Language Reference*. It is not
+an IPC standard, but it is the common autorouter exchange: Allegro, Altium, Pulsonix and KiCad all export it. The
+language has constructs for pairs, matched-length groups and from-to lengths. We take the exact syntax from the
+reference, and from sample DSNs that Allegro, Altium or Pulsonix export with pairs in them (worth asking for), and
+we read whatever those tools write. KiCad's exporter writes no pair or length rules: the user's DSNs have none, although
+their `.kicad_pro` files carry diff-pair width, gap and via gap. KiCad users can get them in two ways. One is the
+KiCad JSON input Freerouting already has (`management/BoardLoader.java:43`), extended with KiCad's net-class pair and
+length rules. The other is the agent adding pair rules to the DSN, the way `dsn_hv.py` adds `class_class`. Impedance
+itself (width and gap for a target ohms on a given stackup, IPC-2141) is calculated by the design tool. The router
+takes the width and gap per layer as rules. IPC-2581, which KiCad and the others export, carries the stackup if a
+later phase wants to check it.
+
+**Plan, in order of risk:**
+1. **Read and protect (phase 2, beside shove).** Parse pair, matched-group and length rules from DSN and KiCad JSON,
+   and write them back in the session. Rip-up, shove and the optimizer never move a pair member alone and keep every
+   length rule. Report pair gap, skew and group mismatch through DRC and the result manifest. Hand-routed pairs then
+   survive the autorouter, which is not true today.
+2. **Length-aware routing (phase 3).**
+   - The maze search prunes paths whose length already exceeds a net's maximum.
+   - A tuning pass adds meanders where a net is too short for its minimum or its group, like KiCad's length tuner.
+     It runs after routing, within the clearance rules.
+   - Skew inside a pair is tuned the same way.
+3. **Coupled pair routing (phase 4).** Route the pair as one wide trace (two widths plus the gap) through the maze,
+   then split it into two parallel traces at the gap. This suits a shape router well: the search is the one it
+   already does, with a wider compensated width. Separately:
+   - Pad breakout uses short uncoupled stubs, kept under a maximum uncoupled length.
+   - Vias are placed as a via pair at the via gap.
+   - Corners keep the gap at 45 degrees.
+   - The finisher and escape planner learn the pair form too.
+4. **Tests.**
+   - A small board with USB and Ethernet pairs and a matched parallel bus: the CM5 carrier fixture (`Issue732`)
+     is a candidate, to confirm.
+   - Pairs injected into a dense low-voltage fixture.
+   - Both checked with KiCad DRC, which knows pair gap and skew.
+
 ### 7.5 Learning
 
 Only after `connections.ndjson` has collected enough outcomes across a corpus: net ordering, corridor-cost tuning,
