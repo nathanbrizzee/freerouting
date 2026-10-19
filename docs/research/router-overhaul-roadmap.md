@@ -179,6 +179,29 @@ other machine, rather than ship this alone. Until then, an agent can bound the r
 `--router.autorouter.fallback_strategies=none` (Issue070: 10.5 minutes down to 2.4, for 3 more unrouted),
 `--router.job_timeout=00:45:00`, and `-mp N`.
 
+### 6.1b An agent guide that ships with the jar
+
+**Why.** An agent that drives Freerouting needs to know every capability and how to call it, and an agent on another
+machine may have only the jar, not this repository. `AGENTS.md` is for coding agents working on the source, so it
+is the wrong place.
+
+**What to build:**
+- `docs/AGENT_GUIDE.md` as the source of truth. It covers:
+  - what Freerouting does;
+  - recommended command lines per situation;
+  - every agent-relevant flag (status file, stop file, net and region routing, result JSON);
+  - the status JSON fields;
+  - how to read the estimate and when to stop a run;
+  - exit codes and output files;
+  - the REST and MCP equivalents.
+- The same file bundled in the jar as a resource and printed by `java -jar freerouting.jar --agent-guide`. The first
+  line of `--help` points to it.
+- `llms.txt` at the repo root, a short pointer to the guide.
+- An MCP tool and a REST endpoint that return the guide.
+- A unit test that fails when a flag named in the guide does not exist in the settings, so the guide cannot drift.
+
+**When.** Phase 2, with step 10. Each later feature updates the guide in the same commit.
+
 ### 6.2 Changing rules mid-run: only at pass boundaries, and only strategy settings
 
 Changing clearance or width rules while a search runs is the wrong design. Rules feed the clearance matrix, the
