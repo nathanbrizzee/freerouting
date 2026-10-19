@@ -129,6 +129,56 @@ only, `autoroute/pipeline/AutorouteBatchLoop.java:751`). The REST API exposes on
 - Write the best session each time the best result improves (brief P6), so a killed process still leaves the best
   pass on disk.
 
+### 6.1a Live status, an estimated finish time and an agent-triggered stop
+
+**Why.** The user's routing agent runs the Freerouting CLI and can only wait for it to exit. It waited up to 2 hours
+on typical boards and once 7 hours before it could send the result to KiCad. During that time it cannot tell
+whether the run is progressing, stuck on one connection, or rerunning the board in the fallback stage, and it
+cannot stop the run without losing everything, because the session is written only at the end. The default
+`router.job_timeout` is 12 hours.
+
+**What exists today:**
+- one prose log line per pass, so nothing until a pass ends;
+- `GET /v1/jobs/{id}` with state and pass number, but only in server mode;
+- an SSE partial-output stream, also server mode only;
+- the result manifest (`--router.result_json`), only at the end.
+
+**What to build.** It is new code beside the router and does not change routes.
+
+1. `--router.status_file=<path>`: a JSON file rewritten atomically (temp file plus rename) every few seconds and at
+   every pass and stage boundary. Contents:
+   - stage and pass number;
+   - items done and total in the current pass, and the current net;
+   - unrouted at start, now and best so far, and violations;
+   - unrouted per pass so far, so the trend is visible;
+   - elapsed time, estimated time left as a low-high range with a confidence label;
+   - seconds since the best result last improved, and since the last routed connection;
+   - path of the best session written so far;
+   - the stop reason once finished.
+2. **Best session on improvement.** Write the SES whenever the best result improves (brief P6), so a killed run still
+   leaves the best board on disk.
+3. **`--router.stop_file=<path>`** (and `PUT /v1/jobs/{id}/finish` for the API). When the file appears, Freerouting:
+   - finishes the current connection;
+   - skips the remaining passes and fallbacks;
+   - removes danglers (phase 1.1 makes that run on every exit);
+   - restores the best board, writes the SES and exits normally.
+4. **`events.ndjson`**: one JSON line per pass, fallback attempt and stage, for agents that want the history (section 6.4).
+
+**How the estimate works.** It is rough by nature, so it is reported as a range:
+- **Rest of the current pass:** items left times the measured time per item in this pass. Fairly good.
+- **Remaining passes:** bounded, because the stop rules are fixed. The loop stops after 10 passes without a 0.5-point
+  gain, and restore checks run from pass 8 on every 4th pass (`AutorouteBatchLoop.java:367-413, 492-599`). Recent pass
+  times give the low end; the pass ceiling gives the high end.
+- **Fallback stage:** up to five attempts, each about as long as the default run, so it can be estimated as soon as the
+  stage starts. On long runs this is the largest hidden cost.
+- **Stuck rather than slow:** "time since the last routed connection" tells the agent that one hard connection is
+  holding the pass, which no estimate can predict.
+
+**When.** Phase 2, step 10. The user chose to wait for the full set of fixes and test the finished router on the
+other machine, rather than ship this alone. Until then, an agent can bound the run with
+`--router.autorouter.fallback_strategies=none` (Issue070: 10.5 minutes down to 2.4, for 3 more unrouted),
+`--router.job_timeout=00:45:00`, and `-mp N`.
+
 ### 6.2 Changing rules mid-run: only at pass boundaries, and only strategy settings
 
 Changing clearance or width rules while a search runs is the wrong design. Rules feed the clearance matrix, the
@@ -264,7 +314,7 @@ Each step is a commit, measured against the baseline. Benchmarks use the default
 |---|---|
 | 0. Harness | Benchmark script (one row per run), SES diff, baseline. The user's stage DSNs are the goal set, so they join as soon as they arrive. KiCad DRC as the clearance oracle in the harness, because Freerouting's own count rests on the octagon DRC. |
 | 1. Bugs | (1) dangler cleanup on every exit, minimum neck width; (2) `class_class` for vias and pads, with a test board; (3) hangs; (4) a failed attempt (failed insert or strict-DRC rejection) restores the board, including ripped victims and partial copper; (5) 2-pin self-rip; dead randomization as its own measured commit; (6) stagnation on unrouted count, best-session write; starting later passes from the best board as an option that is off by default and benchmarked against the recoveries upstream documented; (7) plane targets (target doors open on the plane layer, expansion stays closed), fixed-track targets, overlapping pads, board-bounds wires; (8) the optimizer, or a cleanup subset, on partial boards. |
-| 2. Speed and control | (1) a work budget in search steps instead of time, first, because every later measurement depends on it and it makes results the same on every machine; (2) profile, then rank the search costs (start-room size, layer test order, per-layer filtering, unused clearance trees); (3) per-layer-pair via cost and an admissible heuristic, the likeliest cause of long runs left open on empty layers; (4) shove before rip; (5) deterministic net ordering (airline length, pin density, bounding box); (6) a tolerance in `enforceStrictDrc` so it stops rejecting routes over 2-4 um octagon artefacts; (7) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (8) route only these nets or this region; (9) fallback on the leftovers only; (10) graceful finish, sub-logs and `status.json`, with pause and stop at connection boundaries as well as pass boundaries; (11) parallel fallback portfolio, only if (9) leaves enough fallback time to matter. Everything must work headless (`--gui.enabled=false`), which is how WSL and remote sessions run it. |
+| 2. Speed and control | (1) a work budget in search steps instead of time, first, because every later measurement depends on it and it makes results the same on every machine; (2) profile, then rank the search costs (start-room size, layer test order, per-layer filtering, unused clearance trees); (3) per-layer-pair via cost and an admissible heuristic, the likeliest cause of long runs left open on empty layers; (4) shove before rip; (5) deterministic net ordering (airline length, pin density, bounding box); (6) a tolerance in `enforceStrictDrc` so it stops rejecting routes over 2-4 um octagon artefacts; (7) the master pass-1 slowdown (111 s against 9 s on v2.5.0); (8) route only these nets or this region; (9) fallback on the leftovers only; (10) live status file with an estimated finish time, best session on improvement, an agent-triggered stop file (section 6.1a), sub-logs, and pause and stop at connection boundaries as well as pass boundaries; (11) parallel fallback portfolio, only if (9) leaves enough fallback time to matter. Everything must work headless (`--gui.enabled=false`), which is how WSL and remote sessions run it. |
 | 3. Finisher and escapes | Fine-grid local finisher (section 5.3) with a window of the connection's bounding box plus margin, coarse then fine as `pcb_link.py` does, and the exact check after pull-tight. Escape planner per component (section 7.3): fanout is the first stage, the 45-minute hang and the 44.6% escape rate live there, and a prototype exists. Room and via-site reuse between connections is measured here, since it likely changes routes. |
 | 4. Agent API | Session API and MCP tools (section 6.3); pause, patch, resume. |
 | 5. Engine | Global router with negotiation; soft corridors with feedback; escape planner; parallel global routing. |
