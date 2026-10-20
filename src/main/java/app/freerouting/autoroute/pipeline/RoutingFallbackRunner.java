@@ -45,9 +45,9 @@ final class RoutingFallbackRunner {
     BatchAutorouter.StopReason reason = defaultRouter.lastStopReason;
     if (!RoutingFallback.isRetryable(reason)) {
       job.logInfo(
-          "Routing fallback skipped: the pass loop stopped for "
+          "Routing fallback skipped (the pass loop stopped: "
               + RoutingFallback.describe(reason)
-              + " with "
+              + ") with "
               + best
               + ".");
       return defaultRouter;

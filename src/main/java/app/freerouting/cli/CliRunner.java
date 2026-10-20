@@ -25,6 +25,7 @@ import java.util.UUID;
 public final class CliRunner {
 
   private static final long STATUS_FILE_INTERVAL_MILLIS = 2000;
+  private static final long ROUTING_THREAD_WAIT_MILLIS = 60_000;
   private static volatile boolean statusFileWarned;
 
   private CliRunner() {}
@@ -101,11 +102,23 @@ public final class CliRunner {
     routingJob.state = RoutingJobState.READY_TO_START;
 
     long lastStatusWrite = 0;
+    boolean stopFileSeen = false;
     while (!isCliTerminalState(routingJob.state)) {
       long nowMillis = System.currentTimeMillis();
       if (nowMillis - lastStatusWrite >= STATUS_FILE_INTERVAL_MILLIS) {
         writeStatusFile(routingJob);
         lastStatusWrite = nowMillis;
+        if (!stopFileSeen && stopFileExists(routingJob)) {
+          stopFileSeen = true;
+          FRLogger.info(
+              "Stop file '"
+                  + routingJob.routerSettings.stopFilePath
+                  + "' found: stopping after the current connection and writing the best board.");
+          routingJob.status().stopped("STOP_FILE");
+          if (routingJob.thread != null) {
+            routingJob.thread.requestStop();
+          }
+        }
       }
       try {
         Thread.sleep(50);
@@ -124,6 +137,7 @@ public final class CliRunner {
       }
     }
 
+    awaitRoutingThread(routingJob);
     boolean outputWritten = writeCliOutputIfAvailable(globalSettings, routingJob);
     int cliExitCode = computeCliExitCode(routingJob, outputWritten);
     routingJob.status().finished(String.valueOf(routingJob.state));
@@ -245,6 +259,36 @@ public final class CliRunner {
         FRLogger.warn("Couldn't write the status file '" + target + "': " + e.getMessage());
       }
     }
+  }
+
+  /**
+   * Waits for the routing thread after the job reached a terminal state. A timeout marks the job
+   * timed out while the thread may still be unwinding, and the thread sets the final output, the
+   * best board, only when it ends; without the wait the CLI could save an older live copy.
+   */
+  static void awaitRoutingThread(RoutingJob routingJob) {
+    Thread thread = routingJob.thread;
+    if (thread == null || !thread.isAlive() || thread == Thread.currentThread()) {
+      return;
+    }
+    FRLogger.info(
+        "Waiting up to "
+            + ROUTING_THREAD_WAIT_MILLIS / 1000
+            + " seconds for the routing thread to finish, so that its best board is saved.");
+    try {
+      thread.join(ROUTING_THREAD_WAIT_MILLIS);
+    } catch (InterruptedException _) {
+      Thread.currentThread().interrupt();
+    }
+    if (thread.isAlive()) {
+      FRLogger.warn(
+          "The routing thread is still running; saving the last board copy it published.");
+    }
+  }
+
+  static boolean stopFileExists(RoutingJob routingJob) {
+    String path = routingJob.routerSettings != null ? routingJob.routerSettings.stopFilePath : null;
+    return path != null && !path.isBlank() && Files.exists(Path.of(path));
   }
 
   public static boolean isCliTerminalState(RoutingJobState state) {

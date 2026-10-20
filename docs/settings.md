@@ -149,6 +149,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       does not read it. Fanout is also single-threaded. The optimizer pool uses
       `--router.optimizer.max_threads`. The legacy flat `--router.max_threads` remains as a
       fallback / GUI knob and is still copied onto both pools.
+- **`stop_file`**: Optional path that a headless CLI run checks every 2 seconds. When a file appears
+  there, the job stops after the connection it is routing, skips the remaining fallback and
+  optimizer stages, and writes its best board to the output file and the result manifest; the
+  status file shows `stop_reason: STOP_FILE`. Use it to end a run that is good enough instead of
+  killing the process, which loses the output. Equivalent CLI flag: `--router.stop_file=<path>`.
 - **`result_json`**: Optional path for a machine-readable routing result manifest written at the
   end of a headless `-de`/`-do` run. Used by the benchmark and autopilot harnesses. Equivalent CLI
   flag: `--router.result_json=<path>`.

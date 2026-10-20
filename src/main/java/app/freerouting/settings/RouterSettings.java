@@ -153,6 +153,15 @@ public class RouterSettings implements Serializable, Cloneable {
   public String statusFilePath;
 
   /**
+   * Optional path that a headless CLI run watches: when a file appears there, the job stops as soon
+   * as the current connection is done and writes its best board as the result. Lets an agent end a
+   * run that is good enough without killing the process and losing the output. Ignored when null or
+   * blank.
+   */
+  @SerializedName("stop_file")
+  public String stopFilePath;
+
+  /**
    * When {@code true}, per-layer trace costs were initialized from board geometry (or set
    * explicitly by the user) and must not be overwritten by subsequent calls to {@link
    * #applyBoardSpecificOptimizations}.
@@ -649,6 +658,7 @@ public class RouterSettings implements Serializable, Cloneable {
     // place, so without these the result manifest and the status file were lost.
     result.resultJsonPath = this.resultJsonPath;
     result.statusFilePath = this.statusFilePath;
+    result.stopFilePath = this.stopFilePath;
     result.clearanceToleranceUm = this.clearanceToleranceUm;
     result.planeNets = this.planeNets != null ? this.planeNets.clone() : null;
     result.planeAsObstacle = this.planeAsObstacle;
