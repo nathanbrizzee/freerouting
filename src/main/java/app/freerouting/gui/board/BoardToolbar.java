@@ -490,6 +490,10 @@ public class BoardToolbar extends JPanel {
               (Boolean isBoardReadOnly) -> {
                 setEnabled(!isBoardReadOnly);
                 cancelButton.setEnabled(isBoardReadOnly);
+                // Display All only changes the view and reads the board the display already
+                // draws, so it stays usable while the router runs. Display Region stays off: it
+                // switches the editor state.
+                toolbarDisplayAllButton.setEnabled(true);
               });
         });
   }
