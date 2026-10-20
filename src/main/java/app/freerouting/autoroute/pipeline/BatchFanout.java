@@ -259,7 +259,12 @@ public final class BatchFanout {
         String fullPinName =
             currentComponent.boardComponent.name + "-" + currentPin.boardPin.name();
         int netNumber = currentPin.boardPin.getNetNumber(0);
-        int targetCount = currentPin.boardPin.getUnconnectedSet(netNumber).size();
+        // Only the granular trace shows it, and on a net with a copper pour each count queries the
+        // whole pour (about a fifth of the fanout time on a dense HV card).
+        int targetCount =
+            FRLogger.granularTraceEnabled
+                ? currentPin.boardPin.getUnconnectedSet(netNumber).size()
+                : -1;
 
         app.freerouting.rules.Net net = this.routingBoard.rules.nets.get(netNumber);
         if (net != null) {
@@ -443,7 +448,6 @@ public final class BatchFanout {
           }
         }
         --pinsToGo;
-        int extraViasThisPass = Math.max(0, this.routingBoard.getViaCount() - viasBeforePass);
         maybePublishProgress(
             progressListener,
             passNo,
@@ -452,7 +456,7 @@ public final class BatchFanout {
             routedCount,
             notRoutedCount,
             insertErrorCount,
-            extraViasThisPass,
+            viasBeforePass,
             false,
             passStart,
             progressStats);
@@ -469,7 +473,7 @@ public final class BatchFanout {
               routedCount,
               notRoutedCount,
               insertErrorCount,
-              extraViasThisPass,
+              Math.max(0, this.routingBoard.getViaCount() - viasBeforePass),
               escapeStats,
               true,
               passStart,
@@ -487,7 +491,7 @@ public final class BatchFanout {
               routedCount,
               notRoutedCount,
               insertErrorCount,
-              extraViasThisPass,
+              Math.max(0, this.routingBoard.getViaCount() - viasBeforePass),
               escapeStats,
               true,
               passStart,
@@ -589,16 +593,19 @@ public final class BatchFanout {
       int routedCount,
       int notRoutedCount,
       int insertErrorCount,
-      int extraViasThisPass,
+      int viasBeforePass,
       boolean passCompleted,
       long passStart,
       BoardStatistics progressStats) {
     if (passCompleted || progressThrottler.shouldUpdate()) {
+      // Counting the vias walks every board item, so it is done only for an update that is sent.
+      int viaCount = this.routingBoard.getViaCount();
+      int extraViasThisPass = Math.max(0, viaCount - viasBeforePass);
       // Mid-pass interim updates use a lightweight empty escape statistics placeholder
       // to avoid the cost of a full escape scan on every tick.
       EscapeStatistics interimEscape = new EscapeStatistics(this.totalSmdPinCount, 0, 0.0);
       if (progressStats != null) {
-        progressStats.vias.totalCount = this.routingBoard.getViaCount();
+        progressStats.vias.totalCount = viaCount;
         progressStats.traces.totalCount = this.routingBoard.getTraces().size();
       }
       publishProgress(
