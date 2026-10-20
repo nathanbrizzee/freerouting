@@ -124,6 +124,16 @@ final class AutoroutePassRunner {
             router.thread.requestStop();
             break;
           }
+          if (router.workBudget >= 0 && router.totalItemsRouted >= router.workBudget) {
+            router.job.logInfo(
+                "Work budget of "
+                    + router.workBudget
+                    + " connection attempts used up in pass #"
+                    + passNo
+                    + "; stopping this attempt and keeping its best board.");
+            router.stopForWorkBudget();
+            break;
+          }
           router.totalItemsRouted++;
           router.board.startMarkingChangedArea();
 

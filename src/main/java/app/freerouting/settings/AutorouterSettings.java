@@ -90,6 +90,18 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Integer residualRepairMaxOpen;
 
   /**
+   * The fallback stage may make at most this many times as many connection attempts as the default
+   * run made, summed over its attempts; an attempt that reaches the limit stops and keeps its best
+   * board. Counting attempts, not time, keeps the result deterministic. {@code 0} means no limit.
+   */
+  @SerializedName("fallback_work_ratio")
+  @Schema(
+      description =
+          "Connection attempts the fallback stage may make, as a multiple of the default run's;"
+              + " 0 means no limit")
+  public Double fallbackWorkRatio;
+
+  /**
    * Erik Gavriluk (freerouting.net): exploration attempts after the opening fallback. {@code 0}
    * disables them. Later tries of a kind raise via costs and widen the ripped neighbourhood.
    * Attempts are not cut short by elapsed time.

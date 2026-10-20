@@ -4,6 +4,7 @@ import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
+import app.freerouting.core.results.RoutingResultManifest;
 import app.freerouting.drc.ClearanceBaseline;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
@@ -23,6 +24,9 @@ final class RoutingFallbackRunner {
   private final Map<String, RoutingFallback.Outcome> passLoopStarts = new LinkedHashMap<>();
   private final BatchAutorouter listenerSource;
 
+  /** Connection attempts the fallback stage has left, or a negative value for no limit. */
+  private long workBudgetLeft = -1;
+
   RoutingFallbackRunner(BatchAutorouter listenerSource) {
     this.listenerSource = listenerSource;
   }
@@ -41,7 +45,7 @@ final class RoutingFallbackRunner {
     BatchAutorouter.StopReason reason = defaultRouter.lastStopReason;
     if (!RoutingFallback.isRetryable(reason)) {
       job.logInfo(
-          "Routing fallback skipped: the pass loop stopped at its "
+          "Routing fallback skipped: the pass loop stopped for "
               + RoutingFallback.describe(reason)
               + " with "
               + best
@@ -65,6 +69,7 @@ final class RoutingFallbackRunner {
       return defaultRouter;
     }
     job.status().fallbackPlanned(alternatives.size() + continuations.size());
+    recordAttempt(job, best, reason, 0);
     job.logInfo(
         "Routing fallback: the default configuration stopped at "
             + RoutingFallback.describe(reason)
@@ -76,6 +81,18 @@ final class RoutingFallbackRunner {
             + (alternatives.size() == 1 ? "strategy" : "strategies")
             + (residual ? ", then continuing the best board" : "")
             + ".");
+    double workRatio = workRatio(job.routerSettings);
+    if (workRatio > 0) {
+      this.workBudgetLeft = Math.max(1, Math.round(workRatio * defaultRouter.totalItemsRouted));
+      job.logInfo(
+          "Routing fallback work budget: "
+              + this.workBudgetLeft
+              + " connection attempts ("
+              + workRatio
+              + " times the default run's "
+              + defaultRouter.totalItemsRouted
+              + ").");
+    }
     if (defaultRouter.passLoopStartHash != null) {
       this.passLoopStarts.put(defaultRouter.passLoopStartHash, best);
     }
@@ -88,7 +105,7 @@ final class RoutingFallbackRunner {
       continuedFrom = bestAttempt.board;
     }
     for (RoutingFallback.Strategy strategy : alternatives) {
-      if (stopped(job) || bestAttempt.outcome.isCompleteAndClean()) {
+      if (stopped(job) || bestAttempt.outcome.isCompleteAndClean() || budgetSpent(job)) {
         break;
       }
       Attempt attempt = runAttempt(job, input, strategy, false, inputBaseline);
@@ -140,10 +157,13 @@ final class RoutingFallbackRunner {
     } else {
       after.addAll(automaticContinuations(job.routerSettings));
     }
-    if (!after.isEmpty()) {
+    if (!after.isEmpty() && !budgetSpent(job)) {
       bestAttempt = runContinuations(job, bestAttempt, after);
     }
     job.board = bestAttempt.board;
+    if (job.resultPhaseMetrics != null && job.resultPhaseMetrics.fallback != null) {
+      job.resultPhaseMetrics.fallback.chosen = bestAttempt.outcome.strategy;
+    }
     job.logInfo(
         "Routing fallback chose '"
             + bestAttempt.outcome.strategy
@@ -162,6 +182,8 @@ final class RoutingFallbackRunner {
     if (!RoutingSupervisor.explores(job.routerSettings) || stopped(job)) {
       return incumbent;
     }
+    // Exploration is opt-in and has its own patience; the fallback budget does not apply to it.
+    this.workBudgetLeft = -1;
     RoutingSupervisor supervisor = new RoutingSupervisor();
     RoutingFallback.Outcome best =
         RoutingFallback.Outcome.of("incumbent", job.board, job.routerSettings);
@@ -217,7 +239,7 @@ final class RoutingFallbackRunner {
   private Attempt runContinuations(
       RoutingJob job, Attempt bestAttempt, List<RoutingFallback.Strategy> continuations) {
     for (RoutingFallback.Strategy strategy : continuations) {
-      if (bestAttempt.outcome.isCompleteAndClean() || stopped(job)) {
+      if (bestAttempt.outcome.isCompleteAndClean() || stopped(job) || budgetSpent(job)) {
         break;
       }
       if (!strategy.continueBest
@@ -302,19 +324,30 @@ final class RoutingFallbackRunner {
     job.status().attemptStarted(strategyName);
     job.board = board;
     job.routerSettings = settings;
+    long attemptStart = System.nanoTime();
     try {
       boolean removeUnconnectedVias = !keepFanoutVias && !settings.isFanoutEnabled();
       BatchAutorouter router =
           BatchAutorouter.createAttempt(job, board, settings, removeUnconnectedVias);
       router.copyListenersFrom(this.listenerSource);
+      if (this.workBudgetLeft >= 0) {
+        router.workBudget = (int) Math.min(Integer.MAX_VALUE, this.workBudgetLeft);
+      }
       RoutingFallback.Strategy strategy = RoutingFallback.find(strategyName);
       if (strategy != null && strategy.fanoutOnly) {
         router.setRepeatsPassLoop(hash -> hash != null && this.passLoopStarts.containsKey(hash));
       }
-      router.runBatchLoop();
+      try {
+        router.runBatchLoop();
+      } finally {
+        if (this.workBudgetLeft >= 0) {
+          this.workBudgetLeft = Math.max(0, this.workBudgetLeft - router.totalItemsRouted);
+        }
+      }
       RoutingFallback.Outcome outcome =
           RoutingFallback.Outcome.of(strategyName, job.board, savedSettings);
       ClearanceBaseline baseline = RoutingFallback.captureClearance(job.board, outcome.violations);
+      recordAttempt(job, outcome, router.lastStopReason, (System.nanoTime() - attemptStart) / 1e9f);
       return new Attempt(outcome, job.board, router, baseline);
     } catch (RuntimeException e) {
       job.board = savedBoard;
@@ -337,6 +370,53 @@ final class RoutingFallbackRunner {
     return best.isCompleteAndClean()
         || reason == BatchAutorouter.StopReason.TIMED_OUT
         || reason == BatchAutorouter.StopReason.CANCELLED;
+  }
+
+  /**
+   * Adds an attempt to the result manifest, so an agent can see what the fallback stage tried and
+   * what each attempt cost without reading the log.
+   */
+  private static void recordAttempt(
+      RoutingJob job,
+      RoutingFallback.Outcome outcome,
+      BatchAutorouter.StopReason reason,
+      float seconds) {
+    if (job.resultPhaseMetrics == null) {
+      return;
+    }
+    if (job.resultPhaseMetrics.fallback == null) {
+      job.resultPhaseMetrics.fallback = new RoutingResultManifest.FallbackDetail();
+    }
+    RoutingResultManifest.FallbackAttempt attempt = new RoutingResultManifest.FallbackAttempt();
+    attempt.strategy = outcome.strategy;
+    attempt.stopReason = reason != null ? reason.name() : null;
+    attempt.unrouted = outcome.unrouted;
+    attempt.newOrChangedViolations = outcome.newOrChanged;
+    attempt.clearanceViolations = outcome.violations;
+    attempt.routerScore = outcome.score;
+    attempt.durationSeconds = seconds;
+    job.resultPhaseMetrics.fallback.attempts.add(attempt);
+  }
+
+  private boolean budgetReported;
+
+  /** True once the work budget is used up; the first call logs it. */
+  private boolean budgetSpent(RoutingJob job) {
+    if (this.workBudgetLeft != 0) {
+      return false;
+    }
+    if (!this.budgetReported) {
+      this.budgetReported = true;
+      job.logInfo(
+          "Routing fallback: the work budget is used up; no further attempts start"
+              + " (router.autorouter.fallback_work_ratio raises it, 0 removes it).");
+    }
+    return true;
+  }
+
+  private static double workRatio(RouterSettings settings) {
+    Double ratio = settings.autorouter != null ? settings.autorouter.fallbackWorkRatio : null;
+    return ratio != null ? ratio : 0;
   }
 
   private static boolean stopped(RoutingJob job) {

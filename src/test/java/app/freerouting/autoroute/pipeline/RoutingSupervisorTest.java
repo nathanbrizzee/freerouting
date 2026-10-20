@@ -40,7 +40,7 @@ class RoutingSupervisorTest {
     assertEquals("none", RoutingSupervisor.explorationFallback(settings));
     settings.autorouter.exploreFallbackStrategies = " ";
     assertEquals(
-        "direct-first,fanout-retry,short-escape,open-escape,no-fanout",
+        DefaultSettings.DEFAULT_FALLBACK_STRATEGIES,
         RoutingSupervisor.explorationFallback(settings));
   }
 

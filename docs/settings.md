@@ -132,6 +132,17 @@ The primary way to configure Freerouting is through a JSON settings file. This f
     - **`algorithm`**: Algorithm identifier (`freerouting-router` by default; legacy identifiers such as `freerouting-router-v19` safely normalize to `freerouting-router`).
     - **`max_passes`**: Maximum autorouter passes. `0` means no limit.
     - **`max_items`**: Maximum items attempted in the autorouter stage.
+    - **`fallback_strategies`**: Comma-separated attempts tried in order when the pass loop stops
+      with open connections or new violations. The default is
+      `fanout-retry,short-escape,direct-first,open-escape,no-fanout`; `none` turns the fallback off.
+      Most of these route the board again from the start, so each one costs about as much as the
+      default run.
+    - **`fallback_work_ratio`**: The fallback stage may make at most this many times as many
+      connection attempts as the default run made, summed over its attempts. The attempt that
+      reaches the limit stops and keeps its best board, and no further attempt starts. Default
+      `1.0`, so the fallback stage takes roughly as long as the default run at most; `0` means no
+      limit. Connection attempts, not time, are counted, so the result does not depend on the
+      machine.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
     - **`ignore_net_classes`**: Net class names the autorouter should skip.
     - **`max_threads`**: Canonical CLI is `--router.autorouter.max_threads`. The autorouter pass

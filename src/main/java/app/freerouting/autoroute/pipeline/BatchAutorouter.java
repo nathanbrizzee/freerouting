@@ -88,6 +88,13 @@ public final class BatchAutorouter extends NamedAlgorithm {
   private final AutorouteBatchLoop batchLoop;
   protected RoutingJob job;
   int totalItemsRouted;
+
+  /**
+   * Connection attempts this run may make before it stops with {@link StopReason#WORK_BUDGET}, or a
+   * negative value for no limit. The fallback stage sets it from its remaining work budget.
+   */
+  int workBudget = -1;
+
   boolean fanoutTimedOut;
 
   /** Time when the routing session started. */
@@ -148,7 +155,8 @@ public final class BatchAutorouter extends NamedAlgorithm {
     NO_IMPROVEMENT,
     TIMED_OUT,
     CANCELLED,
-    REPEATED
+    REPEATED,
+    WORK_BUDGET
   }
 
   /**
@@ -605,6 +613,15 @@ public final class BatchAutorouter extends NamedAlgorithm {
   public boolean runBatchLoop() {
     this.board.awaitPostLoad();
     return batchLoop.run();
+  }
+
+  /** Stops this run's pass loop because its work budget is used up; later stages still run. */
+  void stopForWorkBudget() {
+    if (this.lastStopReason == null) {
+      this.lastStopReason = StopReason.WORK_BUDGET;
+    }
+    this.job.status().stopped(StopReason.WORK_BUDGET.name());
+    this.thread.requestStopAutoRouter();
   }
 
   String buildUnroutedConnectionsReport() {

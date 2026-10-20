@@ -16,14 +16,14 @@ import org.junit.jupiter.api.Test;
 class RoutingFallbackTest {
 
   @Test
-  void defaultStrategiesStartWithDirectFirst() {
+  void defaultStrategiesStartWithTheOnesThatHaveImprovedBoards() {
     RouterSettings defaults = new DefaultSettings().getSettings();
     List<String> names = new ArrayList<>();
     for (RoutingFallback.Strategy strategy : RoutingFallback.parse(defaults, null)) {
       names.add(strategy.name);
     }
     assertEquals(
-        List.of("direct-first", "fanout-retry", "short-escape", "open-escape", "no-fanout"), names);
+        List.of("fanout-retry", "short-escape", "direct-first", "open-escape", "no-fanout"), names);
   }
 
   @Test
@@ -96,6 +96,7 @@ class RoutingFallbackTest {
     assertFalse(RoutingFallback.isRetryable(BatchAutorouter.StopReason.TIMED_OUT));
     assertFalse(RoutingFallback.isRetryable(BatchAutorouter.StopReason.CANCELLED));
     assertFalse(RoutingFallback.isRetryable(BatchAutorouter.StopReason.REPEATED));
+    assertFalse(RoutingFallback.isRetryable(BatchAutorouter.StopReason.WORK_BUDGET));
   }
 
   @Test

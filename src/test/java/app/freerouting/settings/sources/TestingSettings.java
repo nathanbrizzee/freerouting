@@ -93,6 +93,16 @@ public class TestingSettings implements SettingsSource {
     this.settings.minTraceWidthUm = minTraceWidthUm;
   }
 
+  /** Sets the routing fallback strategies; tests run without a fallback unless they set this. */
+  public void setFallbackStrategies(String strategies) {
+    this.settings.autorouter.fallbackStrategies = strategies;
+  }
+
+  /** Sets the fallback work budget as a multiple of the default run's connection attempts. */
+  public void setFallbackWorkRatio(double ratio) {
+    this.settings.autorouter.fallbackWorkRatio = ratio;
+  }
+
   /** Sets the neck width override used by tests. */
   public void setNeckWidthUm(double neckWidthUm) {
     this.settings.neckWidthUm = neckWidthUm;

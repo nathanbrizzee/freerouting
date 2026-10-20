@@ -182,6 +182,7 @@ public final class RoutingFallback {
       case TIMED_OUT -> "timeout";
       case CANCELLED -> "cancelled";
       case REPEATED -> "a repeat of an earlier pass loop";
+      case WORK_BUDGET -> "the fallback work budget";
     };
   }
 

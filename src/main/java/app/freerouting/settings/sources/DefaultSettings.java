@@ -108,8 +108,11 @@ public class DefaultSettings implements SettingsSource {
 
   public static final float DEFAULT_ROUTER_UNROUTED_CONNECTION_WEIGHT = 1000.0F;
 
+  // The alternatives that have improved boards (fanout-retry, short-escape) come first, because the
+  // fallback work budget may end the stage before the later ones run.
   public static final String DEFAULT_FALLBACK_STRATEGIES =
-      "direct-first,fanout-retry,short-escape,open-escape,no-fanout";
+      "fanout-retry,short-escape,direct-first,open-escape,no-fanout";
+  public static final double DEFAULT_FALLBACK_WORK_RATIO = 1.0;
   public static final String DEFAULT_EXPLORE_FALLBACK_STRATEGIES = "short-escape,open-escape";
   public static final double DEFAULT_SMD_NET_VIA_COST_FACTOR = 0.1;
 
@@ -174,6 +177,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.exploreFallbackStrategies = DEFAULT_EXPLORE_FALLBACK_STRATEGIES;
     settings.autorouter.smdNetViaCostFactor = DEFAULT_SMD_NET_VIA_COST_FACTOR;
     settings.autorouter.residualRepairMaxOpen = 4;
+    settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.explorePatience = 0;
     settings.maxThreads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
     settings.autorouter.maxThreads = settings.maxThreads;
