@@ -156,7 +156,11 @@ final class DirectPinRouting {
             net,
             control.traceClearanceClassIndex,
             thread,
-            new TimeLimit((int) Math.min(perPinMs, Integer.MAX_VALUE)),
+            settings.fanout != null
+                    && settings.fanout.maxSearchStepsPerPin != null
+                    && settings.fanout.maxSearchStepsPerPin > 0
+                ? TimeLimit.ofSteps(settings.fanout.maxSearchStepsPerPin)
+                : new TimeLimit((int) Math.min(perPinMs, Integer.MAX_VALUE)),
             false);
     return engine.autorouteConnection(
         pin.getConnectedSet(net), pin.getUnconnectedSet(net), control, new TreeSet<>(), null);

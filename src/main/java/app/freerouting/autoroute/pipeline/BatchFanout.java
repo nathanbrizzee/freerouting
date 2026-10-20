@@ -30,6 +30,7 @@ public final class BatchFanout {
   private final int alreadyConnectedPinCount;
   private final ProgressThrottler progressThrottler = new ProgressThrottler(1000);
   private int lastNotRoutedCount;
+  private final SearchWork searchWork = new SearchWork();
   private int extraViasTotal;
   public int totalItemsFanouted;
   private Long deadlineMs;
@@ -185,6 +186,8 @@ public final class BatchFanout {
     final int viasBeforePass = this.routingBoard.getViaCount();
     int ripupCosts = this.settings.getStartRipupCosts() * (passNo + 1);
 
+    Long baseStepsPerPin =
+        this.settings.fanout != null ? this.settings.fanout.maxSearchStepsPerPin : null;
     long baseMillisPerPin =
         this.settings.fanout != null && this.settings.fanout.maxMillisecondsPerPin != null
             ? this.settings.fanout.maxMillisecondsPerPin
@@ -209,11 +212,14 @@ public final class BatchFanout {
             + ", ripupCosts="
             + effectiveRipupCosts
             + ", baseMillisPerPin="
-            + baseMillisPerPin,
+            + baseMillisPerPin
+            + ", baseStepsPerPin="
+            + baseStepsPerPin,
         "",
         new app.freerouting.geometry.planar.Point[0]);
 
     this.progressThrottler.reset();
+    this.searchWork.reset();
     BoardStatistics progressStats = new BoardStatistics(this.routingBoard, null, false);
     publishProgress(
         progressListener,
@@ -242,7 +248,10 @@ public final class BatchFanout {
           break;
         }
         double maxMilliseconds = baseMillisPerPin * (passNo + 1);
-        final TimeLimit timeLimit = new TimeLimit((int) maxMilliseconds);
+        final TimeLimit timeLimit =
+            baseStepsPerPin != null && baseStepsPerPin > 0
+                ? TimeLimit.ofSteps(baseStepsPerPin * (passNo + 1))
+                : new TimeLimit((int) Math.min(maxMilliseconds, Integer.MAX_VALUE));
         if (currentPin.boardPin.hasIgnoredNets()) {
           --pinsToGo;
           continue;
@@ -307,6 +316,9 @@ public final class BatchFanout {
             this.routingBoard.fanout(
                 currentPin.boardPin, this.settings, effectiveRipupCosts, this.thread, timeLimit);
         long pinDurationMs = (System.nanoTime() - pinStartNanos) / 1_000_000L;
+        this.searchWork.record(
+            timeLimit,
+            currentResult.state == app.freerouting.autoroute.AutorouteAttemptState.ROUTED);
 
         if (currentResult.state == app.freerouting.autoroute.AutorouteAttemptState.ROUTED) {
           AutorouteAttemptResult fanoutDrcRejection =
@@ -552,6 +564,10 @@ public final class BatchFanout {
         true,
         passStart,
         passStats);
+    String work = this.searchWork.describe("fanout pin");
+    if (work != null) {
+      FRLogger.info("Fanout pass #" + (passNo + 1) + ": " + work);
+    }
 
     return routedCount;
   }

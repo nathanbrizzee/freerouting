@@ -143,6 +143,13 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       `1.0`, so the fallback stage takes roughly as long as the default run at most; `0` means no
       limit. Connection attempts, not time, are counted, so the result does not depend on the
       machine.
+    - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
+      doubling each pass. Not set by default, which keeps the time limit (100 s in pass 1, doubling
+      each pass). When set, it replaces the time limit, so a connection stops at the same point on
+      every run and machine. Each pass logs `Auto-routing pass #N: Search work: ...` with the
+      searches, the steps, how many stopped at the limit, and the steps the routed connections
+      needed, which shows what budget a board needs. CLI:
+      `--router.autorouter.max_search_steps_per_connection=<steps>`.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
     - **`ignore_net_classes`**: Net class names the autorouter should skip.
     - **`max_threads`**: Canonical CLI is `--router.autorouter.max_threads`. The autorouter pass
@@ -251,6 +258,7 @@ Configures the SMD-pin fanout pre-pass stage.
 - **`max_passes`**: Maximum number of fanout passes. Default is `20`.
 - **`timeout`**: Optional wall-clock budget for the fanout stage (`HH:MM:SS`). When unset, fanout has no stage timeout of its own. `router.job_timeout` still covers fanout, autorouting, and optimization together.
 - **`max_milliseconds_per_pin`**: Base time budget in milliseconds per SMD pin in pass 1. Scales with pass number. Default is `10000`.
+- **`max_search_steps_per_pin`**: Maze search steps one SMD pin may use in pass 1, scaling with the pass number like `max_milliseconds_per_pin`, which it replaces when set. Not set by default. The time limit makes the fanout depend on machine load; the step budget stops a pin at the same point on every run. Each fanout pass logs `Fanout pass #N: Search work: ...` with how many pins stopped at the limit and the steps the routed pins needed. CLI: `--router.fanout.max_search_steps_per_pin=<steps>`.
 - **`ripup_allowed`**: Whether fanout can rip up existing traces. Default is `true`.
 - **`min_escape_length_mm`**: The minimum physical escape trace length in millimeters. Default is `2.5`. Landing vias and escape stubs are not placed closer than this distance from the pin center.
 - **`max_escape_length_mm`**: The maximum physical escape trace length in millimeters. Default is `4.5`. Enforced directly during maze expansion.

@@ -90,6 +90,18 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Integer residualRepairMaxOpen;
 
   /**
+   * Deterministic budget per connection in pass 1, in maze search steps, doubling each pass like
+   * the time budget it replaces when set (100 s in pass 1). Unlike the time budget, the same board
+   * stops at the same point on every run, whatever the machine load.
+   */
+  @SerializedName("max_search_steps_per_connection")
+  @Schema(
+      description =
+          "Maze search steps per connection in pass 1, doubling each pass; replaces the time"
+              + " limit when set")
+  public Long maxSearchStepsPerConnection;
+
+  /**
    * The fallback stage may make at most this many times as many connection attempts as the default
    * run made, summed over its attempts; an attempt that reaches the limit stops and keeps its best
    * board. Counting attempts, not time, keeps the result deterministic. {@code 0} means no limit.

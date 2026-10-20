@@ -49,6 +49,14 @@ public class FanoutSettings implements Serializable, Cloneable {
   public Long maxMillisecondsPerPin;
 
   /**
+   * Deterministic budget per SMD pin in pass 1, in maze search steps; scales with the pass number
+   * like {@link #maxMillisecondsPerPin}, which it replaces when set. Unlike the time budget, the
+   * same board stops at the same point on every run, whatever the machine load.
+   */
+  @SerializedName("max_search_steps_per_pin")
+  public Long maxSearchStepsPerPin;
+
+  /**
    * Whether the fanout router is allowed to rip up and re-route existing traces in order to make
    * room for a new escape via. When {@code false} fanout runs without any ripup, which is faster
    * but may leave more pins un-escaped on congested boards.

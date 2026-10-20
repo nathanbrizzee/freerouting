@@ -483,6 +483,10 @@ final class AutorouteBatchLoop {
       }
       if (!isOptimizerAutorouter) {
         job.logInfo(passCompletedMessage);
+        String work = router.passSearchWork.describe("connection");
+        if (work != null) {
+          job.logInfo("Auto-routing pass #" + currentPass + ": " + work);
+        }
       }
 
       DesignRulesChecker tempDrc = new DesignRulesChecker(router.board, null);

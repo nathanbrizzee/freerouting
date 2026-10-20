@@ -33,6 +33,37 @@ final class AutorouteConnectionRouter {
       SortedSet<Item> rippedItemList,
       Map<Item, Integer> ripupCosts,
       int ripupPassNo) {
+    TimeLimit timeLimit = connectionLimit(ripupPassNo);
+    AutorouteAttemptResult result =
+        routeWithin(item, routeNetNo, rippedItemList, ripupCosts, ripupPassNo, timeLimit);
+    router.passSearchWork.record(timeLimit, result.state == AutorouteAttemptState.ROUTED);
+    return result;
+  }
+
+  /**
+   * The search limit for one connection: the step budget when it is set, otherwise the time limit;
+   * both double with each pass.
+   */
+  private TimeLimit connectionLimit(int ripupPassNo) {
+    double factor = Math.pow(2, ripupPassNo - 1);
+    Long steps =
+        router.settings.autorouter != null
+            ? router.settings.autorouter.maxSearchStepsPerConnection
+            : null;
+    if (steps != null && steps > 0) {
+      return TimeLimit.ofSteps((long) Math.min(steps * factor, Long.MAX_VALUE));
+    }
+    double maxMilliseconds = Math.min(100000 * factor, Integer.MAX_VALUE);
+    return new TimeLimit((int) maxMilliseconds);
+  }
+
+  private AutorouteAttemptResult routeWithin(
+      Item item,
+      int routeNetNo,
+      SortedSet<Item> rippedItemList,
+      Map<Item, Integer> ripupCosts,
+      int ripupPassNo,
+      TimeLimit timeLimit) {
     try {
       Net routeNet = router.board.rules.nets.get(routeNetNo);
       boolean containsPlane = routeNet != null && routeNet.containsPlane();
@@ -71,10 +102,6 @@ final class AutorouteConnectionRouter {
       }
 
       router.setAirLine(AutorouteAirlineCalculator.calculateAirline(routeStartSet, routeDestSet));
-
-      double maxMilliseconds = 100000 * Math.pow(2, ripupPassNo - 1);
-      maxMilliseconds = Math.min(maxMilliseconds, Integer.MAX_VALUE);
-      TimeLimit timeLimit = new TimeLimit((int) maxMilliseconds);
 
       boolean isStrictPass = router.settings.isStrictDrc();
 

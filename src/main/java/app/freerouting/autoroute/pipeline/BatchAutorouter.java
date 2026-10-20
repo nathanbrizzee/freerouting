@@ -86,6 +86,10 @@ public final class BatchAutorouter extends NamedAlgorithm {
   private final List<Item> reusableSignalItemList = new ArrayList<>();
   private final Set<Item> reusableHandledItems = new TreeSet<>();
   private final AutorouteConnectionRouter connectionRouter;
+
+  /** Search steps of the current pass, for the pass log. */
+  final SearchWork passSearchWork = new SearchWork();
+
   private final AutoroutePassRunner passRunner;
   private final AutorouteBatchLoop batchLoop;
   protected RoutingJob job;
@@ -547,6 +551,7 @@ public final class BatchAutorouter extends NamedAlgorithm {
    * completely routed.
    */
   boolean autoroutePass(int passNo) {
+    this.passSearchWork.reset();
     return passRunner.runSingleThread(passNo);
   }
 
