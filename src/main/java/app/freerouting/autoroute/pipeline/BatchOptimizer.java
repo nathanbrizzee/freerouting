@@ -298,7 +298,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
     // Capture initial board state for baseline and session summary
     BoardStatistics initialStats = board.getStatistics();
     float initialRouterScore = initialStats.getRouterScore(job.routerSettings);
-    float initialOptimizerScore = initialStats.getOptimizerScore(job.routerSettings);
+    // Candidates are ranked on the unclamped score: the V2 score is clamped at 0 for display, and
+    // on real boards its penalty is above 1000, so a clamped comparison rejected every candidate.
+    float initialOptimizerScore = initialStats.getOptimizerRankScore(job.routerSettings);
     RoutingResultManifest.PhaseDetail phase = job.resultPhaseMetrics.optimizer;
     phase.before =
         RoutingResultManifest.PhaseSnapshot.fromBoardStatistics(
@@ -400,7 +402,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
       }
       ++currentPass;
 
-      float scoreBeforePass = board.getStatistics().getOptimizerScore(job.routerSettings);
+      float scoreBeforePass = board.getStatistics().getOptimizerRankScore(job.routerSettings);
 
       String currentBoardHash = this.board.getHash();
       this.fireTaskStateChangedEvent(
@@ -415,7 +417,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
       }
 
       BoardStatistics passStats = board.getStatistics();
-      float scoreAfterPass = passStats.getOptimizerScore(job.routerSettings);
+      float scoreAfterPass = passStats.getOptimizerRankScore(job.routerSettings);
       String rejectionReason =
           optimizerCandidateRejectionReason(
               this.bestIncompleteCount,
@@ -442,9 +444,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
         restoreIncumbentBoard();
       }
 
-      double passImprovementFraction =
-          scoreBeforePass > 0 ? (double) (scoreAfterPass - scoreBeforePass) / scoreBeforePass : 0;
-      double passImprovementPercent = passImprovementFraction * 100.0;
+      double passImprovementPercent = improvementPercent(scoreBeforePass, scoreAfterPass);
       String passOutcome =
           scoreAfterPass > scoreBeforePass
               ? "IMPROVED"
@@ -452,7 +452,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
       String passImprovementPercentStr =
           scoreBeforePass > 0
               ? String.format(Locale.US, "%.4f%%", passImprovementPercent)
-              : "n/a (baseline was 0.00)";
+              : String.format(Locale.US, "%.4f%% of the penalty", passImprovementPercent);
       job.logInfo(
           String.format(
               Locale.US,
@@ -493,7 +493,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
     // Restore best board achieved if final state regressed below best score or added
     // violations/opens
     BoardStatistics endStats = this.board.getStatistics();
-    float finalBoardScore = endStats.getOptimizerScore(job.routerSettings);
+    float finalBoardScore = endStats.getOptimizerRankScore(job.routerSettings);
     int finalIncomplete = endStats.connections.incompleteCount;
     int finalViolations = endStats.clearanceViolations.totalCount;
 
@@ -582,6 +582,18 @@ public final class BatchOptimizer extends NamedAlgorithm {
     this.board = this.bestBoard.deepCopy();
     this.job.board = this.board;
     this.fireBoardUpdatedEvent(new BoardStatistics(this.board), null, this.board);
+  }
+
+  /**
+   * A pass's improvement in percent: of the score when it is positive, otherwise of the penalty
+   * (1000 minus the score), which is what a score at or below zero still measures.
+   */
+  static double improvementPercent(float before, float after) {
+    if (before > 0) {
+      return (double) (after - before) / before * 100.0;
+    }
+    double penalty = 1000.0 - before;
+    return penalty > 0 ? (after - before) / penalty * 100.0 : 0;
   }
 
   /**
