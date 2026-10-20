@@ -323,7 +323,8 @@ public final class BatchFanout {
         long pinDurationMs = (System.nanoTime() - pinStartNanos) / 1_000_000L;
         this.searchWork.record(
             timeLimit,
-            currentResult.state == app.freerouting.autoroute.AutorouteAttemptState.ROUTED);
+            currentResult.state == app.freerouting.autoroute.AutorouteAttemptState.ROUTED,
+            this.thread);
 
         if (currentResult.state == app.freerouting.autoroute.AutorouteAttemptState.ROUTED) {
           AutorouteAttemptResult fanoutDrcRejection =

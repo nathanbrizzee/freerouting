@@ -54,6 +54,13 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
 
         job.timeoutAt = job.startedAt.plusSeconds(timeout);
       }
+      if (job.routerSettings.maxSearchSteps != null && job.routerSettings.maxSearchSteps > 0) {
+        this.setSearchStepBudget(job.routerSettings.maxSearchSteps);
+        job.logInfo(
+            "Search step budget: the job stops after "
+                + job.routerSettings.maxSearchSteps
+                + " maze search steps (router.max_search_steps).");
+      }
 
       // Start a new thread that will monitor the job thread
       Thread monitorThread =
@@ -419,6 +426,14 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
       }
       if (job.isCancelledByUser()) {
         job.state = RoutingJobState.CANCELLED;
+        return;
+      }
+      if (this.isSearchStepBudgetReached()) {
+        job.logInfo(
+            "The job stopped at its search step budget after "
+                + this.searchSteps()
+                + " steps (router.max_search_steps).");
+        job.state = RoutingJobState.TIMED_OUT;
         return;
       }
       if (jobClockExpired() && job.thread != null && job.thread.isStopRequested()) {

@@ -93,6 +93,15 @@ public class RouterSettings implements Serializable, Cloneable {
   @SerializedName("job_timeout")
   public String jobTimeoutString;
 
+  /**
+   * Maze search steps the whole job may use (fanout, autorouter and fallback searches; not the
+   * optimizer). The job stops after the search that reaches it and ends as timed out. Unlike {@code
+   * job_timeout}, it stops at the same point on every run, so capped benchmark runs do not depend
+   * on machine load. Not set means no limit.
+   */
+  @SerializedName("max_search_steps")
+  public Long maxSearchSteps;
+
   @SerializedName("layers")
   @Schema(
       description =
@@ -639,6 +648,7 @@ public class RouterSettings implements Serializable, Cloneable {
       result.setLayerCount(layerCount);
     }
     result.jobTimeoutString = this.jobTimeoutString;
+    result.maxSearchSteps = this.maxSearchSteps;
     if (this.layers != null) {
       result.layers = new LayerSettings[this.layers.length];
       for (int i = 0; i < this.layers.length; i++) {

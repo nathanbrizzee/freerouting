@@ -174,6 +174,13 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   that runs for more than a few seconds is not normal progress; each one that takes 10 seconds or
   more is also logged with its pin and net. It never changes routing. Equivalent CLI
   flag: `--router.status_file=<path>`.
+- **`max_search_steps`**: Optional cap on the maze search steps of the whole job (fanout,
+  autorouter and fallback searches; the optimizer is not counted). The job stops after the search
+  that reaches the cap, writes its best board and ends as timed out, with a log line naming the
+  cap. Unlike `job_timeout`, the steps depend only on the board and the settings, so a capped run
+  stops at the same point on every run and machine, however busy it is. Use it for benchmarks and
+  repeatable experiments; keep `job_timeout` as a safety net. Each pass logs its steps
+  (`Search work: ...`). Not set by default. CLI: `--router.max_search_steps=<steps>`.
 - **`max_threads`**: Legacy flat / GUI worker-thread cap. `setMaxThreads()` still copies this
   value into both `autorouter.max_threads` and `optimizer.max_threads`. Prefer the nested CLI
   flags (`--router.autorouter.max_threads`, `--router.optimizer.max_threads`) when the two pools

@@ -1,5 +1,6 @@
 package app.freerouting.autoroute.pipeline;
 
+import app.freerouting.core.StoppableThread;
 import app.freerouting.datastructures.TimeLimit;
 import java.util.Arrays;
 import java.util.Locale;
@@ -24,8 +25,14 @@ final class SearchWork {
     this.totalSteps = 0;
   }
 
-  /** Records one finished search under {@code limit}. */
-  void record(TimeLimit limit, boolean routed) {
+  /**
+   * Records one finished search under {@code limit} and adds its steps to the job's search step
+   * budget on {@code thread}, which may be null.
+   */
+  void record(TimeLimit limit, boolean routed, StoppableThread thread) {
+    if (thread != null) {
+      thread.addSearchSteps(limit.steps());
+    }
     this.searches++;
     this.totalSteps += limit.steps();
     if (limit.wasExceeded()) {

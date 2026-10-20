@@ -36,7 +36,8 @@ final class AutorouteConnectionRouter {
     TimeLimit timeLimit = connectionLimit(ripupPassNo);
     AutorouteAttemptResult result =
         routeWithin(item, routeNetNo, rippedItemList, ripupCosts, ripupPassNo, timeLimit);
-    router.passSearchWork.record(timeLimit, result.state == AutorouteAttemptState.ROUTED);
+    router.passSearchWork.record(
+        timeLimit, result.state == AutorouteAttemptState.ROUTED, router.thread);
     return result;
   }
 
