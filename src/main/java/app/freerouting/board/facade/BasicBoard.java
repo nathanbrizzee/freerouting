@@ -31,6 +31,7 @@ import app.freerouting.geometry.planar.Area;
 import app.freerouting.geometry.planar.ConvexShape;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntOctagon;
+import app.freerouting.geometry.planar.Line;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
 import app.freerouting.geometry.planar.PolylineShape;
@@ -853,6 +854,7 @@ public class BasicBoard implements Serializable {
     boolean result = false;
     boolean somethingChanged = true;
     int iterationCount = 0;
+    java.util.Map<Long, Integer> seenLayouts = new java.util.HashMap<>();
     while (somethingChanged) {
       if (++iterationCount > MAX_NORMALIZE_ITERATIONS) {
         // Safety valve: after this many passes the outer loop has not converged.
@@ -907,6 +909,14 @@ public class BasicBoard implements Serializable {
       if (somethingChanged) {
         continue;
       }
+      Integer seenAt = seenLayouts.putIfAbsent(traceLayoutSignature(netTraces), iterationCount);
+      if (seenAt != null) {
+        // Normalizing changed the net and then changed it back: every further iteration repeats
+        // the same cycle, and on a large net 2000 of them took minutes.
+        reportNormalizeCycle(netNumber, iterationCount, iterationCount - seenAt);
+        normalizeSuppressedNetNos.add(netNumber);
+        break;
+      }
 
       for (PolylineTrace currentTrace : netTraces) {
         if (currentTrace.isOnTheBoard()) {
@@ -921,6 +931,41 @@ public class BasicBoard implements Serializable {
       }
     }
     return result;
+  }
+
+  /**
+   * An order-independent hash of the traces' geometry. Splitting and combining give the pieces new
+   * ids, so the hash uses only layer, width and lines; two equal values mean the same layout.
+   */
+  static long traceLayoutSignature(java.util.List<PolylineTrace> traces) {
+    long result = traces.size();
+    for (PolylineTrace trace : traces) {
+      long traceHash = 31L * trace.getLayer() + trace.getHalfWidth();
+      for (Line line : trace.polyline().lines) {
+        traceHash = 31L * traceHash + line.getId();
+      }
+      // splitmix64 finaliser, so that summing the traces does not cancel similar ones.
+      traceHash = (traceHash ^ (traceHash >>> 30)) * 0xbf58476d1ce4e5b9L;
+      traceHash = (traceHash ^ (traceHash >>> 27)) * 0x94d049bb133111ebL;
+      result += traceHash ^ (traceHash >>> 31);
+    }
+    return result;
+  }
+
+  private void reportNormalizeCycle(int netNumber, int iteration, int period) {
+    String netName =
+        rules != null && rules.nets != null && rules.nets.get(netNumber) != null
+            ? rules.nets.get(netNumber).name
+            : String.valueOf(netNumber);
+    FRLogger.warn(
+        "BasicBoard.normalizeTraces: net '"
+            + netName
+            + "' came back to the trace layout of "
+            + period
+            + " iteration(s) earlier at iteration "
+            + iteration
+            + " (a split/combine cycle); traces are kept as-is and further normalization for this"
+            + " net is suppressed on this board candidate.");
   }
 
   /** Normalizes the traces of all nets on the board in a single optimized pass. */
@@ -957,6 +1002,7 @@ public class BasicBoard implements Serializable {
       java.util.List<PolylineTrace> netTraces = entry.getValue();
       boolean somethingChanged = true;
       int iterationCount = 0;
+      java.util.Map<Long, Integer> seenLayouts = new java.util.HashMap<>();
       while (somethingChanged) {
         if (++iterationCount > MAX_NORMALIZE_ITERATIONS) {
           String netName =
@@ -969,6 +1015,11 @@ public class BasicBoard implements Serializable {
                   + " iterations for net '"
                   + netName
                   + "' — stopping to prevent hang.");
+          break;
+        }
+        Integer seenAt = seenLayouts.putIfAbsent(traceLayoutSignature(netTraces), iterationCount);
+        if (seenAt != null) {
+          reportNormalizeCycle(netNumber, iterationCount, iterationCount - seenAt);
           break;
         }
         somethingChanged = false;
