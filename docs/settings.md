@@ -262,6 +262,11 @@ Configures the SMD-pin fanout pre-pass stage.
     - `"distance_to_closest_on_net"`: Pins are sorted by their distance to the closest item on the same net. Pins with closer targets are processed first.
     - `"surroundings_density"`: Measured by the count of SMD pins within a 20 mm proximity radius. Denser areas are processed first, allowing congested pins to escape before space is occupied.
     - `"unsorted"`: Pins are processed by pin number sequence.
+- **`strategy`**: How the fanout escapes SMD pins. Default is `"eager"`.
+    - `"eager"`: Fanout passes escape one pin at a time by maze search to a via inside the escape-length window.
+    - `"direct_first"`: Same-layer pin connections are routed first, without vias; failed pins are left to the autorouter.
+    - `"planned"`: Before the fanout passes, every SMD pin that still needs a connection gets an escape via on a short stub, so no pin is enclosed by copper before it can change layer. The via goes as close to the pad as fits: outward along the pad, then to either side of it, then behind it under the part, then diagonally; the stub grows only when no closer site fits, up to `max_escape_length_mm`. The densest components choose first. The escapes are unfixed, so the autorouter rips them up as needed. Pins with no room go to the eager passes. CLI: `--router.fanout.strategy=planned`.
+      When it helps: dense boards whose pins get enclosed by copper before they can drop a via. Measured with defaults otherwise (2026-10-20): a dense 6-layer HV card went from 6 to 3 unrouted at a 30-minute cap, a dense 6-layer carrier from 179 to 158 after its first pass, and Issue070 from 2 unrouted to finished in 56 s instead of 88 s. On a less crowded 4-layer HV card (7 to 8) and on the DAC2020 bm05 board (5 to 8) it was slightly worse, so it is opt-in. The planned step itself takes 1-6 s on most boards (60 s on the large carrier).
 
 #### **`usage_and_diagnostic_data` Section**
 

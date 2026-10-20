@@ -698,14 +698,26 @@ public class RouterSettings implements Serializable, Cloneable {
 
   /** Returns whether direct pin routing strategy is configured for fanout. */
   public boolean usesDirectPinRouting() {
+    return "direct_first".equalsIgnoreCase(fanoutStrategy());
+  }
+
+  /** Returns whether the planned fanout (an escape via for every SMD pin first) is configured. */
+  public boolean usesPlannedFanout() {
+    return "planned".equalsIgnoreCase(fanoutStrategy());
+  }
+
+  private String fanoutStrategy() {
     String strategy = this.fanout != null ? this.fanout.strategy : null;
-    if (strategy == null || strategy.isEmpty() || "eager".equalsIgnoreCase(strategy)) {
-      return false;
+    if (strategy == null || strategy.isEmpty()) {
+      return "eager";
     }
-    if (!"direct_first".equalsIgnoreCase(strategy)) {
-      throw new IllegalArgumentException("router.fanout.strategy must be eager or direct_first");
+    if (!"eager".equalsIgnoreCase(strategy)
+        && !"direct_first".equalsIgnoreCase(strategy)
+        && !"planned".equalsIgnoreCase(strategy)) {
+      throw new IllegalArgumentException(
+          "router.fanout.strategy must be eager, direct_first or planned");
     }
-    return true;
+    return strategy;
   }
 
   /** Returns whether connections with newly introduced clearance violations are rejected. */

@@ -101,8 +101,11 @@ public final class BatchFanout {
     if (settings.usesDirectPinRouting()) {
       return DirectPinRouting.run(board, settings, thread);
     }
-    BatchFanout fanoutInstance = new BatchFanout(board, settings, thread);
     long fanoutStart = System.currentTimeMillis();
+    if (settings.usesPlannedFanout()) {
+      PlannedFanout.run(board, settings, thread);
+    }
+    BatchFanout fanoutInstance = new BatchFanout(board, settings, thread);
     if (settings.fanout != null && settings.fanout.timeoutString != null) {
       Long timeoutSeconds =
           app.freerouting.util.TextManager.parseTimespanString(settings.fanout.timeoutString);

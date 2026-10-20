@@ -109,8 +109,10 @@ public class FanoutSettings implements Serializable, Cloneable {
   public Boolean retryWithoutEscapeWindow;
 
   /**
-   * Erik Gavriluk (freerouting.net): fanout strategy, "eager" or "direct_first". direct_first
-   * routes same-layer pin connections before any escape via.
+   * Erik Gavriluk (freerouting.net): fanout strategy, "eager", "direct_first" or "planned".
+   * direct_first routes same-layer pin connections before any escape via. planned first gives every
+   * SMD pin that needs a connection an escape via as close to its pad as fits (outward, to the
+   * side, behind the pad, then diagonally), then runs the eager passes for the rest.
    */
   @SerializedName("strategy")
   public String strategy;
