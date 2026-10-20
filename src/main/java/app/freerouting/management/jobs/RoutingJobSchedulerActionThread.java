@@ -24,6 +24,7 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
 
   private static final long MAX_TIMEOUT = 24 * 60 * 60; // 24 hours
   private static final int GRACE_PERIOD = 30; // 30 seconds
+  private static final long LIVE_OUTPUT_INTERVAL_MILLIS = 10_000;
   private final Object terminalStateLock = new Object();
   RoutingJob job;
 
@@ -124,7 +125,18 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
           inputFormat);
 
       RoutingPipeline pipeline = RoutingPipeline.createForHeadless(job);
-      pipeline.addBoardUpdatedEventListener(event -> setJobOutput(job));
+      long[] liveOutputAt = {0};
+      pipeline.addBoardUpdatedEventListener(
+          event -> {
+            // Each copy writes the whole session file, and events come up to 4 times a second.
+            // The final output is set after the pipeline, so live copies (for streaming clients)
+            // only need to be fresh enough to watch.
+            long now = System.currentTimeMillis();
+            if (now - liveOutputAt[0] >= LIVE_OUTPUT_INTERVAL_MILLIS) {
+              liveOutputAt[0] = now;
+              setJobOutput(job);
+            }
+          });
       pipeline.addStageListener(
           new RoutingPipeline.StageListener() {
             @Override

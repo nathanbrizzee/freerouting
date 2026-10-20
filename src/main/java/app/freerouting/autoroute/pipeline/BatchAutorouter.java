@@ -59,6 +59,9 @@ public final class BatchAutorouter extends NamedAlgorithm {
   // Progress statistics are informational only; avoid rebuilding the expensive snapshot for
   // every item while keeping the GUI reasonably current on large boards.
   static final int PROGRESS_STATISTICS_ITEM_INTERVAL = 10;
+  // On a board with large pours one snapshot walks every pour's connected set and can take most of
+  // a second, so it is also rebuilt at most this often, and only for an event that is sent.
+  static final long PROGRESS_STATISTICS_MIN_INTERVAL_MILLIS = 5000;
   // Minimum score gain (on the 0–1000 normalized scale) that counts as a
   // meaningful improvement; gains smaller than this are treated as stagnation.
   static final float STAGNATION_SCORE_THRESHOLD = 0.5F;
@@ -113,6 +116,7 @@ public final class BatchAutorouter extends NamedAlgorithm {
   int profilePlaneItemCount;
   BoardStatistics progressStatistics;
   int progressItemsSinceStatistics;
+  long progressStatisticsBuiltAtMillis;
 
   /**
    * Erik Gavriluk (freerouting.net): nets that routed at neck width earlier in the pass loop (or

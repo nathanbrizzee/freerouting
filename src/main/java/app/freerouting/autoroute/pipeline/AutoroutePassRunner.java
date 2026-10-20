@@ -531,17 +531,20 @@ final class AutoroutePassRunner {
       int routed,
       int skipped) {
     router.progressItemsSinceStatistics++;
-    if (router.progressItemsSinceStatistics >= BatchAutorouter.PROGRESS_STATISTICS_ITEM_INTERVAL) {
-      long progressStatisticsStart =
-          BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
-      router.progressStatistics = new BoardStatistics(router.board, null, false);
-      router.progressItemsSinceStatistics = 0;
-      if (BatchAutorouter.isBenchmarkProfileEnabled()) {
-        router.profileBoardStatisticsNanos += System.nanoTime() - progressStatisticsStart;
-      }
-    }
-
     if (router.shouldFireBoardUpdate()) {
+      long now = System.currentTimeMillis();
+      if (router.progressItemsSinceStatistics >= BatchAutorouter.PROGRESS_STATISTICS_ITEM_INTERVAL
+          && now - router.progressStatisticsBuiltAtMillis
+              >= BatchAutorouter.PROGRESS_STATISTICS_MIN_INTERVAL_MILLIS) {
+        long progressStatisticsStart =
+            BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
+        router.progressStatistics = new BoardStatistics(router.board, null, false);
+        router.progressItemsSinceStatistics = 0;
+        router.progressStatisticsBuiltAtMillis = now;
+        if (BatchAutorouter.isBenchmarkProfileEnabled()) {
+          router.profileBoardStatisticsNanos += System.nanoTime() - progressStatisticsStart;
+        }
+      }
       counters.queuedToBeRoutedCount = itemsToGoCount;
       counters.skippedCount = skipped;
       counters.rippedCount = rippedItemCount;
