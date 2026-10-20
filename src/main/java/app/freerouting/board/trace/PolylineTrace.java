@@ -553,7 +553,9 @@ public class PolylineTrace extends Trace implements Serializable {
                   foundTrace.split(
                       lineIndex,
                       intersectingLines[j],
-                      endsOn(this, foundLineSegment) && !this.isDeletionForbidden());
+                      foundTrace.isDeletionForbidden()
+                          && !this.isDeletionForbidden()
+                          && endsOn(this, foundLineSegment));
               if (currentSplitPieces != null) {
 
                 for (int k = 0; k < 2; k++) {
@@ -605,7 +607,9 @@ public class PolylineTrace extends Trace implements Serializable {
                 split(
                     i + 1,
                     intersectingLines[j],
-                    endsOn(foundTrace, currentLineSegment) && !foundTrace.isDeletionForbidden());
+                    this.isDeletionForbidden()
+                        && !foundTrace.isDeletionForbidden()
+                        && endsOn(foundTrace, currentLineSegment));
             if (currentSplitPieces != null) {
               ownTraceSplit = true;
               // this trace was split itself into 2.
@@ -774,9 +778,16 @@ public class PolylineTrace extends Trace implements Serializable {
     return result;
   }
 
-  /** Whether trace has its first or last corner on segment (a T-junction onto that segment). */
+  /**
+   * Whether trace has its first or last corner on segment (a T-junction onto that segment). Only
+   * integer corners are tested; {@link LineSegment#contains} does not handle rational ones.
+   */
   private static boolean endsOn(PolylineTrace trace, LineSegment segment) {
-    return segment.contains(trace.firstCorner()) || segment.contains(trace.lastCorner());
+    return endsOn(trace.firstCorner(), segment) || endsOn(trace.lastCorner(), segment);
+  }
+
+  private static boolean endsOn(Point corner, LineSegment segment) {
+    return corner instanceof IntPoint && segment.contains(corner);
   }
 
   /**
