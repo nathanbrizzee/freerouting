@@ -280,6 +280,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
     if (this.job != null && this.job.board != null) {
       this.board = this.job.board;
     }
+    if (this.job != null) {
+      this.job.status().stageStarted("optimizer");
+    }
     if (this.thread != null) {
       this.thread.resetStopAutoRouterRequest();
     }

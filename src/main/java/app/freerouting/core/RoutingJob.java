@@ -145,6 +145,10 @@ public class RoutingJob implements Serializable, Comparable<RoutingJob> {
       new RoutingResultManifest.PhaseMetrics();
 
   public transient Instant timeoutAt;
+
+  /** Live progress for agents and scripts; created on first use, not serialized. */
+  private transient RoutingStatus status;
+
   private boolean isCancelledByUser;
 
   /** Returns whether the user cancelled this job. */
@@ -301,6 +305,14 @@ public class RoutingJob implements Serializable, Comparable<RoutingJob> {
   }
 
   /** Sets the current routing pass. */
+  /** Returns the live progress of this job. */
+  public synchronized RoutingStatus status() {
+    if (status == null) {
+      status = new RoutingStatus();
+    }
+    return status;
+  }
+
   public void setCurrentPass(int currentPass) {
     this.currentPass = currentPass;
   }

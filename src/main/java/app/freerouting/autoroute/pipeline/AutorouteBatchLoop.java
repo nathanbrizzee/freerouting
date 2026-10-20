@@ -140,6 +140,7 @@ final class AutorouteBatchLoop {
         }
         int pinsToFanout = netConnectedSmdPins - alreadyConnectedAtStart;
         int netlessPins = router.board.getSmdPins().size() - netConnectedSmdPins - ignoredSmdPins;
+        job.status().stageStarted("fanout");
         job.logInfo(
             "Fanout stage started on board '"
                 + router.board.getHash()
@@ -321,6 +322,11 @@ final class AutorouteBatchLoop {
     // the degenerate case where plane-net items repeatedly fail or are inserted+removed each
     // pass without updating the board state.
     Set<String> alreadyRoutedBoardHashes = new java.util.HashSet<>();
+    job.status()
+        .passLimits(
+            STAGNATION_PASS_LIMIT,
+            router.settings.autorouter.maxPasses != null ? router.settings.autorouter.maxPasses : 0,
+            job.timeoutAt);
     while (continueAutorouting && !router.thread.isStopAutoRouterRequested()) {
       if (job.state == RoutingJobState.TIMED_OUT) {
         stopFor(BatchAutorouter.StopReason.TIMED_OUT);
@@ -364,6 +370,11 @@ final class AutorouteBatchLoop {
 
       BoardStatistics boardStatisticsAfter = new BoardStatistics(router.board);
       float boardScoreAfter = boardStatisticsAfter.getRouterScore(job.routerSettings);
+      job.status()
+          .passFinished(
+              currentPass,
+              boardStatisticsAfter.connections.incompleteCount,
+              boardStatisticsAfter.clearanceViolations.totalCount);
 
       if ((bh.size() >= STOP_AT_PASS_MINIMUM) || (router.thread.isStopAutoRouterRequested())) {
         if (((currentPass % STOP_AT_PASS_MODULO == 0) && (currentPass >= STOP_AT_PASS_MINIMUM))
@@ -773,6 +784,7 @@ final class AutorouteBatchLoop {
     if (router.lastStopReason == null) {
       router.lastStopReason = reason;
     }
+    router.job.status().stopped(reason.name());
     router.thread.requestStopAutoRouter();
   }
 }

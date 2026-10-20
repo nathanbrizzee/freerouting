@@ -10,15 +10,22 @@ import app.freerouting.logger.FRLogger;
 import app.freerouting.management.sessions.SessionManager;
 import app.freerouting.settings.GlobalSettings;
 import app.freerouting.settings.sources.DsnFileSettings;
+import app.freerouting.util.gson.GsonProvider;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.UUID;
 
 /** Executes a batch CLI routing job from command line arguments and settings. */
 public final class CliRunner {
+
+  private static final long STATUS_FILE_INTERVAL_MILLIS = 2000;
+  private static volatile boolean statusFileWarned;
 
   private CliRunner() {}
 
@@ -93,7 +100,13 @@ public final class CliRunner {
     routingJob.drcSettings = globalSettings.drcSettings.clone();
     routingJob.state = RoutingJobState.READY_TO_START;
 
+    long lastStatusWrite = 0;
     while (!isCliTerminalState(routingJob.state)) {
+      long nowMillis = System.currentTimeMillis();
+      if (nowMillis - lastStatusWrite >= STATUS_FILE_INTERVAL_MILLIS) {
+        writeStatusFile(routingJob);
+        lastStatusWrite = nowMillis;
+      }
       try {
         Thread.sleep(50);
       } catch (InterruptedException _) {
@@ -113,6 +126,8 @@ public final class CliRunner {
 
     boolean outputWritten = writeCliOutputIfAvailable(globalSettings, routingJob);
     int cliExitCode = computeCliExitCode(routingJob, outputWritten);
+    routingJob.status().finished(String.valueOf(routingJob.state));
+    writeStatusFile(routingJob);
     writeCliResultManifestIfRequested(globalSettings, routingJob, outputWritten, cliExitCode);
 
     if (outputWritten
@@ -196,6 +211,40 @@ public final class CliRunner {
 
     globalSettings.cliExitCode = cliExitCode;
     return cliExitCode == 0;
+  }
+
+  /**
+   * Rewrites the live status file, if one was requested, through a temporary file and a rename, so
+   * a reader never sees a half-written file. Failures are logged once per run and otherwise
+   * ignored: the status file must never stop a routing job.
+   */
+  static void writeStatusFile(RoutingJob routingJob) {
+    if (routingJob.routerSettings == null
+        || routingJob.routerSettings.statusFilePath == null
+        || routingJob.routerSettings.statusFilePath.isBlank()) {
+      return;
+    }
+    Path target = Path.of(routingJob.routerSettings.statusFilePath);
+    try {
+      Path parent = target.toAbsolutePath().getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+      Files.writeString(
+          temp, GsonProvider.GSON.toJson(routingJob.status().snapshot()), StandardCharsets.UTF_8);
+      try {
+        Files.move(
+            temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+      } catch (AtomicMoveNotSupportedException e) {
+        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+    } catch (IOException | RuntimeException e) {
+      if (!statusFileWarned) {
+        statusFileWarned = true;
+        FRLogger.warn("Couldn't write the status file '" + target + "': " + e.getMessage());
+      }
+    }
   }
 
   public static boolean isCliTerminalState(RoutingJobState state) {

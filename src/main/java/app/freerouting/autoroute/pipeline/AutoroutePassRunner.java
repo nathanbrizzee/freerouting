@@ -94,6 +94,7 @@ final class AutoroutePassRunner {
       }
 
       logIncompleteDetails(passNo, itemsToGoCount, routerCounters, tempDrc);
+      router.job.status().passStarted(passNo, itemsToGoCount, routerCounters.incompleteCount);
       router.fireBoardUpdatedEvent(stats, routerCounters, router.board);
 
       int rippedItemCount = 0;
@@ -196,6 +197,13 @@ final class AutoroutePassRunner {
             ++notRouted;
           }
           --itemsToGoCount;
+          Net statusNet = router.board.rules.nets.get(currentItem.getNetNumber(i));
+          router
+              .job
+              .status()
+              .itemDone(
+                  autorouterResult.state == AutorouteAttemptState.ROUTED,
+                  statusNet != null ? statusNet.name : null);
           rippedItemCount += rippedItemList.size();
           updateProgress(
               routerCounters, itemsToGoCount, rippedItemCount, notRouted, routed, skipped);

@@ -141,6 +141,13 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`result_json`**: Optional path for a machine-readable routing result manifest written at the
   end of a headless `-de`/`-do` run. Used by the benchmark and autopilot harnesses. Equivalent CLI
   flag: `--router.result_json=<path>`.
+- **`status_file`**: Optional path for a live status file (JSON) for agents and scripts that poll a
+  headless run. Rewritten every 2 seconds and once at the end, through a temporary file and a
+  rename, so a reader never sees a partial file. It holds the stage, the fallback attempt, the pass
+  and its progress, unrouted counts (at the start, now, best), a per-pass history, the time since
+  the best result improved and since the last routed connection, and a rough estimate of the time
+  left as a low-high range, capped by the job timeout. It never changes routing. Equivalent CLI
+  flag: `--router.status_file=<path>`.
 - **`max_threads`**: Legacy flat / GUI worker-thread cap. `setMaxThreads()` still copies this
   value into both `autorouter.max_threads` and `optimizer.max_threads`. Prefer the nested CLI
   flags (`--router.autorouter.max_threads`, `--router.optimizer.max_threads`) when the two pools

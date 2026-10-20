@@ -136,6 +136,14 @@ public class RouterSettings implements Serializable, Cloneable {
   public String resultJsonPath;
 
   /**
+   * Optional path for a live status file (JSON), rewritten every few seconds while the job runs and
+   * once at the end: stage, pass, progress, unrouted counts and a rough estimate of the time left.
+   * Ignored when null or blank.
+   */
+  @SerializedName("status_file")
+  public String statusFilePath;
+
+  /**
    * When {@code true}, per-layer trace costs were initialized from board geometry (or set
    * explicitly by the user) and must not be overwritten by subsequent calls to {@link
    * #applyBoardSpecificOptimizations}.

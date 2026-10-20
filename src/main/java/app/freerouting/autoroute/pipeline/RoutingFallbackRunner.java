@@ -64,6 +64,7 @@ final class RoutingFallbackRunner {
     if (alternatives.isEmpty() && continuations.isEmpty() && !residual) {
       return defaultRouter;
     }
+    job.status().fallbackPlanned(alternatives.size() + continuations.size());
     job.logInfo(
         "Routing fallback: the default configuration stopped at "
             + RoutingFallback.describe(reason)
@@ -298,6 +299,7 @@ final class RoutingFallbackRunner {
     RouterSettings savedSettings = job.routerSettings;
     RoutingBoard savedBoard = job.board;
     job.thread.resetAutoRouterStopRequest();
+    job.status().attemptStarted(strategyName);
     job.board = board;
     job.routerSettings = settings;
     try {
