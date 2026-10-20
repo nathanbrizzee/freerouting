@@ -501,8 +501,11 @@ public final class FoundConnectionInserter {
     candidateHalfWidths.add(Math.max(1, (baseHalfWidth * 3) / 5));
     candidateHalfWidths.add(Math.max(1, baseHalfWidth / 2));
 
+    int minHalfWidth = board.rules.getMinAllowedTraceHalfWidth();
     for (int candidateHalfWidth : candidateHalfWidths) {
-      if (candidateHalfWidth <= 0 || candidateHalfWidth >= baseHalfWidth) {
+      if (candidateHalfWidth <= 0
+          || candidateHalfWidth < minHalfWidth
+          || candidateHalfWidth >= baseHalfWidth) {
         continue;
       }
       Point candidateOkPoint =

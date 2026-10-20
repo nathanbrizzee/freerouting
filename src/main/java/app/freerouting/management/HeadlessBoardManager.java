@@ -363,6 +363,7 @@ public class HeadlessBoardManager implements BoardManager {
     this.edgeClearanceAppliedByOverride = false;
     applyCopperToEdgeClearanceOverride();
     applyHoleClearanceOverride();
+    applyMinTraceWidthOverride();
     applyPlaneNetsOverride();
     applyPlaneAsObstacleOverride();
     applyClearanceToleranceOverride();
@@ -622,6 +623,29 @@ public class HeadlessBoardManager implements BoardManager {
     FRLogger.debug("Applied plane_as_obstacle override: " + asObstacle);
   }
 
+  private void applyMinTraceWidthOverride() {
+    if (this.board == null
+        || this.board.rules == null
+        || this.routingJob == null
+        || this.routingJob.routerSettings == null
+        || this.routingJob.routerSettings.minTraceWidthUm == null) {
+      return;
+    }
+    double widthUm = this.routingJob.routerSettings.minTraceWidthUm;
+    if (!Double.isFinite(widthUm) || widthUm < 0) {
+      FRLogger.warn(
+          "Ignoring router.min_trace_width_um because it is invalid (must be finite and >= 0): "
+              + widthUm);
+      return;
+    }
+    int halfWidth =
+        (int) Math.round(this.board.communication.physicalToBoard(widthUm, Unit.UM) / 2);
+    if (halfWidth != this.board.rules.getMinAllowedTraceHalfWidth()) {
+      this.board.rules.setMinAllowedTraceHalfWidth(halfWidth);
+      FRLogger.info("Necking down is limited to traces of at least " + widthUm + " um.");
+    }
+  }
+
   private void applyClearanceToleranceOverride() {
     if (this.board == null
         || this.board.rules == null
@@ -841,6 +865,7 @@ public class HeadlessBoardManager implements BoardManager {
       this.routingJob.routerSettings.applyNetClassExclusions(this.board);
       applyCopperToEdgeClearanceOverride();
       applyHoleClearanceOverride();
+      applyMinTraceWidthOverride();
       applyPlaneNetsOverride();
       applyPlaneAsObstacleOverride();
       applyClearanceToleranceOverride();

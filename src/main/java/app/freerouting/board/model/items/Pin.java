@@ -580,10 +580,14 @@ public class Pin extends DrillItem implements Serializable {
 
   /**
    * Returns the neckdown half width for traces on layer. The neckdown width is used, when the pin
-   * width is smaller than the trace width to enter or leave the pin with a trace.
+   * width is smaller than the trace width to enter or leave the pin with a trace. It is never below
+   * the narrowest trace width the board rules allow.
    */
   public int getTraceNeckdownHalfwidth(int layer) {
     double result = Math.max(0.5 * this.getMinWidth(layer) - 1, 1);
+    if (board != null && board.rules != null) {
+      result = Math.max(result, board.rules.getMinAllowedTraceHalfWidth());
+    }
     return (int) result;
   }
 

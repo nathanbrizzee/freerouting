@@ -33,6 +33,15 @@ public class RouterSettings implements Serializable, Cloneable {
   public Double holeClearanceUm;
 
   /**
+   * Narrowest trace the router may create, in micrometers: necking down at pins, the fanout micro
+   * neckdown and the necked retry never go below it. Set it to the board's minimum track width;
+   * Specctra DSN files do not carry that value. 0/absent: no floor (pin tapers go down to the pad
+   * width, fanout necks to half the trace width).
+   */
+  @SerializedName("min_trace_width_um")
+  public Double minTraceWidthUm;
+
+  /**
    * Clearance violation shortfall tolerance in micrometers. Clearance shortfalls (expected -
    * actual) less than or equal to this threshold are treated as floating-point
    * rounding/discretization noise rather than electrical clearance violations.
@@ -634,6 +643,7 @@ public class RouterSettings implements Serializable, Cloneable {
     }
     result.copperToEdgeClearanceUm = this.copperToEdgeClearanceUm;
     result.holeClearanceUm = this.holeClearanceUm;
+    result.minTraceWidthUm = this.minTraceWidthUm;
     result.clearanceToleranceUm = this.clearanceToleranceUm;
     result.planeNets = this.planeNets != null ? this.planeNets.clone() : null;
     result.planeAsObstacle = this.planeAsObstacle;

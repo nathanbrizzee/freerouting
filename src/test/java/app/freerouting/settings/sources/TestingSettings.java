@@ -88,6 +88,11 @@ public class TestingSettings implements SettingsSource {
     this.settings.holeClearanceUm = holeClearanceUm;
   }
 
+  /** Sets the narrowest trace the router may create, used by tests. */
+  public void setMinTraceWidthUm(double minTraceWidthUm) {
+    this.settings.minTraceWidthUm = minTraceWidthUm;
+  }
+
   /** Sets the neck width override used by tests. */
   public void setNeckWidthUm(double neckWidthUm) {
     this.settings.neckWidthUm = neckWidthUm;

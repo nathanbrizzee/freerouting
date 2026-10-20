@@ -1,0 +1,35 @@
+(pcb neck_floor
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (layer B.Cu (type signal))
+    (boundary (rect pcb 0 0 30000 20000))
+    (via "Via[0-1]_600:300_um")
+    (rule (width 200) (clearance 200)))
+  (placement
+    (component FINE3
+      (place U1 10000 10000 front 0))
+    (component R_0603
+      (place R1 25000 10000 front 0)))
+  (library
+    (image FINE3
+      (pin Pad_150x600_um 1 -500 0)
+      (pin Pad_150x600_um 2 0 0)
+      (pin Pad_150x600_um 3 500 0))
+    (image R_0603
+      (pin Pad_800x950_um 1 -800 0)
+      (pin Pad_800x950_um 2 800 0))
+    (padstack Pad_150x600_um (shape (rect F.Cu -75 -300 75 300)) (attach off))
+    (padstack Pad_800x950_um (shape (rect F.Cu -400 -475 400 475)) (attach off))
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off)))
+  (network
+    (net P (pins U1-2 R1-1))
+    (class kicad_default ""
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 200) (clearance 200)))
+    (class POWER P
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 600) (clearance 200))))
+  (wiring))

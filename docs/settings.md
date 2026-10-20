@@ -161,6 +161,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`plane_as_obstacle`**: Boolean controlling whether conduction areas (copper pours) act as obstacles blocking foreign traces from passing through. Default is `false` (foreign traces may route through fills).
 - **`start_ripup_costs`**: Cost factor for ripping up existing traces.
 - **`automatic_neckdown`**: Enables or disables automatic neckdown of traces.
+- **`min_trace_width_um`**: Narrowest trace the router may create, in micrometers. Necking down at
+  pins, the fanout micro neckdown and the necked retry (`neck_width_um`) never go below it. Set it
+  to the board's minimum track width (in KiCad: Board Setup, Constraints); Specctra DSN files do
+  not carry that value. Absent or 0: no floor, so a pin taper goes down to the pad width and a
+  fanout neck to half the trace width. Equivalent CLI flag: `--router.min_trace_width_um=<um>`.
 - **`layers`**: An array of layer-specific settings (transient, typically set via CLI or loaded from board files). Each element contains:
     - **`routable`**: Boolean indicating if the layer is active/routable by the autorouter.
     - **`preferred_direction_horizontal`**: Boolean indicating if the preferred direction on this layer is horizontal.
