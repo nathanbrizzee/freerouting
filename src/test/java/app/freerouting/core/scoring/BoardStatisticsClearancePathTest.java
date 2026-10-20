@@ -38,7 +38,7 @@ class BoardStatisticsClearancePathTest {
     BoardStatistics stats = new BoardStatistics(board);
 
     assertEquals(fullDrcCount, stats.clearanceViolations.totalCount.intValue());
-    assertEquals(67, fullDrcCount);
+    assertEquals(3, fullDrcCount);
   }
 
   @Test

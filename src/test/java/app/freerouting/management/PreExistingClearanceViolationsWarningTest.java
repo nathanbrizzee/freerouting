@@ -152,7 +152,7 @@ class PreExistingClearanceViolationsWarningTest {
     // When includeClearanceViolations is true, clearance violations are computed via DRC
     BoardStatistics statsWithClearance = new BoardStatistics(board, null, true, false);
     assertNotNull(statsWithClearance.clearanceViolations);
-    assertEquals(67, statsWithClearance.clearanceViolations.totalCount);
-    assertEquals(67, statsWithClearance.clearanceViolations.unfixableCount);
+    assertEquals(3, statsWithClearance.clearanceViolations.totalCount);
+    assertEquals(3, statsWithClearance.clearanceViolations.unfixableCount);
   }
 }

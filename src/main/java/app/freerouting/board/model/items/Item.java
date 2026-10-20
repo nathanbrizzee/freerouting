@@ -442,6 +442,11 @@ public abstract class Item
             }
           }
         }
+        if (isObstacle && isFixedViaInSameNetPad(this, currentItem)) {
+          // The via padstack's attach rule only stops the router from placing vias in SMD pads; a
+          // via the designer fixed in a pad of its own net is a choice, not a clearance violation.
+          isObstacle = false;
+        }
 
         if (isObstacle) {
           // Get the two shapes the clearance is calculated between
@@ -567,6 +572,12 @@ public abstract class Item
    * the {@link BoardOutline}'s polygon shapes. A pad whose center lies inside the outline but whose
    * shape protrudes outside fails this check and stays a clearance obstacle.
    */
+  private static boolean isFixedViaInSameNetPad(Item first, Item second) {
+    Via via = first instanceof Via v ? v : second instanceof Via v ? v : null;
+    Item other = via == first ? second : first;
+    return via != null && other instanceof Pin && via.isUserFixed() && via.sharesNet(other);
+  }
+
   private static boolean outlineContainsTileShape(BoardOutline outline, TileShape tileShape) {
     int cornerCount = tileShape.borderLineCount();
     for (int ci = 0; ci < cornerCount; ci++) {
