@@ -3,6 +3,7 @@ package app.freerouting.autoroute;
 import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.core.scoring.BoardStatistics;
+import app.freerouting.drc.ClearanceBaseline;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.settings.RoutingCostSettings;
 import java.io.Serializable;
@@ -34,6 +35,12 @@ public class BoardHistory {
   private final RouterSettings routerSettings;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
+  /**
+   * The input-board violation baseline. It is transient on the board, so the serialized entries
+   * lose it; restored boards get it back from here.
+   */
+  private ClearanceBaseline clearanceBaseline;
+
   /** Constructs a BoardHistory with default maximum history size. */
   public BoardHistory(RouterSettings routerSettings) {
     this(routerSettings, MAX_HISTORY_SIZE);
@@ -59,6 +66,9 @@ public class BoardHistory {
 
   /** Adds a routing board to history if it improves overall score or space permits. */
   public synchronized void add(RoutingBoard board) {
+    if (board.clearanceBaseline != null) {
+      this.clearanceBaseline = board.clearanceBaseline;
+    }
     if (contains(board)) {
       return;
     }
@@ -164,7 +174,9 @@ public class BoardHistory {
       for (BoardHistoryEntry entry : boards) {
         if (entry.restoreCount <= maxAllowedRestoreCount) {
           entry.restoreCount++;
-          return (RoutingBoard) BasicBoard.deserialize(entry.board);
+          RoutingBoard restored = (RoutingBoard) BasicBoard.deserialize(entry.board);
+          restored.clearanceBaseline = this.clearanceBaseline;
+          return restored;
         }
       }
       return null;

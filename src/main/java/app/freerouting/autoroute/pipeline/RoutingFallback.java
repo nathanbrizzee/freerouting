@@ -6,6 +6,7 @@ import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.drc.ClearanceBaseline;
 import app.freerouting.drc.ClearanceViolation;
 import app.freerouting.drc.DesignRulesChecker;
+import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -260,11 +261,16 @@ public final class RoutingFallback {
           statistics.clearanceViolations.totalCount != null
               ? statistics.clearanceViolations.totalCount
               : 0;
-      int changed =
-          newOrChangedCount(
-              violationCount,
-              exemptionBaseline(incumbent, board.clearanceBaseline),
-              violationsOf(board));
+      ClearanceBaseline baseline = exemptionBaseline(incumbent, board.clearanceBaseline);
+      if (baseline == null && board.preExistingClearanceViolationsCount > 0) {
+        FRLogger.warn(
+            "Routing fallback '"
+                + strategy
+                + "': the board has lost its clearance baseline, so its "
+                + board.preExistingClearanceViolationsCount
+                + " pre-existing violation(s) count as new.");
+      }
+      int changed = newOrChangedCount(violationCount, baseline, violationsOf(board));
       statistics.clearanceViolations.newOrChangedCount = changed;
       return new Outcome(
           strategy,

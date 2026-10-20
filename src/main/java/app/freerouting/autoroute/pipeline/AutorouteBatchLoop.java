@@ -675,7 +675,6 @@ final class AutorouteBatchLoop {
       RoutingBoard bestBoard = bh.restoreBestBoard();
       if (bestBoard != null) {
         BoardStatistics currentStats = new BoardStatistics(router.board);
-        bestBoard.clearanceBaseline = router.board.clearanceBaseline;
         router.board = bestBoard;
         BoardStatistics bestStats = new BoardStatistics(router.board);
         job.logDebug(

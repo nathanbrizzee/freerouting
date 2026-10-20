@@ -2,6 +2,7 @@ package app.freerouting.board.facade;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import app.freerouting.autoroute.BoardHistory;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.drc.ClearanceBaseline;
 import app.freerouting.fixtures.RoutingFixtureTest;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class ClearanceBaselineCopyTest extends RoutingFixtureTest {
 
   @Test
-  void deepCopyKeepsTheBaseline() {
+  void copiesAndRestoresKeepTheBaseline() {
     TestingSettings testSettingsSource = new TestingSettings();
     testSettingsSource.setMaxPasses(1);
     testSettingsSource.setJobTimeoutString("00:01:00");
@@ -26,5 +27,9 @@ class ClearanceBaselineCopyTest extends RoutingFixtureTest {
     job.board.clearanceBaseline = baseline;
 
     assertSame(baseline, job.board.deepCopy().clearanceBaseline);
+
+    BoardHistory history = new BoardHistory(job.routerSettings);
+    history.add(job.board);
+    assertSame(baseline, history.restoreBestBoard().clearanceBaseline);
   }
 }
