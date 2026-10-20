@@ -119,7 +119,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`enabled`**: Enables or disables the graphical user interface (GUI). If set to `false`, Freerouting will run in
   headless mode.
 - **`input_directory`**: Specifies the default directory for opening design files.
-- **`dialog_confirmation_timeout`**: Sets the timeout in seconds for dialog confirmations.
+- **`dialog_confirmation_timeout`**: Sets the timeout in seconds for dialog confirmations. Default is `5`. `0` skips the auto-start dialog, so a GUI launched by a script with `-de` and `-do` starts routing at once (CLI: `-dct 0`).
 
 #### **`router` Section**
 

@@ -139,7 +139,9 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 - **`-dct [seconds]`**
   Sets the dialog confirmation timeout:
   - Specifies the number of seconds before dialogs proceed with the default action.
-  - Default is `20` seconds.
+  - Default is `5` seconds.
+  - `0` skips the dialog: when the GUI is launched with `-de` and `-do`, routing starts at once. Use it when a script launches the GUI.
+  - Equivalent setting: `gui.dialog_confirmation_timeout`.
 
 - **`-da`**
   Disables the collection of anonymous analytics data.
