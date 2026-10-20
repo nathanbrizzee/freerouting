@@ -644,6 +644,11 @@ public class RouterSettings implements Serializable, Cloneable {
     result.copperToEdgeClearanceUm = this.copperToEdgeClearanceUm;
     result.holeClearanceUm = this.holeClearanceUm;
     result.minTraceWidthUm = this.minTraceWidthUm;
+    result.fixKicadFootprints = this.fixKicadFootprints;
+    // Job outputs: a fallback attempt runs on a clone, and a timeout during it leaves the clone in
+    // place, so without these the result manifest and the status file were lost.
+    result.resultJsonPath = this.resultJsonPath;
+    result.statusFilePath = this.statusFilePath;
     result.clearanceToleranceUm = this.clearanceToleranceUm;
     result.planeNets = this.planeNets != null ? this.planeNets.clone() : null;
     result.planeAsObstacle = this.planeAsObstacle;
