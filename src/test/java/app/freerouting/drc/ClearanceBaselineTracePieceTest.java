@@ -56,7 +56,12 @@ class ClearanceBaselineTracePieceTest extends RoutingFixtureTest {
         1,
         baseline.countNewOrChanged(
             List.of(new ClearanceViolation(piece, pin, null, layer, 100, 40))),
-        "a changed clearance");
+        "a piece that comes closer");
+    assertEquals(
+        0,
+        baseline.countNewOrChanged(
+            List.of(new ClearanceViolation(piece, pin, null, layer, 100, 60))),
+        "a piece that is farther away");
     assertEquals(
         1,
         baseline.countNewOrChanged(

@@ -21,7 +21,8 @@ import java.util.Map;
  * Changed pre-existing copper is deliberately rechecked rather than exempted by a count allowance.
  * One change is accepted: a trace that lies along a baseline trace of the same nets, layer and
  * width, which is what a T-join onto pre-existing copper leaves when it splits the trace. Its
- * violation must still have the same layer and clearance measurements.
+ * violation must have the same layer and required clearance, and an actual clearance no smaller
+ * than the baseline violation's.
  *
  * <p>Ported from freerouting.net (Erik Gavriluk, Experimental Television Center).
  */
@@ -111,9 +112,16 @@ public final class ClearanceBaseline {
       if (other == null) {
         return false;
       }
-      if (this.layer != other.layer
-          || Double.compare(this.expected, other.expected) != 0
-          || Double.compare(this.actual, other.actual) != 0) {
+      if (this.layer != other.layer || Double.compare(this.expected, other.expected) != 0) {
+        return false;
+      }
+      // A piece of a split trace is part of the old copper, so it is at least as far from the
+      // other item as the whole trace was; it may not come closer.
+      boolean sameMeasure =
+          allowTracePieces
+              ? other.actual >= this.actual
+              : Double.compare(this.actual, other.actual) == 0;
+      if (!sameMeasure) {
         return false;
       }
       return (matchesItems(this.first, other.first, allowTracePieces)
