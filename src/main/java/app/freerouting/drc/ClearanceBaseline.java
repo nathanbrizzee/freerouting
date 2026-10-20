@@ -1,8 +1,12 @@
 package app.freerouting.drc;
 
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.trace.PolylineTrace;
+import app.freerouting.geometry.planar.FloatLine;
+import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.Line;
 import app.freerouting.geometry.planar.Point;
+import app.freerouting.geometry.planar.Polyline;
 import app.freerouting.geometry.planar.TileShape;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,6 +19,9 @@ import java.util.Map;
  * Immutable input-board violations for conservative result validation. An exemption requires the
  * same item geometry, nets, layer, and clearance measurements; item IDs may change on SES import.
  * Changed pre-existing copper is deliberately rechecked rather than exempted by a count allowance.
+ * One change is accepted: a trace that lies along a baseline trace of the same nets, layer and
+ * width, which is what a T-join onto pre-existing copper leaves when it splits the trace. Its
+ * violation must still have the same layer and clearance measurements.
  *
  * <p>Ported from freerouting.net (Erik Gavriluk, Experimental Television Center).
  */
@@ -47,15 +54,25 @@ public final class ClearanceBaseline {
       Entry current = currentEntries[n];
       int match = -1;
       for (int i = 0; i < this.entries.length; i++) {
-        if (!used[i] && this.entries[i].matches(current)) {
+        if (!used[i] && this.entries[i].matches(current, false)) {
           match = i;
           break;
         }
       }
-      if (match < 0) {
-        result.add(currentViolations[n]);
-      } else {
+      if (match >= 0) {
         used[match] = true;
+        continue;
+      }
+      // A piece of a split baseline trace; the pieces share the baseline entry.
+      boolean piece = false;
+      for (Entry entry : this.entries) {
+        if (entry.matches(current, true)) {
+          piece = true;
+          break;
+        }
+      }
+      if (!piece) {
+        result.add(currentViolations[n]);
       }
     }
     return result;
@@ -90,7 +107,7 @@ public final class ClearanceBaseline {
       this.actual = actual;
     }
 
-    boolean matches(Entry other) {
+    boolean matches(Entry other, boolean allowTracePieces) {
       if (other == null) {
         return false;
       }
@@ -99,15 +116,17 @@ public final class ClearanceBaseline {
           || Double.compare(this.actual, other.actual) != 0) {
         return false;
       }
-      return (matchesItems(this.first, other.first) && matchesItems(this.second, other.second))
-          || (matchesItems(this.first, other.second) && matchesItems(this.second, other.first));
+      return (matchesItems(this.first, other.first, allowTracePieces)
+              && matchesItems(this.second, other.second, allowTracePieces))
+          || (matchesItems(this.first, other.second, allowTracePieces)
+              && matchesItems(this.second, other.first, allowTracePieces));
     }
 
-    private static boolean matchesItems(ItemGeometry a, ItemGeometry b) {
+    private static boolean matchesItems(ItemGeometry a, ItemGeometry b, boolean allowTracePieces) {
       if (a == null) {
         return b == null;
       }
-      return a.matches(b);
+      return a.matches(b) || (allowTracePieces && a.containsTrace(b));
     }
   }
 
@@ -115,6 +134,7 @@ public final class ClearanceBaseline {
     private final String type;
     private final int[] nets;
     private final ShapeGeometry[] shapes;
+    private final TraceGeometry trace;
 
     ItemGeometry(Item item) {
       this.type = item.getClass().getName();
@@ -127,6 +147,18 @@ public final class ClearanceBaseline {
       for (int i = 0; i < this.shapes.length; i++) {
         this.shapes[i] = new ShapeGeometry(item.shapeLayer(i), item.getTileShape(i));
       }
+      this.trace =
+          item instanceof PolylineTrace polylineTrace ? new TraceGeometry(polylineTrace) : null;
+    }
+
+    /** Whether {@code other} is a trace lying along this baseline trace. */
+    boolean containsTrace(ItemGeometry other) {
+      if (other == null || this.trace == null || other.trace == null) {
+        return false;
+      }
+      return this.type.equals(other.type)
+          && Arrays.equals(this.nets, other.nets)
+          && this.trace.contains(other.trace);
     }
 
     boolean matches(ItemGeometry other) {
@@ -145,6 +177,54 @@ public final class ClearanceBaseline {
         }
       }
       return true;
+    }
+  }
+
+  private static final class TraceGeometry {
+    /** Allowed distance of a piece's corners from the baseline centre line, in board units. */
+    private static final double TOLERANCE = 2.0;
+
+    private final int layer;
+    private final int halfWidth;
+    private final FloatPoint[] corners;
+
+    TraceGeometry(PolylineTrace trace) {
+      this.layer = trace.getLayer();
+      this.halfWidth = trace.getHalfWidth();
+      Polyline polyline = trace.polyline();
+      this.corners = new FloatPoint[polyline.cornerCount()];
+      for (int i = 0; i < this.corners.length; i++) {
+        this.corners[i] = polyline.cornerApprox(i);
+      }
+    }
+
+    /** Every corner and segment midpoint of {@code piece} lies on this centre line. */
+    boolean contains(TraceGeometry piece) {
+      if (this.layer != piece.layer
+          || this.halfWidth != piece.halfWidth
+          || this.corners.length < 2
+          || piece.corners.length < 2) {
+        return false;
+      }
+      for (int i = 0; i < piece.corners.length; i++) {
+        if (!onCentreLine(piece.corners[i])) {
+          return false;
+        }
+        if (i > 0 && !onCentreLine(piece.corners[i - 1].middlePoint(piece.corners[i]))) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private boolean onCentreLine(FloatPoint point) {
+      for (int i = 1; i < this.corners.length; i++) {
+        if (new FloatLine(this.corners[i - 1], this.corners[i]).segmentDistance(point)
+            <= TOLERANCE) {
+          return true;
+        }
+      }
+      return false;
     }
   }
 
