@@ -145,8 +145,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   headless run. Rewritten every 2 seconds and once at the end, through a temporary file and a
   rename, so a reader never sees a partial file. It holds the stage, the fallback attempt, the pass
   and its progress, unrouted counts (at the start, now, best), a per-pass history, the time since
-  the best result improved and since the last routed connection, and a rough estimate of the time
-  left as a low-high range, capped by the job timeout. It never changes routing. Equivalent CLI
+  the best result improved and since the last routed connection, how long the connection being
+  routed has run (`current_item_elapsed_s`) and the slowest connection so far (`slowest_item`), and
+  a rough estimate of the time left as a low-high range, capped by the job timeout. A connection
+  that runs for more than a few seconds is not normal progress; each one that takes 10 seconds or
+  more is also logged with its pin and net. It never changes routing. Equivalent CLI
   flag: `--router.status_file=<path>`.
 - **`max_threads`**: Legacy flat / GUI worker-thread cap. `setMaxThreads()` still copies this
   value into both `autorouter.max_threads` and `optimizer.max_threads`. Prefer the nested CLI

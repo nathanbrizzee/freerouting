@@ -33,6 +33,11 @@ public final class RoutingStatus {
   private int passItemsTotal;
   private int passItemsDone;
   private String currentNet;
+  private Instant itemStartedAt;
+  private double slowestItemSeconds;
+  private String slowestItemNet;
+  private int slowestItemPass;
+  private String slowestItemAttempt;
   private int unroutedStart = -1;
   private int unroutedNow = -1;
   private int unroutedBest = -1;
@@ -94,12 +99,29 @@ public final class RoutingStatus {
     this.unroutedNow = unrouted;
   }
 
+  /** The pass starts routing an item of this net. */
+  public synchronized void itemStarted(String netName) {
+    this.currentNet = netName;
+    this.itemStartedAt = Instant.now();
+  }
+
   /** One item of the pass was attempted. */
   public synchronized void itemDone(boolean routed, String netName) {
+    Instant now = Instant.now();
     this.passItemsDone++;
     this.currentNet = netName;
     if (routed) {
-      this.lastRoutedAt = Instant.now();
+      this.lastRoutedAt = now;
+    }
+    if (this.itemStartedAt != null) {
+      double seconds = Duration.between(this.itemStartedAt, now).toMillis() / 1000.0;
+      if (seconds > this.slowestItemSeconds) {
+        this.slowestItemSeconds = seconds;
+        this.slowestItemNet = netName;
+        this.slowestItemPass = this.pass;
+        this.slowestItemAttempt = this.attempt;
+      }
+      this.itemStartedAt = null;
     }
   }
 
@@ -162,6 +184,18 @@ public final class RoutingStatus {
     s.put("pass_items_total", passItemsTotal);
     if (currentNet != null) {
       s.put("current_net", currentNet);
+    }
+    if (itemStartedAt != null) {
+      // A connection that runs for minutes points at a search or cleanup problem, not progress.
+      s.put("current_item_elapsed_s", seconds(itemStartedAt, now));
+    }
+    if (slowestItemNet != null) {
+      Map<String, Object> slowest = new LinkedHashMap<>();
+      slowest.put("net", slowestItemNet);
+      slowest.put("seconds", round(slowestItemSeconds));
+      slowest.put("attempt", slowestItemAttempt);
+      slowest.put("pass", slowestItemPass);
+      s.put("slowest_item", slowest);
     }
     s.put("unrouted_start", unroutedStart);
     s.put("unrouted_now", unroutedNow);

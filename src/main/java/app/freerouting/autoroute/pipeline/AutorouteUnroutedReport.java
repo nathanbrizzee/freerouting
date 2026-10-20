@@ -57,7 +57,7 @@ final class AutorouteUnroutedReport {
    * Returns a short, user-friendly description of a board item suitable for the stagnation report.
    * For pins the format is {@code ComponentName-PinName}; all other item types use a generic form.
    */
-  private static String describeItem(RoutingBoard board, Item item) {
+  static String describeItem(RoutingBoard board, Item item) {
     if (item instanceof Pin pin) {
       try {
         Component component = board.components.get(pin.getComponentId());

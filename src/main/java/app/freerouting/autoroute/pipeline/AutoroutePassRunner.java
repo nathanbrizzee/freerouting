@@ -35,6 +35,9 @@ import java.util.TreeSet;
 /** Executes one autoroute pass on the calling thread. */
 final class AutoroutePassRunner {
 
+  /** Items that take at least this long to route are logged; logging does not change a route. */
+  private static final long SLOW_ITEM_NANOS = 10_000_000_000L;
+
   private final BatchAutorouter router;
   private Set<Integer> previousIncompleteNets = Collections.emptySet();
   private int previousIncompleteCount = -1;
@@ -136,6 +139,10 @@ final class AutoroutePassRunner {
             }
           }
 
+          Net statusNet = router.board.rules.nets.get(currentItem.getNetNumber(i));
+          String statusNetName = statusNet != null ? statusNet.name : null;
+          router.job.status().itemStarted(statusNetName);
+          long itemStart = System.nanoTime();
           long routeItemStart = BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
           PerformanceProfiler.start("autoroute_item");
           final AutorouteAttemptResult autorouterResult =
@@ -149,6 +156,13 @@ final class AutoroutePassRunner {
           if (BatchAutorouter.isBenchmarkProfileEnabled()) {
             router.profileAutorouteItemNanos += System.nanoTime() - routeItemStart;
           }
+          logSlowItem(
+              passNo,
+              currentItem,
+              statusNetName,
+              autorouterResult,
+              rippedItemList.size(),
+              System.nanoTime() - itemStart);
 
           logRippedItems(currentItem, i, rippedItemList, rippedItemCosts);
           if (FRLogger.isTraceEnabled()) {
@@ -197,13 +211,10 @@ final class AutoroutePassRunner {
             ++notRouted;
           }
           --itemsToGoCount;
-          Net statusNet = router.board.rules.nets.get(currentItem.getNetNumber(i));
           router
               .job
               .status()
-              .itemDone(
-                  autorouterResult.state == AutorouteAttemptState.ROUTED,
-                  statusNet != null ? statusNet.name : null);
+              .itemDone(autorouterResult.state == AutorouteAttemptState.ROUTED, statusNetName);
           rippedItemCount += rippedItemList.size();
           updateProgress(
               routerCounters, itemsToGoCount, rippedItemCount, notRouted, routed, skipped);
@@ -434,6 +445,32 @@ final class AutoroutePassRunner {
             + ",Type="
             + currentItem.getClass().getSimpleName(),
         router.getImpactedPoints(currentItem));
+  }
+
+  /**
+   * Logs an item that took long to route. A normal connection takes milliseconds, so one that takes
+   * seconds is where a slow pass spends its time; the log line tells an agent which net it is.
+   */
+  private void logSlowItem(
+      int passNo,
+      Item item,
+      String netName,
+      AutorouteAttemptResult result,
+      int rippedCount,
+      long elapsedNanos) {
+    if (elapsedNanos < SLOW_ITEM_NANOS) {
+      return;
+    }
+    router.job.logInfo(
+        String.format(
+            java.util.Locale.US,
+            "Pass #%d: routing %s on net '%s' took %.1f seconds (%s, %d item(s) ripped).",
+            passNo,
+            AutorouteUnroutedReport.describeItem(router.board, item),
+            netName,
+            elapsedNanos / 1e9,
+            result.state,
+            rippedCount));
   }
 
   private void logNet94Items() {

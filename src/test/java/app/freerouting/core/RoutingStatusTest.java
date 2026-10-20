@@ -43,6 +43,26 @@ class RoutingStatusTest {
   }
 
   @Test
+  void reportsTheItemInProgressAndTheSlowestItem() throws InterruptedException {
+    RoutingStatus status = new RoutingStatus();
+    status.passStarted(1, 2, 2);
+    status.itemStarted("VCC");
+    Map<String, Object> s = status.snapshot();
+    assertEquals("VCC", s.get("current_net"), "the net being routed, not the last one done");
+    assertTrue(s.containsKey("current_item_elapsed_s"));
+
+    Thread.sleep(20);
+    status.itemDone(false, "VCC");
+    status.itemStarted("GND");
+    status.itemDone(true, "GND");
+    s = status.snapshot();
+    assertFalse(s.containsKey("current_item_elapsed_s"), "no item is in progress");
+    Map<?, ?> slowest = (Map<?, ?>) s.get("slowest_item");
+    assertEquals("VCC", slowest.get("net"));
+    assertEquals(1, slowest.get("pass"));
+  }
+
+  @Test
   void estimateCountsPassesLeftUnderTheStagnationLimit() {
     RoutingStatus status = new RoutingStatus();
     status.passLimits(10, 0, null);
