@@ -491,11 +491,15 @@ public class Wiring extends ScopeKeyword {
       }
       IntPoint[] corners = new IntPoint[path.coordinateArr.length / 2];
       double[] currentPoint = new double[2];
+      boolean outsideReported = false;
       for (int i = 0; i < corners.length; i++) {
         currentPoint[0] = path.coordinateArr[2 * i];
         currentPoint[1] = path.coordinateArr[2 * i + 1];
         FloatPoint currentCorner = scopeParameter.coordinateTransform.dsnToBoard(currentPoint);
-        if (!boundingBox.contains(currentCorner)) {
+        if (!outsideReported && !boundingBox.contains(currentCorner)) {
+          // The wire is kept: dropping it lost the designer's copper, both here and in a KiCad
+          // session import, which replaces the board's tracks with the session's. The router
+          // never expands outside the board, so the part outside is only an obstacle.
           String msg =
               "Wiring: wire corner ("
                   + (int) currentPoint[0]
@@ -503,10 +507,10 @@ public class Wiring extends ScopeKeyword {
                   + (int) currentPoint[1]
                   + ") is outside board bounds at '"
                   + scopeParameter.scanner.getScopeIdentifier()
-                  + "'";
+                  + "'; the wire is kept";
           FRLogger.warn(msg);
           scopeParameter.warnings.add(msg);
-          return null;
+          outsideReported = true;
         }
         corners[i] = currentCorner.round();
       }
