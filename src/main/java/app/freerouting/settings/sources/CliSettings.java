@@ -90,6 +90,11 @@ public class CliSettings implements SettingsSource {
                   + " '--router.autorouter.ignore_net_classes' instead.");
         }
 
+        if ("mt".equals(flag)) {
+          applyOptimizerThreads(settings, value);
+          continue;
+        }
+
         // Map short flags to router settings
         String propertyName = mapFlagToProperty(flag);
         if (propertyName != null
@@ -111,6 +116,26 @@ public class CliSettings implements SettingsSource {
     }
 
     return settings;
+  }
+
+  /**
+   * {@code -mt N} sets the optimizer pool size, as documented; {@code -mt 0} turns the optimizer
+   * off. The flat {@code router.max_threads} it used to set never reached the optimizer pool.
+   */
+  private void applyOptimizerThreads(RouterSettings settings, String value) {
+    int threads;
+    try {
+      threads = Integer.decode(value.trim());
+    } catch (NumberFormatException e) {
+      FRLogger.warn("Ignoring '-mt " + value + "': not a thread count.");
+      return;
+    }
+    if (threads <= 0) {
+      applyRouterSetting(settings, "router.optimizer.enabled", "false");
+      FRLogger.info("'-mt " + value + "' turns the optimizer off.");
+    } else {
+      applyRouterSetting(settings, "router.optimizer.max_threads", String.valueOf(threads));
+    }
   }
 
   private void applyRouterSetting(RouterSettings settings, String propertyName, String value) {
@@ -171,7 +196,6 @@ public class CliSettings implements SettingsSource {
     // Map short flags to full property names
     return switch (flag) {
       case "mp" -> "router.max_passes";
-      case "mt" -> "router.max_threads";
       case "inc" -> "router.autorouter.ignore_net_classes";
       case "oit" -> "router.optimizer.improvement_threshold";
       case "router-scoring-version" -> "router.scoring.version";

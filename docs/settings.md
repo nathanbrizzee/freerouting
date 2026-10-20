@@ -170,7 +170,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`max_threads`**: Legacy flat / GUI worker-thread cap. `setMaxThreads()` still copies this
   value into both `autorouter.max_threads` and `optimizer.max_threads`. Prefer the nested CLI
   flags (`--router.autorouter.max_threads`, `--router.optimizer.max_threads`) when the two pools
-  must differ. `-mt` sets **optimizer** threads only.
+  must differ. `-mt N` sets **optimizer** threads only, and `-mt 0` turns the optimizer off.
 - **`improvement_threshold`**: Minimum improvement required to continue routing.
 - **`trace_pull_tight_accuracy`**: Accuracy for pulling traces tight.
 - **`allowed_via_types`**: Enables or disables the use of different via types.
