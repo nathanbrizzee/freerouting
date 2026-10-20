@@ -11,6 +11,7 @@ import app.freerouting.datastructures.TimeLimit;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.RouterSettings;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -113,10 +114,8 @@ public final class BatchFanout {
         settings.fanout != null && settings.fanout.maxPasses != null
             ? settings.fanout.maxPasses
             : 20;
-    final int stagnationPassLimit = 3;
     int completedPasses = 0;
-    long previousBoardState = Long.MIN_VALUE;
-    int identicalPasses = 0;
+    int[] previousOutcome = null;
     String lastBoardHash = board.getHash();
     for (int i = 0; i < maxPasses; ++i) {
       if (fanoutInstance.deadlineMs != null
@@ -137,26 +136,26 @@ public final class BatchFanout {
         break;
       }
       // Oscillation detector, complementing the single-pass board-hash check below: a
-      // fanout cycle where pins keep ripping each other's escapes alternates between two
-      // board states, so consecutive hashes always differ — but the per-pass outcome
-      // (routed count + via count) repeats exactly while ripup costs escalate uselessly
-      // (observed: 14 identical passes on a dense SMD carrier).
-      long boardState = ((long) routedCount << 32) ^ board.getViaCount();
-      if (boardState == previousBoardState) {
-        identicalPasses++;
-        if (identicalPasses >= stagnationPassLimit) {
-          FRLogger.info(
-              "Fanout stopped after "
-                  + completedPasses
-                  + " passes: no progress for "
-                  + stagnationPassLimit
-                  + " consecutive passes.");
-          break;
-        }
-      } else {
-        identicalPasses = 0;
-        previousBoardState = boardState;
+      // fanout cycle where pins keep ripping each other's escapes alternates between board
+      // states, so consecutive hashes always differ, but the per-pass outcome (fanouted,
+      // not routed, via count) repeats exactly while ripup costs escalate uselessly
+      // (observed: 14 identical passes on a dense SMD carrier). One repeat is enough: a
+      // pass that changes nothing in the outcome was spent re-placing the same escapes.
+      int[] outcome = {routedCount, fanoutInstance.lastNotRoutedCount, board.getViaCount()};
+      if (Arrays.equals(outcome, previousOutcome)) {
+        FRLogger.info(
+            "Fanout stopped after "
+                + completedPasses
+                + " passes: the pass repeated the previous pass's outcome ("
+                + routedCount
+                + " fanouted, "
+                + fanoutInstance.lastNotRoutedCount
+                + " not routed, "
+                + board.getViaCount()
+                + " vias).");
+        break;
       }
+      previousOutcome = outcome;
       if (fanoutInstance.isTimedOut) {
         break;
       }
