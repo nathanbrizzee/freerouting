@@ -26,7 +26,12 @@ class TraceTightener90 extends TraceTightener {
   public Polyline pullTight(Polyline polyline) {
     Polyline newResult = avoidAcidTraps(polyline);
     Polyline prevResult = null;
+    int rounds = 0;
     while (newResult != prevResult && !this.isStopRequested()) {
+      if (++rounds > TraceTightener45.MAX_PULL_TIGHT_ROUNDS) {
+        // Without a job timeout nothing else ends a trace that keeps changing.
+        break;
+      }
       prevResult = newResult;
       Polyline tmp1 = trySkipSecondCorner(prevResult);
       Polyline tmp2 = trySkipCorners(tmp1);

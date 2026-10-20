@@ -16,6 +16,7 @@ import app.freerouting.geometry.planar.Polyline;
 import app.freerouting.geometry.planar.Side;
 import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.geometry.planar.Vector;
+import app.freerouting.logger.FRLogger;
 import java.util.Collection;
 
 class TraceTightener45 extends TraceTightener {
@@ -31,17 +32,50 @@ class TraceTightener45 extends TraceTightener {
     super(board, onlyNetNoArr, stoppableThread, timeLimit, keepPoint, keepPointLayer);
   }
 
+  /**
+   * Rounds of reduce, smoothen and reposition in {@link #pullTight}, and rounds of corner smoothing
+   * in one call, before giving up. A converging trace needs a few; an optimizer worker once spent 8
+   * hours in these loops on bm01, where neither checks the job clock.
+   */
+  static final int MAX_PULL_TIGHT_ROUNDS = 100;
+
+  static final int MAX_SMOOTHEN_ROUNDS = 64;
+
+  private static final java.util.concurrent.atomic.AtomicInteger capWarnings =
+      new java.util.concurrent.atomic.AtomicInteger();
+
   @Override
   public Polyline pullTight(Polyline polyline) {
     Polyline newResult = avoidAcidTraps(polyline);
     Polyline prevResult = null;
+    int rounds = 0;
     while (newResult != prevResult && !this.isStopRequested()) {
+      if (++rounds > MAX_PULL_TIGHT_ROUNDS) {
+        warnCap("pullTight", MAX_PULL_TIGHT_ROUNDS, newResult);
+        break;
+      }
       prevResult = newResult;
       Polyline tmp1 = reduceCorners(prevResult);
       Polyline tmp2 = smoothenCorners(tmp1);
       newResult = repositionLines(tmp2);
     }
     return newResult;
+  }
+
+  /** Logs the first few cap hits; a board that hits it often would flood the log otherwise. */
+  private static void warnCap(String loop, int cap, Polyline polyline) {
+    int count = capWarnings.incrementAndGet();
+    if (count <= 5) {
+      FRLogger.warn(
+          "TraceTightener45."
+              + loop
+              + ": stopped after "
+              + cap
+              + " rounds that kept changing a "
+              + polyline.lines.length
+              + "-line trace; it is kept as it is"
+              + (count == 5 ? " (further cases are not logged)." : "."));
+    }
   }
 
   AngleRestriction getAngleRestriction() {
@@ -227,8 +261,13 @@ class TraceTightener45 extends TraceTightener {
   private Polyline smoothenCorners(Polyline polyline) {
     Polyline result = polyline;
     boolean polylineChanged = true;
+    int rounds = 0;
     while (polylineChanged) {
       if (result.lines.length < 4) {
+        return result;
+      }
+      if (++rounds > MAX_SMOOTHEN_ROUNDS) {
+        warnCap("smoothenCorners", MAX_SMOOTHEN_ROUNDS, result);
         return result;
       }
       polylineChanged = false;
