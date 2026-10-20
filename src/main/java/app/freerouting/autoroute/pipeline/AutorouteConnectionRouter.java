@@ -314,7 +314,9 @@ final class AutorouteConnectionRouter {
           "",
           null);
       if (boardSnapshotBeforeRoute != null) {
-        router.board = (RoutingBoard) BasicBoard.deserialize(boardSnapshotBeforeRoute);
+        RoutingBoard restored = (RoutingBoard) BasicBoard.deserialize(boardSnapshotBeforeRoute);
+        restored.clearanceBaseline = router.board.clearanceBaseline;
+        router.board = restored;
       }
     }
     return rejection;

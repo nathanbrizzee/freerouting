@@ -53,6 +53,8 @@ public final class RoutingBoardUndoFacade {
       RoutingBoard boardCopy = (RoutingBoard) inputStream.readObject();
       boardCopy.clearAllItemTemporaryAutorouteData();
       boardCopy.finishAutoroute();
+      // The input-board violation baseline is transient and immutable; the copy shares it.
+      boardCopy.clearanceBaseline = board.clearanceBaseline;
       return boardCopy;
     } catch (Exception exception) {
       FRLogger.error("Exception in deep_copy_routing_board" + exception, exception);
