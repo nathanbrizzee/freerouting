@@ -351,6 +351,8 @@ with the router, wherever we spot them. This list collects them as they come up,
 | Pair and length rules (section 7.4a) | Ignored without a word | Log the count read, and report pair gap, skew and length violations in the manifest |
 | GUI responsiveness | No way to see the cost of drawing | Log the render time of a frame when it exceeds the repaint interval |
 | Shove (phase 2.4) | Not visible today | Per pass, counts of shoves, rips and rip-backs, so a run that rips its own work shows it |
+| Pre-existing violation warning (phase 1.7c) | Told the user to fix in KiCad what KiCad does not flag (a fixed via in its own pad); fixed | Keep each category of that warning checked against a KiCad DRC run |
+| Neck floor (phase 1.7e) | The board minimum track width is not in the DSN, so a run cannot know it | The agent guide tells agents to read it from the KiCad project (`design_settings.rules.min_track_width`) and pass `--router.min_trace_width_um`; a log line confirms the floor |
 
 ## 7. The new engine (later phases)
 
