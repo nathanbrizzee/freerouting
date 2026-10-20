@@ -62,6 +62,9 @@ public class GraphicsContext implements Serializable {
   /** When true, copper pours use fast solid fills (used during the first paint after load). */
   private transient boolean simplifiedPlaneRendering;
 
+  /** When true, the router is changing the board; see {@link #isRoutingInProgress()}. */
+  private transient boolean routingInProgress;
+
   private transient java.awt.TexturePaint cachedHatchPaint;
   private transient double cachedHatchPitchPx = -1.0;
   private transient Color cachedHatchColor;
@@ -910,6 +913,18 @@ public class GraphicsContext implements Serializable {
 
   public void setSimplifiedPlaneRendering(boolean simplifiedPlaneRendering) {
     this.simplifiedPlaneRendering = simplifiedPlaneRendering;
+  }
+
+  /**
+   * Whether the router is changing the board. Every change invalidates the detailed copper-pour
+   * fill, so while routing, pours are drawn as solid fills and the window stays responsive.
+   */
+  public boolean isRoutingInProgress() {
+    return routingInProgress;
+  }
+
+  public void setRoutingInProgress(boolean routingInProgress) {
+    this.routingInProgress = routingInProgress;
   }
 
   /** GetFullyVisibleVirtualLayer. */

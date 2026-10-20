@@ -118,6 +118,9 @@ public final class GuiBoardPresentationController {
       return;
     }
 
+    if (graphicsContext != null) {
+      graphicsContext.setRoutingInProgress(manager.isBoardReadOnly());
+    }
     BoardRenderer.draw(board, graphics, graphicsContext);
     if (manager.getPresentationRatsNest() != null) {
       manager.getPresentationRatsNest().draw(graphics, graphicsContext);

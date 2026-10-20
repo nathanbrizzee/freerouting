@@ -593,7 +593,9 @@ public final class BoardRenderer {
       double clearanceScreenPx =
           graphicsContext.coordinateTransform.boardToScreen(maxClearanceLookupBoard);
       boolean useSimpleFill =
-          clearanceScreenPx < 15.0 || graphicsContext.isSimplifiedPlaneRendering();
+          clearanceScreenPx < 15.0
+              || graphicsContext.isSimplifiedPlaneRendering()
+              || graphicsContext.isRoutingInProgress();
       if (useSimpleFill) {
         graphicsContext.fillArea(area.getArea(), graphics, color, fillOpacity);
       } else {
