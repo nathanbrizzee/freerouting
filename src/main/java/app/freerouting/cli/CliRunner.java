@@ -25,7 +25,7 @@ import java.util.UUID;
 public final class CliRunner {
 
   private static final long STATUS_FILE_INTERVAL_MILLIS = 2000;
-  private static final long ROUTING_THREAD_WAIT_MILLIS = 60_000;
+  private static final long ROUTING_THREAD_WAIT_MILLIS = 300_000;
   private static volatile boolean statusFileWarned;
 
   private CliRunner() {}
