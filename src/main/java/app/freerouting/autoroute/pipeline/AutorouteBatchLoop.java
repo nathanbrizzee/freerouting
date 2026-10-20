@@ -10,6 +10,7 @@ import static app.freerouting.autoroute.pipeline.BatchAutorouter.STAGNATION_PASS
 import static app.freerouting.autoroute.pipeline.BatchAutorouter.STAGNATION_SCORE_THRESHOLD;
 import static app.freerouting.autoroute.pipeline.BatchAutorouter.STOP_AT_PASS_MINIMUM;
 import static app.freerouting.autoroute.pipeline.BatchAutorouter.STOP_AT_PASS_MODULO;
+import static app.freerouting.autoroute.pipeline.BatchAutorouter.UNCHANGED_BOARD_PASS_LIMIT;
 
 import app.freerouting.autoroute.BoardHistory;
 import app.freerouting.autoroute.PerformanceProfiler;
@@ -322,6 +323,8 @@ final class AutorouteBatchLoop {
     // the degenerate case where plane-net items repeatedly fail or are inserted+removed each
     // pass without updating the board state.
     Set<String> alreadyRoutedBoardHashes = new java.util.HashSet<>();
+    String previousPassStartHash = null;
+    int unchangedPasses = 0;
     job.status()
         .passLimits(
             STAGNATION_PASS_LIMIT,
@@ -333,6 +336,30 @@ final class AutorouteBatchLoop {
       }
 
       String currentBoardHash = router.board.getHash();
+      if (currentBoardHash.equals(previousPassStartHash)) {
+        unchangedPasses++;
+      } else {
+        unchangedPasses = 0;
+      }
+      previousPassStartHash = currentBoardHash;
+      if (unchangedPasses >= UNCHANGED_BOARD_PASS_LIMIT) {
+        // Rising rip-up costs can let a later pass change a board that one pass left alone, so
+        // one unchanged pass is not enough; in the benchmark logs, a board left unchanged by 3
+        // passes in a row never went on to a better result, and the full stagnation window
+        // spent up to 15 more passes on it.
+        job.logInfo(
+            "The board has not changed in the last "
+                + UNCHANGED_BOARD_PASS_LIMIT
+                + " passes (hash "
+                + currentBoardHash
+                + "). Stopping the auto-router after "
+                + (currentPass - 1)
+                + " passes ("
+                + router.calculateIncompleteCount(router.board)
+                + " items still unconnected).");
+        stopFor(BatchAutorouter.StopReason.STAGNATION);
+        break;
+      }
 
       // Same-hash stop disabled because ripup budgets and random seeds change per-pass, making
       // progress possible in later passes.

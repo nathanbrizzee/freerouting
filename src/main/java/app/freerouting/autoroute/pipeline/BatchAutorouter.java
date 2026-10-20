@@ -66,6 +66,8 @@ public final class BatchAutorouter extends NamedAlgorithm {
   // meaningful improvement; gains smaller than this are treated as stagnation.
   static final float STAGNATION_SCORE_THRESHOLD = 0.5F;
   static final int MAX_TAIL_REMOVAL_SWEEPS = 100;
+  // Passes in a row that leave the board unchanged before the pass loop stops.
+  static final int UNCHANGED_BOARD_PASS_LIMIT = 3;
   private static final boolean BENCHMARK_PROFILE_ENABLED =
       Boolean.getBoolean("freerouting.benchmark.profile");
   private static final boolean BENCHMARK_RETAIN_AUTOROUTE_DATABASE =
