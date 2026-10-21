@@ -116,6 +116,12 @@ public class BasicBoard implements Serializable {
    */
   public transient int neckHalfWidth;
 
+  /**
+   * Whether spring-over passes obstacles that overlap without either containing the other as one
+   * octagon ({@code router.autorouter.spring_over_overlaps}); otherwise it refuses the path.
+   */
+  public transient boolean springOverOverlaps;
+
   public transient app.freerouting.drc.ClearanceBaseline clearanceBaseline;
   public transient CompletableFuture<Void> postLoadFuture;
 

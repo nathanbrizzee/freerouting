@@ -56,6 +56,9 @@ final class AutoroutePassRunner {
       long itemSelectionStart = BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
       List<Item> autorouteItemList = router.getAutorouteItems(router.board);
       router.board.neckHalfWidth = neckHalfWidth(router);
+      router.board.springOverOverlaps =
+          router.settings.autorouter != null
+              && Boolean.TRUE.equals(router.settings.autorouter.springOverOverlaps);
       dropDesignBlockedItems(autorouteItemList);
       if (BatchAutorouter.isBenchmarkProfileEnabled()) {
         router.profileItemSelectionNanos += System.nanoTime() - itemSelectionStart;

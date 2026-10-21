@@ -3,6 +3,7 @@ package app.freerouting.board.optimize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.freerouting.board.facade.RoutingBoard;
@@ -18,7 +19,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * A fixed trace on a foreign pin: the two obstacles overlap and neither contains the other. Spring
- * over used to give up on such a pair; it now goes around their common octagon.
+ * over gives up on such a pair unless {@code spring_over_overlaps} is on; then it goes around their
+ * common octagon.
  */
 class SpringOverOverlappingObstaclesTest {
 
@@ -28,7 +30,7 @@ class SpringOverOverlappingObstaclesTest {
         (structure (layer top (type signal)) (layer bottom (type signal))
           (boundary (rect pcb 0 0 20000 12000)) (via V) (rule (width 200) (clearance 200)))
         (placement
-          (component P (place A 3000 5500 front 0) (place B 17000 5500 front 0)
+          (component P (place A 3000 5400 front 0) (place B 17000 5400 front 0)
             (place X1 10000 5000 front 0)))
         (library
           (image P (pin S 1 0 0))
@@ -60,8 +62,12 @@ class SpringOverOverlappingObstaclesTest {
     int net = netOf(board, "A");
     int[] nets = {net};
     int halfWidth = 100;
-    Polyline path = new Polyline(new Point[] {new IntPoint(3000, 5500), new IntPoint(17000, 5500)});
+    Polyline path = new Polyline(new Point[] {new IntPoint(3000, 5400), new IntPoint(17000, 5400)});
 
+    assertNull(
+        new TraceShover(board).springOverObstacles(path, halfWidth, 0, nets, 1, null),
+        "off by default");
+    board.springOverOverlaps = true;
     Polyline detour = new TraceShover(board).springOverObstacles(path, halfWidth, 0, nets, 1, null);
     assertNotNull(detour, "the pin and the fixed trace on it are passed as one obstacle");
     assertTrue(detour.cornerCount() > 2, "the route detours");

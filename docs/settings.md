@@ -196,6 +196,14 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       (10-minute cap, optimizer off) L6 ends with 15 open instead of 27 with the defaults and 30
       with eight attempts, at 3,030 CPU s instead of 6,810; the synthetic board 4 open (defaults 5,
       eight attempts 3).
+    - **`spring_over_overlaps`**: Lets the insert spring over obstacles that overlap without
+      either containing the other, such as a fixed trace on a foreign pin, as one octagon. Without
+      it the insert refuses a path the search found past such a pair, after ripping neighbours for
+      it, and the connection comes back in the next pass. Default `false`.
+      When it helps: boards with locked tracks on pins. M4 (optimizer off): the same 6 open, but
+      86 s instead of 164 s, and the default run finishes without fallbacks; Starling 36 -> 21 s;
+      lpa96 (6-minute cap) 3 -> 2 open. On other boards it changes which connections fit and can
+      leave more open (TX5823 0 -> 1, mppt-1210 0 -> 2), so it is opt-in.
     - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
       doubling each pass. Default `10000000`, about the 100 s the older time limit allowed; the
       longest routed search on the benchmark boards took about 635,000 steps. The step budget stops

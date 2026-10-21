@@ -782,7 +782,7 @@ public class TraceShover {
     Item foundObstacle = null;
     IntBox foundObstacleBoundingBox = null;
     // Obstacles that overlap the found one without either containing the other, such as a fixed
-    // trace on a pin; the polyline springs over their common octagon.
+    // trace on a pin; with spring_over_overlaps the polyline springs over their common octagon.
     List<Item> overlappingObstacles = null;
     ShapeSearchTree searchTree = this.board.searchTreeManager.getDefaultTree();
     int[] checkNetNoArr;
@@ -844,6 +844,9 @@ public class TraceShover {
                 foundObstacle = currentItem;
                 foundObstacleBoundingBox = currentItemBoundingBox;
               } else if (!foundObstacleBoundingBox.contains(currentItemBoundingBox)) {
+                if (!this.board.springOverOverlaps) {
+                  return null;
+                }
                 if (overlappingObstacles == null) {
                   overlappingObstacles = new ArrayList<>();
                 }

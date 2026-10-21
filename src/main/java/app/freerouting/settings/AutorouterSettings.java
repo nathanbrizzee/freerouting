@@ -143,6 +143,17 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Boolean fallbackRace;
 
   /**
+   * Lets the insert spring over obstacles that overlap without either containing the other, such as
+   * a fixed trace on a foreign pin, as one octagon instead of giving up on the path.
+   */
+  @SerializedName("spring_over_overlaps")
+  @Schema(
+      description =
+          "Spring over overlapping fixed obstacles (a fixed trace on a pin) as one octagon instead"
+              + " of refusing the path")
+  public Boolean springOverOverlaps;
+
+  /**
    * Erik Gavriluk (freerouting.net): exploration attempts after the opening fallback. {@code 0}
    * disables them. Later tries of a kind raise via costs and widen the ripped neighbourhood.
    * Attempts are not cut short by elapsed time.
