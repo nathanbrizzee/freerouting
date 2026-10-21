@@ -147,7 +147,7 @@ public final class RoutingFallback {
         if (unknown != null) {
           unknown.accept(name);
         }
-      } else if (!result.contains(known)) {
+      } else if (result.stream().noneMatch(listed -> listed.name.equals(known.name))) {
         result.add(known);
       }
     }
@@ -160,7 +160,30 @@ public final class RoutingFallback {
         return strategy;
       }
     }
-    return null;
+    return seedStrategy(name);
+  }
+
+  /**
+   * {@code seed-N} (N a positive integer): the input board routed again with the item order of
+   * every pass shuffled by {@code router.autorouter.item_order_seed} N. A different order gives a
+   * different board, so several seeds side by side give the best of several tries.
+   */
+  private static Strategy seedStrategy(String name) {
+    String lower = name.toLowerCase(Locale.ROOT);
+    if (!lower.startsWith("seed-")) {
+      return null;
+    }
+    int seed;
+    try {
+      seed = Integer.parseInt(lower.substring("seed-".length()));
+    } catch (NumberFormatException e) {
+      return null;
+    }
+    if (seed <= 0) {
+      return null;
+    }
+    return new Strategy(
+        "seed-" + seed, false, settings -> settings.autorouter.itemOrderSeed = seed, false, false);
   }
 
   /** Whether a pass loop that stopped for this reason may be followed by another attempt. */

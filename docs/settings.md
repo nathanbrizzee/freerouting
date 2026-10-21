@@ -140,7 +140,15 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       with open connections or new violations. The default is
       `fanout-retry,short-escape,direct-first,open-escape,no-fanout`; `none` turns the fallback off.
       Most of these route the board again from the start, so each one costs about as much as the
-      default run.
+      default run. `seed-N` (N a positive integer) routes the input board again with the item order
+      of every pass shuffled by `item_order_seed` N; a different order gives a different board.
+      When it helps: several seeds side by side (`fallback_threads=0`, `fallback_work_ratio=0`)
+      give the best of several tries for about the wall time of one. On eight hard PCBench boards
+      (8-minute cap, optimizer off), adding `seed-1,seed-2,seed-3` to the default list in parallel
+      left 21 open connections instead of 26 and made one more board clean (EncoderBoard, through
+      `seed-1`); on PCBench as a whole the best of four item orders made 18 of 24 boards clean where
+      the default order made 16. It costs CPU time for every seed, and on a board the default run
+      already finishes it can take longer, because every attempt runs to its end.
     - **`fallback_work_ratio`**: The fallback stage may make at most this many times as many
       connection attempts as the default run made, summed over its attempts. The attempt that
       reaches the limit stops and keeps its best board, and no further attempt starts. Default

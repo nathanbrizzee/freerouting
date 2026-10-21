@@ -43,6 +43,22 @@ class RoutingFallbackTest {
   }
 
   @Test
+  void seedStrategiesSetTheItemOrderSeed() {
+    RouterSettings settings = new DefaultSettings().getSettings();
+    List<String> unknown = new ArrayList<>();
+    settings.autorouter.fallbackStrategies = "seed-3, Seed-1, seed-3, seed-0, seed-x";
+    List<RoutingFallback.Strategy> parsed = RoutingFallback.parse(settings, unknown::add);
+    assertEquals(2, parsed.size());
+    assertEquals("seed-3", parsed.get(0).name);
+    assertEquals("seed-1", parsed.get(1).name);
+    assertEquals(List.of("seed-0", "seed-x"), unknown);
+    RouterSettings copy = settings.clone();
+    parsed.get(0).apply(copy);
+    assertEquals(3, copy.autorouter.itemOrderSeed);
+    assertEquals(null, settings.autorouter.itemOrderSeed);
+  }
+
+  @Test
   void directFirstAndOpenEscapeChangeACloneOnly() {
     RouterSettings defaults = new DefaultSettings().getSettings();
     RouterSettings directFirst = defaults.clone();
