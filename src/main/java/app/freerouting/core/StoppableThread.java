@@ -57,6 +57,11 @@ public abstract class StoppableThread extends Thread implements Stoppable {
     }
   }
 
+  /** The search step budget, or 0 for no limit. */
+  public synchronized long searchStepBudget() {
+    return this.searchStepBudget;
+  }
+
   /** Maze search steps used so far by the fanout and autorouter searches of this thread. */
   public synchronized long searchSteps() {
     return this.searchSteps;

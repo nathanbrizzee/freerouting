@@ -143,6 +143,26 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       `1.0`, so the fallback stage takes roughly as long as the default run at most; `0` means no
       limit. Connection attempts, not time, are counted, so the result does not depend on the
       machine.
+    - **`fallback_threads`**: Threads for the fallback stage. Default `1` runs the attempts one
+      after another. A higher value runs the alternative strategies side by side, each on its own
+      copy of the board, together with the continuation of a residual board; `0` uses one thread
+      per attempt, up to the number of processors. In parallel each attempt may make the whole
+      `fallback_work_ratio` budget of connection attempts, and the search step budget left under
+      `router.max_search_steps` is split equally between the attempts. The results are merged in
+      the sequential order with the same rule for replacing the best board. Once an attempt is
+      complete and clean, the later ones are stopped, because the merge would discard them. The
+      chosen board is the same with any thread count above 1, but it can differ from `1`, because
+      there each attempt only gets the budget its predecessors left. Each attempt's log lines carry
+      its strategy name, and the live status follows the first attempt.
+      When it helps: with `fallback_work_ratio` raised or `0`, so that several attempts run. The
+      stage then takes about as long as its slowest attempt instead of the sum, for about the same
+      CPU time (optimizer off, ratio `0`: M4 539 to 272 s, bm05 636 to 235 s, Issue070 95 to 74 s,
+      the same boards; the full-pour synthetic board finished all five attempts in 1574 s where the
+      sequential run reached the 30-minute cap in the third). With the default ratio of `1.0` the
+      first sequential attempt usually uses the whole budget and no other starts, so parallel
+      attempts try every strategy but take longer (M4 160 to 243 s). It needs one board copy of
+      memory per thread, and it does not help when the default run already uses up the job's time
+      or step budget.
     - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
       doubling each pass. Not set by default, which keeps the time limit (100 s in pass 1, doubling
       each pass). When set, it replaces the time limit, so a connection stops at the same point on

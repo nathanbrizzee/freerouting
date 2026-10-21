@@ -114,6 +114,22 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Double fallbackWorkRatio;
 
   /**
+   * Threads for the fallback stage. {@code 1} runs the attempts one after another, as before. More
+   * runs the alternative strategies side by side, together with the continuation of a residual
+   * board, each on its own copy of the board; {@code 0} uses one thread per attempt, up to the
+   * number of processors. In parallel each attempt may make the whole fallback work budget of
+   * connection attempts, and the job's search step budget left is split equally between them. The
+   * shares depend on the number of attempts, not on the number of threads, so the chosen board is
+   * the same with any thread count.
+   */
+  @SerializedName("fallback_threads")
+  @Schema(
+      description =
+          "Threads for the fallback stage: 1 runs attempts in order, more runs them side by side,"
+              + " 0 uses one per attempt up to the processor count")
+  public Integer fallbackThreads;
+
+  /**
    * Erik Gavriluk (freerouting.net): exploration attempts after the opening fallback. {@code 0}
    * disables them. Later tries of a kind raise via costs and widen the ripped neighbourhood.
    * Attempts are not cut short by elapsed time.
