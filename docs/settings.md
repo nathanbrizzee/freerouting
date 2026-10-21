@@ -190,7 +190,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       after the default run, and 26 with the default settings (lpa96 2 -> 0, Unifying 11 -> 1, reworkctf 5 -> 2,
       EncoderBoard clean in 64 s instead of 123 s).
       It costs CPU time for every attempt, and on a board the default run finishes the attempts
-      slow it down through shared cores and memory (LimeSDR 84 -> 122 s, TX5823 41 -> 84 s).
+      slow it down through shared cores and memory (LimeSDR 84 -> 122 s, TX5823 41 -> 84 s). On a large
+      board that reaches the timeout it can also leave more open, because the slowed default run
+      gets through fewer passes (L6, 10-minute cap: 20 -> 32 open; the synthetic board 5 -> 3).
     - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
       doubling each pass. Default `10000000`, about the 100 s the older time limit allowed; the
       longest routed search on the benchmark boards took about 635,000 steps. The step budget stops
