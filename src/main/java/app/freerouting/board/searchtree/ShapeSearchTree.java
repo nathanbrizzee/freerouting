@@ -83,6 +83,18 @@ public class ShapeSearchTree extends MinAreaTree {
     key = getKey(this, directions, compensatedClearanceClassNo);
   }
 
+  @Override
+  protected int indexedLayerCount() {
+    return this.board != null ? this.board.getLayerCount() : 0;
+  }
+
+  @Override
+  protected int leafLayer(Leaf leaf) {
+    return leaf.object instanceof SearchTreeObject object
+        ? object.shapeLayer(leaf.shapeIndexInObject)
+        : -1;
+  }
+
   /** GetKey. */
   public static String getKey(
       ShapeSearchTree searchTree, ShapeBoundingDirections directions, int clearanceClass) {
@@ -475,7 +487,7 @@ public class ShapeSearchTree extends MinAreaTree {
     tmpList.clear();
     boolean is45Degree = shape instanceof IntOctagon;
     try {
-      this.overlapsUnlocked(bounds, tmpList);
+      this.overlapsUnlocked(bounds, layer, tmpList);
       for (Leaf currentLeaf : tmpList) {
         SearchTreeObject currentObject = (SearchTreeObject) currentLeaf.object;
         int shapeIndex = currentLeaf.shapeIndexInObject;
@@ -578,7 +590,7 @@ public class ShapeSearchTree extends MinAreaTree {
     Set<EntrySortedByClearance> sortedItems = new TreeSet<>();
     int nextEntryId = 0;
     try {
-      overlapsUnlocked(offsetBounds, tmpList);
+      overlapsUnlocked(offsetBounds, layer, tmpList);
       for (Leaf currentLeaf : tmpList) {
         Item currentItem = (Item) currentLeaf.object;
         int shapeIndex = currentLeaf.shapeIndexInObject;

@@ -84,6 +84,78 @@ public class MinAreaTree extends ShapeTree {
     }
   }
 
+  /**
+   * Appends the leaves on {@code layer} (and those without a single layer) that overlap {@code
+   * shape}, in {@link Leaf} order, while the read lock is held. It finds what {@link
+   * #overlapsUnlocked(RegularTileShape, List)} finds with the other layers' leaves left out, from a
+   * per-layer index; without one, or for a layer outside it, it returns all layers.
+   */
+  protected final void overlapsUnlocked(RegularTileShape shape, int layer, List<Leaf> result) {
+    if (this.layerIndexes == null || layer < 0 || layer >= this.layerIndexes.length) {
+      overlapsUnlocked(shape, result);
+      return;
+    }
+    int first = result.size();
+    ArrayStack<LayerLeafIndex.Node> stack = layerNodeStack.get();
+    this.layerIndexes[layer].overlaps(shape, stack, result);
+    this.otherLayers.overlaps(shape, stack, result);
+    if (first == 0) {
+      Collections.sort(result);
+    } else {
+      result.subList(first, result.size()).sort(null);
+    }
+  }
+
+  /**
+   * Number of layers to keep a per-layer index for, or 0 for none. Read once, at the first insert.
+   */
+  protected int indexedLayerCount() {
+    return 0;
+  }
+
+  /** The layer of a leaf, for the per-layer index; outside the indexed layers for all layers. */
+  protected int leafLayer(Leaf leaf) {
+    return -1;
+  }
+
+  private LayerLeafIndex[] layerIndexes;
+  private LayerLeafIndex otherLayers;
+  private boolean layerIndexChecked;
+
+  private final ThreadLocal<ArrayStack<LayerLeafIndex.Node>> layerNodeStack =
+      ThreadLocal.withInitial(() -> new ArrayStack<>(10000));
+
+  private void indexLeaf(Leaf leaf) {
+    if (!this.layerIndexChecked) {
+      this.layerIndexChecked = true;
+      int layers = indexedLayerCount();
+      if (layers > 0) {
+        this.layerIndexes = new LayerLeafIndex[layers];
+        for (int i = 0; i < layers; i++) {
+          this.layerIndexes[i] = new LayerLeafIndex();
+        }
+        this.otherLayers = new LayerLeafIndex();
+      }
+    }
+    if (this.layerIndexes == null) {
+      return;
+    }
+    int layer = leafLayer(leaf);
+    LayerLeafIndex index =
+        layer >= 0 && layer < this.layerIndexes.length
+            ? this.layerIndexes[layer]
+            : this.otherLayers;
+    leaf.layerNode = index.insert(leaf);
+  }
+
+  private static void unindexLeaf(Leaf leaf) {
+    LayerLeafIndex.Node node = leaf.layerNode;
+    if (node != null) {
+      leaf.layerNode = null;
+      node.owner.remove(node);
+    }
+  }
+
   /** Extension hook for testing and instrumentation during tree traversal. */
   protected void onNodeVisited() {}
 
@@ -101,6 +173,7 @@ public class MinAreaTree extends ShapeTree {
   /** Inserts a leaf while the write lock is already held. */
   private void insertUnlocked(Leaf leaf) {
     ++this.leafCount;
+    indexLeaf(leaf);
 
     // Tree is empty - just insert the new leaf
     if (root == null) {
@@ -186,6 +259,7 @@ public class MinAreaTree extends ShapeTree {
     if (leaf.parent == null && root != leaf) {
       return;
     }
+    unindexLeaf(leaf);
     // remove the leaf node
     InnerNode parent = leaf.parent;
     // Keep payload fields valid for callers that retained this Leaf from an earlier query; only

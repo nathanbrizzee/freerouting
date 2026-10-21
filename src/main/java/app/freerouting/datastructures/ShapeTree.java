@@ -260,6 +260,9 @@ public abstract class ShapeTree {
     /** Index of the shape in the object. */
     public int shapeIndexInObject;
 
+    /** This leaf's node in a per-layer index of the tree, or null. */
+    LayerLeafIndex.Node layerNode;
+
     /** Creates a leaf node for object at index with parent and boundingShape. */
     public Leaf(
         ShapeTree.Storable object, int index, InnerNode parent, RegularTileShape boundingShape) {
