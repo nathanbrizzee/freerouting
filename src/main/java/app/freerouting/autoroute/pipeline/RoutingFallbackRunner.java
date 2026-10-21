@@ -55,6 +55,11 @@ final class RoutingFallbackRunner {
       return defaultRouter;
     }
     BatchAutorouter.StopReason reason = defaultRouter.lastStopReason;
+    if (race != null
+        && (reason == BatchAutorouter.StopReason.TIMED_OUT
+            || reason == BatchAutorouter.StopReason.CANCELLED)) {
+      return mergeStoppedRace(job, defaultRouter, best, reason, race);
+    }
     if (!RoutingFallback.isRetryable(reason)) {
       cancelRace(job, race, "the default run stopped: " + RoutingFallback.describe(reason));
       job.logInfo(
@@ -265,6 +270,50 @@ final class RoutingFallbackRunner {
     }
     race.executor.shutdownNow();
     job.logInfo("Routing fallback race: stopped the alternative attempts (" + why + ").");
+  }
+
+  /**
+   * The default run was stopped (job timeout or cancel) while the racing attempts were still
+   * routing. They are stopped too and their boards are merged as they are, so a better board an
+   * attempt reached in the same time is kept. No continuation runs: the job is out of time.
+   */
+  private BatchAutorouter mergeStoppedRace(
+      RoutingJob job,
+      BatchAutorouter defaultRouter,
+      RoutingFallback.Outcome best,
+      BatchAutorouter.StopReason reason,
+      Race race) {
+    for (Stream stream : race.streams) {
+      stream.thread.requestStop();
+    }
+    job.status().fallbackPlanned(race.streams.size());
+    recordAttempt(job, best, reason, 0);
+    job.logInfo(
+        "Routing fallback race: the default run stopped at "
+            + RoutingFallback.describe(reason)
+            + " with "
+            + best
+            + "; stopping the "
+            + race.streams.size()
+            + " alternative attempts and merging their boards as they are.");
+    Attempt bestAttempt =
+        new Attempt(
+            best,
+            job.board,
+            defaultRouter,
+            RoutingFallback.captureClearance(job.board, best.violations));
+    bestAttempt = mergeRace(job, race, bestAttempt);
+    job.board = bestAttempt.board;
+    if (job.resultPhaseMetrics != null && job.resultPhaseMetrics.fallback != null) {
+      job.resultPhaseMetrics.fallback.chosen = bestAttempt.outcome.strategy;
+    }
+    job.logInfo(
+        "Routing fallback chose '"
+            + bestAttempt.outcome.strategy
+            + "': "
+            + bestAttempt.outcome
+            + ".");
+    return bestAttempt.router;
   }
 
   /**

@@ -49,6 +49,42 @@ class FallbackRaceTest extends RoutingFixtureTest {
         two.board.getHash(), three.board.getHash(), "the same routes with 2 and 3 threads");
   }
 
+  /** A stop of the job (a cancel, or the job timeout) keeps the racing boards as they are. */
+  @Test
+  void racingBoardsAreMergedWhenTheJobIsStopped() {
+    TestingSettings testSettingsSource = new TestingSettings();
+    testSettingsSource.setJobTimeoutString("00:02:00");
+    testSettingsSource.setOptimizerEnabled(false);
+    testSettingsSource.setFallbackStrategies("seed-1,seed-2");
+    RoutingJob job = getRoutingJob("Issue508-DAC2020_bm05.dsn", testSettingsSource);
+    job.routerSettings.autorouter.fallbackThreads = 3;
+    job.routerSettings.autorouter.fallbackRace = true;
+    RoutingJob stopped = job;
+    Thread stopper =
+        new Thread(
+            () -> {
+              try {
+                Thread.sleep(8000);
+              } catch (InterruptedException e) {
+                return;
+              }
+              stopped.thread.requestStop();
+            });
+    stopper.setDaemon(true);
+    stopper.start();
+    job = runRoutingJob(job);
+    assertNotNull(job.board, "the job has a board");
+    List<String> attempts = attempts(job);
+    assertEquals(3, attempts.size(), "the default run and both racing attempts: " + attempts);
+    assertTrue(
+        attempts.get(0).startsWith("default/CANCELLED/")
+            || attempts.get(0).startsWith("default/TIMED_OUT/"),
+        "the default run was stopped: " + attempts);
+    assertTrue(attempts.get(1).startsWith("seed-1/"), "then seed-1: " + attempts);
+    assertTrue(attempts.get(2).startsWith("seed-2/"), "then seed-2: " + attempts);
+    assertNotNull(job.resultPhaseMetrics.fallback.chosen, "an attempt was chosen");
+  }
+
   private static List<String> attempts(RoutingJob job) {
     RoutingResultManifest.FallbackDetail fallback = job.resultPhaseMetrics.fallback;
     assertNotNull(fallback, "the default run leaves open connections, so the fallback runs");
