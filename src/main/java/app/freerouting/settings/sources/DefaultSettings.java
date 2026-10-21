@@ -194,6 +194,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.residualRepairMaxOpen = 4;
     settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.fallbackThreads = DEFAULT_FALLBACK_THREADS;
+    settings.autorouter.fallbackRace = false;
     settings.autorouter.maxSearchStepsPerConnection = DEFAULT_MAX_SEARCH_STEPS_PER_CONNECTION;
     settings.autorouter.explorePatience = 0;
     settings.maxThreads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);

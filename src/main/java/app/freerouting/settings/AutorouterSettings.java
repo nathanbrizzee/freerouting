@@ -130,6 +130,19 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Integer fallbackThreads;
 
   /**
+   * Starts the alternative fallback strategies at the beginning of the routing stage, beside the
+   * default run, instead of after it. Needs {@code fallback_threads} other than 1. The attempts
+   * cannot be given a share of the default run's work, which is not known yet, so each may run to
+   * its end; they are merged in the usual order once the default run is done.
+   */
+  @SerializedName("fallback_race")
+  @Schema(
+      description =
+          "Start the alternative fallback strategies beside the default run instead of after it"
+              + " (needs fallback_threads other than 1)")
+  public Boolean fallbackRace;
+
+  /**
    * Erik Gavriluk (freerouting.net): exploration attempts after the opening fallback. {@code 0}
    * disables them. Later tries of a kind raise via costs and widen the ripped neighbourhood.
    * Attempts are not cut short by elapsed time.

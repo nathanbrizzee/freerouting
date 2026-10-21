@@ -175,6 +175,22 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       attempts try every strategy but take longer (M4 160 to 243 s). It needs one board copy of
       memory per thread, and it does not help when the default run already uses up the job's time
       or step budget.
+    - **`fallback_race`**: Starts the alternative fallback strategies at the beginning of the
+      routing stage, each on its own copy of the input board, beside the default run instead of
+      after it. Needs `fallback_threads` other than `1`. Default `false`. The attempts cannot get a
+      share of the default run's work, which is not known yet, so each may run to its end; they are
+      merged in the usual order once the default run is done, so the chosen board does not depend
+      on which attempt finishes first or on the thread count. A complete and clean default run
+      stops them. They follow a stop of the whole job (timeout, stop file) but not the end of the
+      default run's pass loop. The continuations of the best board run after the merge.
+      When it helps: boards the default run does not finish, where the job timeout leaves no time
+      for fallbacks after the default run. Eight hard PCBench boards, 8-minute cap, optimizer off,
+      `fallback_strategies` = the defaults plus `seed-1,seed-2,seed-3`, `fallback_threads=0`,
+      `fallback_work_ratio=0`: 6 open connections in all instead of 21 with the same attempts run
+      after the default run, and 26 with the default settings (lpa96 2 -> 0, Unifying 11 -> 1, reworkctf 5 -> 2,
+      EncoderBoard clean in 64 s instead of 123 s).
+      It costs CPU time for every attempt, and on a board the default run finishes the attempts
+      slow it down through shared cores and memory (LimeSDR 84 -> 122 s, TX5823 41 -> 84 s).
     - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
       doubling each pass. Default `10000000`, about the 100 s the older time limit allowed; the
       longest routed search on the benchmark boards took about 635,000 steps. The step budget stops

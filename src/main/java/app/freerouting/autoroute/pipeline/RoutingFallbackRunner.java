@@ -45,15 +45,18 @@ final class RoutingFallbackRunner {
       RoutingJob job,
       BatchAutorouter defaultRouter,
       List<RoutingFallback.Strategy> strategies,
-      byte[] input) {
+      byte[] input,
+      Race race) {
     ClearanceBaseline inputBaseline = job.board.clearanceBaseline;
     RoutingFallback.Outcome best =
         RoutingFallback.Outcome.of("default", job.board, job.routerSettings);
     if (best.isCompleteAndClean()) {
+      cancelRace(job, race, "the default run is complete");
       return defaultRouter;
     }
     BatchAutorouter.StopReason reason = defaultRouter.lastStopReason;
     if (!RoutingFallback.isRetryable(reason)) {
+      cancelRace(job, race, "the default run stopped: " + RoutingFallback.describe(reason));
       job.logInfo(
           "Routing fallback skipped (the pass loop stopped: "
               + RoutingFallback.describe(reason)
@@ -74,21 +77,26 @@ final class RoutingFallbackRunner {
         alternatives.add(strategy);
       }
     }
+    if (race != null) {
+      alternatives.clear();
+    }
     boolean residual = RoutingSupervisor.residual(job.routerSettings, best.unrouted);
-    if (alternatives.isEmpty() && continuations.isEmpty() && !residual) {
+    if (race == null && alternatives.isEmpty() && continuations.isEmpty() && !residual) {
       return defaultRouter;
     }
-    job.status().fallbackPlanned(alternatives.size() + continuations.size());
+    int alternativeCount = race != null ? race.streams.size() : alternatives.size();
+    job.status().fallbackPlanned(alternativeCount + continuations.size());
     recordAttempt(job, best, reason, 0);
     job.logInfo(
         "Routing fallback: the default configuration stopped at "
             + RoutingFallback.describe(reason)
             + " with "
             + best
-            + "; trying "
-            + alternatives.size()
+            + "; "
+            + (race != null ? "merging " : "trying ")
+            + alternativeCount
             + " alternative "
-            + (alternatives.size() == 1 ? "strategy" : "strategies")
+            + (alternativeCount == 1 ? "strategy" : "strategies")
             + (residual ? ", then continuing the best board" : "")
             + ".");
     double workRatio = workRatio(job.routerSettings);
@@ -113,7 +121,9 @@ final class RoutingFallbackRunner {
     boolean continueFirst = residual && !alternatives.isEmpty();
     int threads =
         fallbackThreads(job.routerSettings, alternatives.size() + (continueFirst ? 1 : 0));
-    if (threads > 1) {
+    if (race != null) {
+      bestAttempt = mergeRace(job, race, bestAttempt);
+    } else if (threads > 1) {
       ParallelResult parallel =
           runParallel(job, input, inputBaseline, bestAttempt, continueFirst, alternatives, threads);
       bestAttempt = parallel.best();
@@ -161,6 +171,139 @@ final class RoutingFallbackRunner {
             + bestAttempt.outcome
             + ".");
     return bestAttempt.router;
+  }
+
+  /** Alternatives started beside the default run ({@code fallback_race}), merged after it. */
+  static final class Race {
+    private final List<Stream> streams;
+    private final ExecutorService executor;
+
+    private Race(List<Stream> streams, ExecutorService executor) {
+      this.streams = streams;
+      this.executor = executor;
+    }
+  }
+
+  /**
+   * Starts the alternative strategies on copies of the input board beside the default run, when
+   * {@code fallback_race} is on and more than one fallback thread is allowed; returns null
+   * otherwise. Each attempt gets its own settings copy, no share of the default run's work (it is
+   * not known yet), and an equal share of the search step budget left.
+   */
+  static Race startRace(RoutingJob job, List<RoutingFallback.Strategy> strategies, byte[] input) {
+    if (input == null
+        || job.routerSettings.autorouter == null
+        || !Boolean.TRUE.equals(job.routerSettings.autorouter.fallbackRace)) {
+      return null;
+    }
+    boolean fanoutRuns = job.routerSettings.isFanoutEnabled() && !job.board.getSmdPins().isEmpty();
+    List<RoutingFallback.Strategy> alternatives = new ArrayList<>();
+    for (RoutingFallback.Strategy strategy :
+        RoutingFallback.applicable(strategies, job.routerSettings, fanoutRuns)) {
+      if (!strategy.continueBest) {
+        alternatives.add(strategy);
+      }
+    }
+    int threads = fallbackThreads(job.routerSettings, alternatives.size());
+    if (alternatives.isEmpty() || threads <= 1) {
+      return null;
+    }
+    ClearanceBaseline inputBaseline = job.board.clearanceBaseline;
+    long stepBudget = job.thread.searchStepBudget();
+    long stepShare =
+        stepBudget > 0
+            ? Math.max(1, (stepBudget - job.thread.searchSteps()) / (alternatives.size() + 1))
+            : 0;
+    List<Stream> streams = new ArrayList<>();
+    List<String> names = new ArrayList<>();
+    for (RoutingFallback.Strategy strategy : alternatives) {
+      Stream stream = new Stream(strategy.name, strategy);
+      stream.thread = new StreamThread(job.thread, stepShare, false);
+      stream.job = new StreamJob(job, stream.name, stream.thread, false);
+      stream.job.routerSettings = job.routerSettings.clone();
+      stream.runner = new RoutingFallbackRunner(null);
+      streams.add(stream);
+      names.add(stream.name);
+    }
+    job.logInfo(
+        "Routing fallback race: starting "
+            + streams.size()
+            + " alternative attempts beside the default run on "
+            + threads
+            + " threads ("
+            + String.join(", ", names)
+            + ")"
+            + (stepShare > 0 ? "; each may make " + stepShare + " search steps" : "")
+            + ".");
+    AtomicInteger threadNo = new AtomicInteger();
+    ExecutorService executor =
+        Executors.newFixedThreadPool(
+            threads,
+            task -> {
+              Thread thread = new Thread(task, "fallback-race-" + threadNo.incrementAndGet());
+              thread.setDaemon(true);
+              return thread;
+            });
+    Race race = new Race(streams, executor);
+    for (Stream stream : streams) {
+      stream.future =
+          executor.submit(() -> stream.runner.runStream(stream, input, inputBaseline, null, job));
+    }
+    return race;
+  }
+
+  /** Stops the racing attempts that are no longer needed and waits for them. */
+  static void cancelRace(RoutingJob job, Race race, String why) {
+    if (race == null) {
+      return;
+    }
+    for (Stream stream : race.streams) {
+      stream.thread.requestStop();
+    }
+    for (Stream stream : race.streams) {
+      await(job, stream);
+    }
+    race.executor.shutdownNow();
+    job.logInfo("Routing fallback race: stopped the alternative attempts (" + why + ").");
+  }
+
+  /**
+   * Merges the racing attempts into the incumbent in the sequential order, as the parallel stage
+   * does; once the incumbent is complete and clean the later attempts are stopped.
+   */
+  private Attempt mergeRace(RoutingJob job, Race race, Attempt incumbent) {
+    Attempt best = incumbent;
+    long mergedSteps = 0;
+    try {
+      for (int i = 0; i < race.streams.size(); i++) {
+        Stream stream = race.streams.get(i);
+        final Attempt attempt = await(job, stream);
+        mergedSteps += stream.thread.searchSteps();
+        copyAttemptRecords(stream.job, job);
+        job.logInfo(
+            "Routing fallback '"
+                + stream.name
+                + "' finished: "
+                + stream.thread.searchSteps()
+                + " search steps, "
+                + String.format(Locale.ROOT, "%.1f", stream.cpuSeconds)
+                + " s CPU, "
+                + String.format(Locale.ROOT, "%.1f", stream.wallSeconds)
+                + " s.");
+        if (attempt != null) {
+          best = merge(job, stream.strategy, attempt, best);
+        }
+        if (best.outcome.isCompleteAndClean()) {
+          cancelAfter(job, race.streams, i);
+          break;
+        }
+      }
+    } finally {
+      race.executor.shutdownNow();
+    }
+    job.thread.addSearchSteps(mergedSteps);
+    job.board = best.board;
+    return best;
   }
 
   /**
@@ -700,9 +843,19 @@ final class RoutingFallbackRunner {
    */
   private static final class StreamThread extends StoppableThread {
     private final StoppableThread jobThread;
+    private final boolean followsAutoRouterStop;
 
     StreamThread(StoppableThread jobThread, long stepShare) {
+      this(jobThread, stepShare, true);
+    }
+
+    /**
+     * A racing attempt does not follow the job's autorouter-only stop, which the default run's pass
+     * loop requests when it ends; it follows a stop of the whole job.
+     */
+    StreamThread(StoppableThread jobThread, long stepShare, boolean followsAutoRouterStop) {
       this.jobThread = jobThread;
+      this.followsAutoRouterStop = followsAutoRouterStop;
       setSearchStepBudget(stepShare);
     }
 
@@ -716,7 +869,10 @@ final class RoutingFallbackRunner {
 
     @Override
     public boolean isStopAutoRouterRequested() {
-      return super.isStopAutoRouterRequested() || this.jobThread.isStopAutoRouterRequested();
+      return super.isStopAutoRouterRequested()
+          || (this.followsAutoRouterStop
+              ? this.jobThread.isStopAutoRouterRequested()
+              : this.jobThread.isStopRequested());
     }
   }
 

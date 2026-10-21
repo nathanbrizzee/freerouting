@@ -126,10 +126,17 @@ public final class RoutingPipeline {
               "Routing fallback disabled; the input board could not be saved: " + e.getMessage());
         }
       }
-      this.autorouter.runBatchLoop();
+      RoutingFallbackRunner.Race race =
+          RoutingFallbackRunner.startRace(this.job, strategies, input);
+      try {
+        this.autorouter.runBatchLoop();
+      } catch (RuntimeException e) {
+        RoutingFallbackRunner.cancelRace(this.job, race, "the default run failed");
+        throw e;
+      }
       RoutingFallbackRunner fallback = new RoutingFallbackRunner(this.autorouter);
       if (input != null) {
-        this.autorouter = fallback.run(this.job, this.autorouter, strategies, input);
+        this.autorouter = fallback.run(this.job, this.autorouter, strategies, input, race);
       }
       if (RoutingSupervisor.explores(this.job.routerSettings)) {
         this.autorouter = fallback.explore(this.job, this.autorouter);
