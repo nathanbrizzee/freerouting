@@ -159,6 +159,9 @@ public class ShapeSearchTree45Degree extends ShapeSearchTree {
     int roomLayer = room.getLayer();
     boolean debugAnchor = isCompleteShapeDebugAnchor(netNumber, roomLayer, startShape);
     int debugStep = 0;
+    // Leaves on other layers change nothing below, so subtrees without one on the room layer are
+    // skipped; the leaves that matter are still visited in the same order.
+    long layerBit = debugAnchor || roomLayer < 0 || roomLayer >= Long.SIZE ? -1L : 1L << roomLayer;
     Collection<IncompleteFreeSpaceExpansionRoom> result = new ArrayList<>();
     result.add(new IncompleteFreeSpaceExpansionRoom(startShape, roomLayer, shapeToBeContained));
     ArrayStack<TreeNode> stack = completeShapeStack.get();
@@ -306,10 +309,14 @@ public class ShapeSearchTree45Degree extends ShapeSearchTree {
         } else {
           TreeNode first = ((InnerNode) currentNode).firstChild;
           TreeNode second = ((InnerNode) currentNode).secondChild;
-          if (first != null && first.boundingShape.intersects(boundingShape)) {
+          if (first != null
+              && (first.layerMask & layerBit) != 0
+              && first.boundingShape.intersects(boundingShape)) {
             stack.push(first);
           }
-          if (second != null && second.boundingShape.intersects(boundingShape)) {
+          if (second != null
+              && (second.layerMask & layerBit) != 0
+              && second.boundingShape.intersects(boundingShape)) {
             stack.push(second);
           }
         }

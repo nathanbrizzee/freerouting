@@ -230,6 +230,13 @@ public abstract class ShapeTree {
 
     public RegularTileShape boundingShape;
     InnerNode parent;
+
+    /**
+     * Layers of the leaves below this node, one bit per layer (all bits for a leaf without a single
+     * layer below 64). A walk that only wants one layer can skip a node without its bit; a set bit
+     * may be stale after removals, which only costs that skip.
+     */
+    public long layerMask = -1L;
   }
 
   //////////////////////////////////////////////////////////

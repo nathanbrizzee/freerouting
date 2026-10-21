@@ -107,13 +107,17 @@ public class MinAreaTree extends ShapeTree {
   }
 
   /**
-   * Number of layers to keep a per-layer index for, or 0 for none. Read once, at the first insert.
+   * Number of layers to keep a per-layer index for, or 0 for none (then the tree keeps no layer
+   * masks either). Read once, at the first insert.
    */
   protected int indexedLayerCount() {
     return 0;
   }
 
-  /** The layer of a leaf, for the per-layer index; outside the indexed layers for all layers. */
+  /**
+   * The layer of a leaf, for the layer masks and the per-layer index; a value outside 0 to 63 (or
+   * outside the indexed layers) stands for all layers.
+   */
   protected int leafLayer(Leaf leaf) {
     return -1;
   }
@@ -125,7 +129,8 @@ public class MinAreaTree extends ShapeTree {
   private final ThreadLocal<ArrayStack<LayerLeafIndex.Node>> layerNodeStack =
       ThreadLocal.withInitial(() -> new ArrayStack<>(10000));
 
-  private void indexLeaf(Leaf leaf) {
+  /** Whether this tree keeps layer masks and a per-layer index; decided at the first insert. */
+  private boolean layered() {
     if (!this.layerIndexChecked) {
       this.layerIndexChecked = true;
       int layers = indexedLayerCount();
@@ -137,10 +142,10 @@ public class MinAreaTree extends ShapeTree {
         this.otherLayers = new LayerLeafIndex();
       }
     }
-    if (this.layerIndexes == null) {
-      return;
-    }
-    int layer = leafLayer(leaf);
+    return this.layerIndexes != null;
+  }
+
+  private void indexLeaf(Leaf leaf, int layer) {
     LayerLeafIndex index =
         layer >= 0 && layer < this.layerIndexes.length
             ? this.layerIndexes[layer]
@@ -173,7 +178,11 @@ public class MinAreaTree extends ShapeTree {
   /** Inserts a leaf while the write lock is already held. */
   private void insertUnlocked(Leaf leaf) {
     ++this.leafCount;
-    indexLeaf(leaf);
+    if (layered()) {
+      int layer = leafLayer(leaf);
+      leaf.layerMask = layer >= 0 && layer < Long.SIZE ? 1L << layer : -1L;
+      indexLeaf(leaf, layer);
+    }
 
     // Tree is empty - just insert the new leaf
     if (root == null) {
@@ -188,6 +197,7 @@ public class MinAreaTree extends ShapeTree {
     RegularTileShape newBounds = leaf.boundingShape.union(leafToReplace.boundingShape);
     InnerNode currentParent = leafToReplace.parent;
     InnerNode newNode = new InnerNode(newBounds, currentParent);
+    newNode.layerMask = leaf.layerMask | leafToReplace.layerMask;
 
     if (leafToReplace.parent != null) {
       // Replace the pointer from the parent to the leaf with our new node
@@ -217,6 +227,7 @@ public class MinAreaTree extends ShapeTree {
       InnerNode currentInnerNode = (InnerNode) node;
       currentInnerNode.boundingShape =
           leafToInsert.boundingShape.union(currentInnerNode.boundingShape);
+      currentInnerNode.layerMask |= leafToInsert.layerMask;
 
       // Choose the child, so that the area increase of that child after taking the union
       // with the shape of leafToInsert is minimal.
@@ -314,6 +325,13 @@ public class MinAreaTree extends ShapeTree {
       }
       nodeToRecalculate.boundingShape = newBounds;
       nodeToRecalculate = nodeToRecalculate.parent;
+    }
+    for (InnerNode node = grandParent; node != null; node = node.parent) {
+      long newMask = node.firstChild.layerMask | node.secondChild.layerMask;
+      if (newMask == node.layerMask) {
+        break;
+      }
+      node.layerMask = newMask;
     }
   }
 }
