@@ -127,6 +127,7 @@ public class DefaultSettings implements SettingsSource {
    * time limit; the longest routed fanout search measured took about 2,700 steps.
    */
   public static final long DEFAULT_MAX_SEARCH_STEPS_PER_PIN = 1_000_000L;
+
   public static final String DEFAULT_EXPLORE_FALLBACK_STRATEGIES = "short-escape,open-escape";
   public static final double DEFAULT_SMD_NET_VIA_COST_FACTOR = 0.1;
 
