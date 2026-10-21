@@ -42,6 +42,9 @@ public abstract class TraceTightener {
   /** If stoppableThread != null, the algorithm can be requested to be stopped. */
   private final Stoppable stoppableThread;
 
+  /** Checks a millisecond of the caller's limit allows; 1000 ms is 10,000 checks. */
+  static final int CHECKS_PER_MILLISECOND = 10;
+
   private final TimeLimit timeLimit;
 
   /**
@@ -82,7 +85,10 @@ public abstract class TraceTightener {
     this.onlyNetNoArr = onlyNetNoArr;
     this.stoppableThread = stoppableThread;
     if (timeLimit > 0) {
-      this.timeLimit = new TimeLimit(timeLimit);
+      // The limit is a guard against endless loops. A wall-clock limit made the copper depend on
+      // machine load (under load it stopped a tightening after 392 checks that ran to 1,900 on an
+      // idle machine), so the milliseconds become a fixed number of checks.
+      this.timeLimit = TimeLimit.ofSteps((long) timeLimit * CHECKS_PER_MILLISECOND);
     } else {
       this.timeLimit = null;
     }
@@ -93,7 +99,7 @@ public abstract class TraceTightener {
   /**
    * Returns a new instance of TraceTightener. If onlyNetNo > 0, only traces with net number notNo
    * are optimized. If stoppableThread != null, the algorithm can be requested to be stopped. If
-   * timeLimit > 0; the algorithm will be stopped after timeLimit Milliseconds.
+   * timeLimit > 0; the algorithm stops after timeLimit times CHECKS_PER_MILLISECOND checks.
    */
   public static TraceTightener getInstance(
       RoutingBoard board,
