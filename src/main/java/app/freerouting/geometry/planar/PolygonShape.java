@@ -16,7 +16,6 @@ import java.util.Random;
 public class PolygonShape extends PolylineShape {
 
   private static final int seed = 99;
-  private static final Random randomGenerator = new Random(seed);
   public final Point[] corners;
 
   /** Stores precalculated data for this polygon shape. */
@@ -561,9 +560,9 @@ public class PolygonShape extends PolylineShape {
         return null;
       }
       // not yet precalculated
-      // use a fixed seed to get reproducible result
-      randomGenerator.setSeed(seed);
-      Collection<PolygonShape> convexPieces = splitToConvexRecu();
+      // A fixed seed gives a reproducible result. Each split has its own generator, so splits on
+      // other threads (the optimizer, parallel fallback attempts) do not change its sequence.
+      Collection<PolygonShape> convexPieces = splitToConvexRecu(new Random(seed));
       if (convexPieces == null) {
         // split failed, maybe the polygon has selfontersections
         this.convexSplitFailed = true;
@@ -580,7 +579,7 @@ public class PolygonShape extends PolylineShape {
   }
 
   /** Private recursive part of split_to_convex. Returns a collection of polygon shape pieces. */
-  private Collection<PolygonShape> splitToConvexRecu() {
+  private Collection<PolygonShape> splitToConvexRecu(Random randomGenerator) {
     // start with a hashed corner and search the first concave corner
     int startCornerNo = randomGenerator.nextInt(corners.length);
     Point currentCorner = corners[startCornerNo];
@@ -651,11 +650,11 @@ public class PolygonShape extends PolylineShape {
     }
     PolygonShape lastPiece = new PolygonShape(lastArr);
     PolygonShape firstPiece = new PolygonShape(firstArr);
-    Collection<PolygonShape> c1 = firstPiece.splitToConvexRecu();
+    Collection<PolygonShape> c1 = firstPiece.splitToConvexRecu(randomGenerator);
     if (c1 == null) {
       return null;
     }
-    Collection<PolygonShape> c2 = lastPiece.splitToConvexRecu();
+    Collection<PolygonShape> c2 = lastPiece.splitToConvexRecu(randomGenerator);
     if (c2 == null) {
       return null;
     }
