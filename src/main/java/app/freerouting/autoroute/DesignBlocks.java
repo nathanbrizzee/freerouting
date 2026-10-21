@@ -19,9 +19,10 @@ import java.util.Set;
 
 /**
  * Connections the design itself blocks. A pin is blocked when, on every layer it has copper, fixed
- * copper (a pin, a fixed trace or via, a conduction area) of another net or of no net overlaps it
- * and comes within clearance of its centre, where traces attach: any trace leaving it breaks
- * clearance.
+ * copper (a pin, a fixed trace or via, a conduction area) of another net or of no net either
+ * overlaps it and comes within clearance of its centre, or stays clear of it but comes within
+ * clearance of every corner of its pad for the narrowest trace the router uses: any trace leaving
+ * it breaks clearance.
  *
  * <p>Ported from freerouting.net (Erik Gavriluk, Experimental Television Center).
  */
@@ -60,11 +61,12 @@ public final class DesignBlocks {
     List<Item> blockers = new ArrayList<>();
     for (ClearanceViolation v : pin.clearanceViolations()) {
       Item other = (v.firstItem == pin) ? v.secondItem : v.firstItem;
-      if (v.actualClearance > 0
-          || other.isRoutable()
+      if (other.isRoutable()
           || !isCopper(other)
           || other.sharesNet(pin)
-          || !coversCentre(pin, other, v.layer, v.expectedClearance)) {
+          || !(v.actualClearance > 0
+              ? coversPad(pin, other, v.layer, v.expectedClearance)
+              : coversCentre(pin, other, v.layer, v.expectedClearance))) {
         continue;
       }
       blockedLayers.add(v.layer);
@@ -150,6 +152,63 @@ public final class DesignBlocks {
       }
     }
     return false;
+  }
+
+  /**
+   * Whether fixed copper that does not overlap pin still comes within clearance of every point of
+   * its pad on layer, for the narrowest trace the router attaches with: a trace attaches inside the
+   * pad, and the distance to a convex shape is largest at a corner of the pad.
+   */
+  private static boolean coversPad(Pin pin, Item other, int layer, double clearance) {
+    double reach = clearance + narrowestTraceHalfWidth(pin, layer);
+    boolean padSeen = false;
+    for (int i = 0; i < pin.tileShapeCount(); i++) {
+      if (pin.shapeLayer(i) != layer || pin.getTileShape(i) == null) {
+        continue;
+      }
+      TileShape pad = pin.getTileShape(i);
+      padSeen = true;
+      for (int c = 0; c < pad.borderLineCount(); c++) {
+        if (!within(other, layer, pad.cornerApprox(c), reach)) {
+          return false;
+        }
+      }
+    }
+    return padSeen;
+  }
+
+  private static boolean within(Item other, int layer, FloatPoint point, double distance) {
+    for (int i = 0; i < other.tileShapeCount(); i++) {
+      if (other.shapeLayer(i) == layer
+          && other.getTileShape(i) != null
+          && other.getTileShape(i).distance(point) < distance) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The narrowest trace that can attach to pin on layer: the pin neck-down, half the net class
+   * width (the insert's smallest micro neck-down), or the routing neck when one is set, never below
+   * the board's minimum.
+   */
+  private static int narrowestTraceHalfWidth(Pin pin, int layer) {
+    int result = pin.getTraceNeckdownHalfwidth(layer);
+    if (pin.netCount() > 0
+        && pin.board != null
+        && pin.board.rules.nets.get(pin.getNetNumber(0)) != null) {
+      int classHalfWidth =
+          pin.board.rules.nets.get(pin.getNetNumber(0)).getNetClass().getTraceHalfWidth(layer);
+      if (classHalfWidth > 0) {
+        result = Math.min(result, Math.max(1, classHalfWidth / 2));
+      }
+    }
+    if (pin.board != null && pin.board.neckHalfWidth > 0) {
+      result = Math.min(result, pin.board.neckHalfWidth);
+    }
+    int floor = pin.board != null ? pin.board.rules.getMinAllowedTraceHalfWidth() : 0;
+    return Math.max(result, floor);
   }
 
   private static boolean isCopper(Item item) {

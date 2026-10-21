@@ -36,17 +36,25 @@ class DesignBlocksTest {
           (component X (place X1 3000 5000 front 0))
           (component H (place T 30000 5000 front 0) (place U 36000 5000 front 0))
           (component Y (place Y1 30000 5000 front 0))
-          (component W (place W1 25750 15000 front 0)))
+          (component W (place W1 25750 15000 front 0))
+          (component G (place G1 10000 10000 front 0) (place J1 22000 9000 front 0))
+          (component P2 (place G2 10000 17000 front 0) (place J2 33000 9000 front 0))
+          (component Z (place Z1 10550 10000 front 0) (place Z2 22900 9000 front 0)))
         (library
           (image P (pin S 1 0 0))
           (image X (pin S e1 0 0))
           (image H (pin R 1 0 0))
           (image Y (pin S e1 0 0))
           (image W (pin S e1 0 0))
+          (image G (pin T 1 0 0))
+          (image P2 (pin S 1 0 0))
+          (image Z (pin S e1 0 0))
           (padstack S (shape (rect top -400 -400 400 400)) (attach off))
+          (padstack T (shape (rect top -50 -50 50 50)) (attach off))
           (padstack R (shape (circle top 800)) (shape (circle bottom 800)) (attach off))
           (padstack V (shape (circle top 600)) (shape (circle bottom 600)) (attach off)))
-        (network (net N (pins A-1 B-1)) (net M (pins C-1 D-1)) (net K (pins T-1 U-1)) (net Q (pins E-1 F-1))))
+        (network (net N (pins A-1 B-1)) (net M (pins C-1 D-1)) (net K (pins T-1 U-1)) (net Q (pins E-1 F-1))
+          (net G (pins G1-1 G2-1)) (net J (pins J1-1 J2-1))))
       """;
 
   private static RoutingBoard loadBoard() {
@@ -82,6 +90,25 @@ class DesignBlocksTest {
     // W1's netless pad overlaps E-1 by 50 um but stays 350 um from its centre: a trace can leave on
     // the free side
     assertFalse(DesignBlocks.isBlocked(pinOf(board, "E")));
+  }
+
+  /**
+   * G1's 100 um pad stays 100 um from Z1's netless pad, inside the 200 um clearance; even its far
+   * corner is 200 um away, closer than the clearance plus the narrowest trace, so no trace can
+   * leave it. J1's 800 um pad at the same gap from Z2 has a far side a trace can leave from.
+   */
+  @Test
+  void testPinWithinClearanceOfForeignCopperAtEveryCornerIsBlocked() {
+    RoutingBoard board = loadBoard();
+    Pin g1 = pinOf(board, "G1");
+    assertTrue(DesignBlocks.isBlocked(g1));
+    assertEquals(1, DesignBlocks.blockingItems(g1).size());
+    assertEquals(
+        "Z1", board.components.get(DesignBlocks.blockingItems(g1).get(0).getComponentId()).name);
+    Pin g2 = pinOf(board, "G2");
+    assertTrue(DesignBlocks.connectionsBlocked(board, g2, g2.getNetNumber(0)));
+
+    assertFalse(DesignBlocks.isBlocked(pinOf(board, "J1")));
   }
 
   @Test

@@ -55,6 +55,7 @@ final class AutoroutePassRunner {
     try {
       long itemSelectionStart = BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
       List<Item> autorouteItemList = router.getAutorouteItems(router.board);
+      router.board.neckHalfWidth = neckHalfWidth(router);
       dropDesignBlockedItems(autorouteItemList);
       if (BatchAutorouter.isBenchmarkProfileEnabled()) {
         router.profileItemSelectionNanos += System.nanoTime() - itemSelectionStart;
@@ -581,6 +582,22 @@ final class AutoroutePassRunner {
               + (before - items.size())
               + " item(s) whose open connections the design blocks (pins on foreign copper).");
     }
+  }
+
+  /** The routing neck half width in board units, or 0 when no neck is set. */
+  private static int neckHalfWidth(BatchAutorouter router) {
+    if (router.settings.getNeckWidthUm() <= 0) {
+      return 0;
+    }
+    int boardResolution = Math.max(1, router.board.communication.resolution);
+    int neckWidth =
+        (int)
+            Math.round(
+                Unit.scale(
+                    router.settings.getNeckWidthUm() * boardResolution,
+                    Unit.UM,
+                    router.board.communication.unit));
+    return Math.max(Math.max(1, neckWidth / 2), router.board.rules.getMinAllowedTraceHalfWidth());
   }
 
   static Set<Integer> ruleBlockedNets(RoutingBoard board) {

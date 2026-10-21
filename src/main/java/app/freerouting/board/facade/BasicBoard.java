@@ -109,6 +109,13 @@ public class BasicBoard implements Serializable {
   public int preExistingClearanceViolationsCount = 0;
   public transient int unfixableClearanceViolationsCount = 0;
   public transient Set<Integer> ruleBlockedPins;
+
+  /**
+   * The routing neck half width when a neck is set ({@code router.min_trace_width_um}), else 0;
+   * {@link app.freerouting.autoroute.DesignBlocks} counts traces this narrow as possible.
+   */
+  public transient int neckHalfWidth;
+
   public transient app.freerouting.drc.ClearanceBaseline clearanceBaseline;
   public transient CompletableFuture<Void> postLoadFuture;
 
