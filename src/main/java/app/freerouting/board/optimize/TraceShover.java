@@ -24,6 +24,7 @@ import app.freerouting.geometry.planar.ConvexShape;
 import app.freerouting.geometry.planar.Direction;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
+import app.freerouting.geometry.planar.IntOctagon;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Line;
 import app.freerouting.geometry.planar.LineSegment;
@@ -33,8 +34,10 @@ import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.geometry.planar.Vector;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.ClearanceMatrix;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -736,6 +739,32 @@ public class TraceShover {
   }
 
   /**
+   * The bounding octagon of the shapes of obstacles on layer, or null when they have none or one of
+   * them is the board outline.
+   */
+  private static IntOctagon commonOctagon(
+      List<Item> obstacles, ShapeSearchTree searchTree, int layer) {
+    IntOctagon result = null;
+    for (Item obstacle : obstacles) {
+      if (obstacle instanceof BoardOutline) {
+        return null;
+      }
+      for (int i = 0; i < obstacle.treeShapeCount(searchTree); i++) {
+        if (obstacle.shapeLayer(i) != layer) {
+          continue;
+        }
+        TileShape shape = obstacle.getTreeShape(searchTree, i);
+        if (shape == null || shape.isEmpty()) {
+          continue;
+        }
+        IntOctagon octagon = shape.boundingOctagon();
+        result = result == null ? octagon : result.union(octagon);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Checks, if there are obstacle in the way of polyline and tries to wrap the polyline trace
    * around these obstacles in counterclock sense. Returns null, if that is not possible. Returns
    * polyline, if there were no obstacles If contactPins != null, all pins not contained in
@@ -752,6 +781,9 @@ public class TraceShover {
       Set<Pin> contactPins) {
     Item foundObstacle = null;
     IntBox foundObstacleBoundingBox = null;
+    // Obstacles that overlap the found one without either containing the other, such as a fixed
+    // trace on a pin; the polyline springs over their common octagon.
+    List<Item> overlappingObstacles = null;
     ShapeSearchTree searchTree = this.board.searchTreeManager.getDefaultTree();
     int[] checkNetNoArr;
     if (contactPins == null) {
@@ -812,7 +844,12 @@ public class TraceShover {
                 foundObstacle = currentItem;
                 foundObstacleBoundingBox = currentItemBoundingBox;
               } else if (!foundObstacleBoundingBox.contains(currentItemBoundingBox)) {
-                return null;
+                if (overlappingObstacles == null) {
+                  overlappingObstacles = new ArrayList<>();
+                }
+                if (!overlappingObstacles.contains(currentItem)) {
+                  overlappingObstacles.add(currentItem);
+                }
               }
             }
           }
@@ -845,7 +882,11 @@ public class TraceShover {
       }
     }
     ConvexShape obstacleShape = null;
-    if (trySpringOver) {
+    if (trySpringOver && overlappingObstacles != null) {
+      overlappingObstacles.add(0, foundObstacle);
+      obstacleShape = commonOctagon(overlappingObstacles, searchTree, layer);
+      trySpringOver = obstacleShape != null;
+    } else if (trySpringOver) {
       if (foundObstacle instanceof ObstacleArea || foundObstacle instanceof Trace) {
         if (foundObstacle.treeShapeCount(searchTree) == 1) {
           obstacleShape = foundObstacle.getTreeShape(searchTree, 0);
@@ -879,10 +920,16 @@ public class TraceShover {
       offsetShape = (TileShape) obstacleShape.enlarge(offset);
     } else {
       int offset = halfWidth + 1;
-      double halfClOffset =
-          0.5
-              * board.clearanceValue(
-                  foundObstacle.clearanceClassIndex(), clearanceClassIndex, layer);
+      double halfClOffset = 0;
+      for (Item obstacle :
+          overlappingObstacles != null ? overlappingObstacles : List.of(foundObstacle)) {
+        halfClOffset =
+            Math.max(
+                halfClOffset,
+                0.5
+                    * board.clearanceValue(
+                        obstacle.clearanceClassIndex(), clearanceClassIndex, layer));
+      }
       if (obstacleShape instanceof TileShape tile && !tile.isIntOctagon()) {
         // Match the checker's separately rounded half-clearance and width expansions. Combining
         // width and half-clearance can consume the one-unit guard because Line.translate rounds
