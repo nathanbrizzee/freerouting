@@ -1013,13 +1013,11 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     }
     int pinNetNo = pin.getNetNumber(0);
     int pinLayer = pin.firstLayer();
-    Set<Item> pinConnectedSet = pin.getConnectedSet(pinNetNo);
-    for (Item currentItem : pinConnectedSet) {
-      if (currentItem.firstLayer() != pinLayer || currentItem.lastLayer() != pinLayer) {
-        return new AutorouteAttemptResult(
-            AutorouteAttemptState.ALREADY_CONNECTED, "The pin '" + pin + "' is already connected.");
-      }
+    if (pin.connectedSetLeavesLayer(pinNetNo, pinLayer)) {
+      return new AutorouteAttemptResult(
+          AutorouteAttemptState.ALREADY_CONNECTED, "The pin '" + pin + "' is already connected.");
     }
+    Set<Item> pinConnectedSet = pin.getConnectedSet(pinNetNo);
     Set<Item> unconnectedSet = pin.getUnconnectedSet(pinNetNo);
     if (unconnectedSet.isEmpty()) {
       return new AutorouteAttemptResult(

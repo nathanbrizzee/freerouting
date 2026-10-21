@@ -27,6 +27,7 @@ import app.freerouting.rules.Nets;
 import app.freerouting.util.TextManager;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -708,6 +709,43 @@ public abstract class Item
     result.add(this);
     getConnectedSetRecu(result, netNumber, stopAtPlane);
     return result;
+  }
+
+  /**
+   * Returns true if an item of the connected set of this item for netNumber (see {@link
+   * #getConnectedSet(int)}) is not confined to the input layer. Stops at the first such item, so on
+   * a net with a copper pour it does not walk the whole pour.
+   */
+  public boolean connectedSetLeavesLayer(int netNumber, int layer) {
+    if (netNumber > 0 && !this.containsNet(netNumber)) {
+      return false;
+    }
+    Set<Item> visited = new TreeSet<>();
+    ArrayDeque<Item> toVisit = new ArrayDeque<>();
+    visited.add(this);
+    toVisit.push(this);
+    while (!toVisit.isEmpty()) {
+      Item current = toVisit.pop();
+      if (current.firstLayer() != layer || current.lastLayer() != layer) {
+        return true;
+      }
+      Collection<Item> contactList = current.getNormalContacts();
+      if (contactList == null) {
+        continue;
+      }
+      for (Item currentContact : contactList) {
+        if (netNumber > 0 && !currentContact.containsNet(netNumber)) {
+          continue;
+        }
+        if (currentContact.firstLayer() != layer || currentContact.lastLayer() != layer) {
+          return true;
+        }
+        if (visited.add(currentContact)) {
+          toVisit.push(currentContact);
+        }
+      }
+    }
+    return false;
   }
 
   /** Recursive part of get_connected_set. */
