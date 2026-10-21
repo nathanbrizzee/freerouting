@@ -4,7 +4,6 @@ import app.freerouting.datastructures.ShapeTree.Leaf;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.RegularTileShape;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -131,7 +130,8 @@ final class LayerLeafIndex {
 
   /**
    * Rebuilds the index balanced: each group of leaves is split at the median center along its
-   * longer side. Ties are broken by leaf order, so the same leaves give the same index.
+   * longer side. Ties are broken by the order of a walk of the old index, which the same inserts
+   * and removals repeat, so the same history gives the same index.
    */
   private void rebuild() {
     this.insertsSinceRebuild = 0;
@@ -157,9 +157,11 @@ final class LayerLeafIndex {
       IntBox box = leafNode.bounds.boundingBox();
       entries[i] =
           new Entry(
-              leafNode, 0.5 * ((double) box.ll.x + box.ur.x), 0.5 * ((double) box.ll.y + box.ur.y));
+              leafNode,
+              0.5 * ((double) box.ll.x + box.ur.x),
+              0.5 * ((double) box.ll.y + box.ur.y),
+              i);
     }
-    Arrays.sort(entries, (a, b) -> a.node.leaf.compareTo(b.node.leaf));
     this.root = build(entries, 0, entries.length, null);
   }
 
@@ -180,15 +182,8 @@ final class LayerLeafIndex {
       maxY = Math.max(maxY, entries[i].y);
     }
     boolean byX = maxX - minX >= maxY - minY;
-    Arrays.sort(
-        entries,
-        from,
-        to,
-        (a, b) -> {
-          int c = byX ? Double.compare(a.x, b.x) : Double.compare(a.y, b.y);
-          return c != 0 ? c : a.node.leaf.compareTo(b.node.leaf);
-        });
     int mid = (from + to) >>> 1;
+    select(entries, from, to - 1, mid, byX);
     Node inner = new Node(null, null, this);
     inner.parent = parent;
     inner.first = build(entries, from, mid, inner);
@@ -197,5 +192,44 @@ final class LayerLeafIndex {
     return inner;
   }
 
-  private record Entry(Node node, double x, double y) {}
+  private static int compare(Entry a, Entry b, boolean byX) {
+    int c = byX ? Double.compare(a.x, b.x) : Double.compare(a.y, b.y);
+    return c != 0 ? c : Integer.compare(a.rank, b.rank);
+  }
+
+  /**
+   * Reorders entries[lo..hi] so that the entry at k is the one a sort would put there, with the
+   * smaller ones before it and the larger ones after it (Hoare's selection, middle pivot).
+   */
+  private static void select(Entry[] entries, int lo, int hi, int k, boolean byX) {
+    while (lo < hi) {
+      Entry pivot = entries[(lo + hi) >>> 1];
+      int i = lo;
+      int j = hi;
+      while (i <= j) {
+        while (compare(entries[i], pivot, byX) < 0) {
+          i++;
+        }
+        while (compare(entries[j], pivot, byX) > 0) {
+          j--;
+        }
+        if (i <= j) {
+          Entry tmp = entries[i];
+          entries[i] = entries[j];
+          entries[j] = tmp;
+          i++;
+          j--;
+        }
+      }
+      if (k <= j) {
+        hi = j;
+      } else if (k >= i) {
+        lo = i;
+      } else {
+        return;
+      }
+    }
+  }
+
+  private record Entry(Node node, double x, double y, int rank) {}
 }
