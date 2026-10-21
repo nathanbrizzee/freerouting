@@ -168,13 +168,14 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       memory per thread, and it does not help when the default run already uses up the job's time
       or step budget.
     - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
-      doubling each pass. Not set by default, which keeps the time limit (100 s in pass 1, doubling
-      each pass). When set, it replaces the time limit, so a connection stops at the same point on
-      every run and machine. Each pass logs `Auto-routing pass #N: Search work: ...` with the
-      searches, the steps, how many stopped at the limit, the steps the routed connections
-      needed, and how many searches did not route and what they cost, which shows what budget a
-      board needs and how much of a pass goes into searches that fail. CLI:
-      `--router.autorouter.max_search_steps_per_connection=<steps>`.
+      doubling each pass. Default `10000000`, about the 100 s the older time limit allowed; the
+      longest routed search on the benchmark boards took about 635,000 steps. The step budget stops
+      a connection at the same point on every run and machine, which a time limit does not under
+      load. A negative value restores the time limit (100 s in pass 1, doubling each pass). Each
+      pass logs `Auto-routing pass #N: Search work: ...` with the searches, the steps, how many
+      stopped at the limit, the steps the routed connections needed, and how many searches did not
+      route and what they cost, which shows what budget a board needs and how much of a pass goes
+      into searches that fail. CLI: `--router.autorouter.max_search_steps_per_connection=<steps>`.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
     - **`ignore_net_classes`**: Net class names the autorouter should skip.
     - **`max_threads`**: Canonical CLI is `--router.autorouter.max_threads`. The autorouter pass
@@ -289,8 +290,8 @@ Configures the SMD-pin fanout pre-pass stage.
 - **`enabled`**: Whether to run the fanout pre-pass at all. Default is `true`.
 - **`max_passes`**: Maximum number of fanout passes. Default is `20`.
 - **`timeout`**: Optional wall-clock budget for the fanout stage (`HH:MM:SS`). When unset, fanout has no stage timeout of its own. `router.job_timeout` still covers fanout, autorouting, and optimization together.
-- **`max_milliseconds_per_pin`**: Base time budget in milliseconds per SMD pin in pass 1. Scales with pass number. Default is `10000`.
-- **`max_search_steps_per_pin`**: Maze search steps one SMD pin may use in pass 1, scaling with the pass number like `max_milliseconds_per_pin`, which it replaces when set. Not set by default. The time limit makes the fanout depend on machine load; the step budget stops a pin at the same point on every run. Each fanout pass logs `Fanout pass #N: Search work: ...` with how many pins stopped at the limit and the steps the routed pins needed. CLI: `--router.fanout.max_search_steps_per_pin=<steps>`.
+- **`max_milliseconds_per_pin`**: Base time budget in milliseconds per SMD pin in pass 1. Scales with pass number. Default is `10000`. Used only when `max_search_steps_per_pin` is negative.
+- **`max_search_steps_per_pin`**: Maze search steps one SMD pin may use in pass 1, scaling with the pass number like `max_milliseconds_per_pin`, which it replaces. Default `1000000`, about the 10 s time limit; the longest routed fanout search measured took about 2,700 steps. The time limit makes the fanout depend on machine load; the step budget stops a pin at the same point on every run. A negative value restores the time limit. Each fanout pass logs `Fanout pass #N: Search work: ...` with how many pins stopped at the limit and the steps the routed pins needed. CLI: `--router.fanout.max_search_steps_per_pin=<steps>`.
 - **`ripup_allowed`**: Whether fanout can rip up existing traces. Default is `true`.
 - **`min_escape_length_mm`**: The minimum physical escape trace length in millimeters. Default is `2.5`. Landing vias and escape stubs are not placed closer than this distance from the pin center.
 - **`max_escape_length_mm`**: The maximum physical escape trace length in millimeters. Default is `4.5`. Enforced directly during maze expansion.

@@ -114,6 +114,19 @@ public class DefaultSettings implements SettingsSource {
       "fanout-retry,short-escape,direct-first,open-escape,no-fanout";
   public static final double DEFAULT_FALLBACK_WORK_RATIO = 1.0;
   public static final int DEFAULT_FALLBACK_THREADS = 1;
+
+  /**
+   * Maze search steps one connection may use in pass 1 (doubling each pass). About the 100 s the
+   * time limit allowed at 100,000 steps per second; the longest routed search measured on the
+   * benchmark boards took about 635,000 steps.
+   */
+  public static final long DEFAULT_MAX_SEARCH_STEPS_PER_CONNECTION = 10_000_000L;
+
+  /**
+   * Maze search steps one SMD pin may use in fanout pass 1 (times the pass number). About the 10 s
+   * time limit; the longest routed fanout search measured took about 2,700 steps.
+   */
+  public static final long DEFAULT_MAX_SEARCH_STEPS_PER_PIN = 1_000_000L;
   public static final String DEFAULT_EXPLORE_FALLBACK_STRATEGIES = "short-escape,open-escape";
   public static final double DEFAULT_SMD_NET_VIA_COST_FACTOR = 0.1;
 
@@ -180,6 +193,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.residualRepairMaxOpen = 4;
     settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.fallbackThreads = DEFAULT_FALLBACK_THREADS;
+    settings.autorouter.maxSearchStepsPerConnection = DEFAULT_MAX_SEARCH_STEPS_PER_CONNECTION;
     settings.autorouter.explorePatience = 0;
     settings.maxThreads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
     settings.autorouter.maxThreads = settings.maxThreads;
@@ -200,6 +214,7 @@ public class DefaultSettings implements SettingsSource {
     settings.fanout.enabled = true;
     settings.fanout.maxPasses = 20;
     settings.fanout.maxMillisecondsPerPin = 10000L;
+    settings.fanout.maxSearchStepsPerPin = DEFAULT_MAX_SEARCH_STEPS_PER_PIN;
     settings.fanout.ripupAllowed = true;
     settings.fanout.minEscapeLengthMm = 2.5;
     settings.fanout.maxEscapeLengthMm = 4.5;
