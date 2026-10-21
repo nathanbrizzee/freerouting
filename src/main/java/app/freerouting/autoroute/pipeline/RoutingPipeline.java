@@ -2,6 +2,7 @@ package app.freerouting.autoroute.pipeline;
 
 import app.freerouting.autoroute.events.BoardUpdatedEventListener;
 import app.freerouting.autoroute.events.TaskStateChangedEventListener;
+import app.freerouting.autoroute.plan.OracleCorridors;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingStage;
 import java.util.ArrayList;
@@ -92,6 +93,10 @@ public final class RoutingPipeline {
   }
 
   private void runRoutingStage() {
+    String oracle = OracleCorridors.describeActive();
+    if (oracle != null) {
+      this.job.logInfo(oracle);
+    }
     boolean routerEnabled =
         this.job.routerSettings.getRunRouter()
             && (this.job.routerSettings.autorouter.maxPasses == null
@@ -141,6 +146,7 @@ public final class RoutingPipeline {
     }
 
     this.job.board.finishAutoroute();
+    OracleCorridors.writeIfRequested(this.job.board, this.job::logInfo);
     for (StageListener listener : this.stageListeners) {
       listener.afterRouting(this.autorouter);
     }
