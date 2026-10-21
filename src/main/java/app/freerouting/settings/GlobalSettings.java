@@ -46,11 +46,11 @@ public class GlobalSettings implements Serializable {
   }
 
   private static GlobalSettings getFreeroutingGlobalSettingsIfAvailable() {
+    java.lang.reflect.Field field = FreeroutingField.FIELD;
+    if (field == null) {
+      return null;
+    }
     try {
-      Class<?> freeroutingClass =
-          Class.forName(
-              "app.freerouting.Freerouting", false, GlobalSettings.class.getClassLoader());
-      java.lang.reflect.Field field = freeroutingClass.getField("globalSettings");
       Object val = field.get(null);
       if (val instanceof GlobalSettings gs) {
         return gs;
@@ -59,6 +59,27 @@ public class GlobalSettings implements Serializable {
       // Ignored in environments where Freerouting is not loaded or unavailable
     }
     return null;
+  }
+
+  /**
+   * {@code Freerouting.globalSettings}, looked up once, or null where Freerouting is not loaded.
+   * The router's trace calls reach {@link #current()} millions of times per run, and the class and
+   * field lookup was most of their cost. The field itself is still read on every call, since tests
+   * replace it.
+   */
+  private static final class FreeroutingField {
+    static final java.lang.reflect.Field FIELD = find();
+
+    private static java.lang.reflect.Field find() {
+      try {
+        Class<?> freeroutingClass =
+            Class.forName(
+                "app.freerouting.Freerouting", false, GlobalSettings.class.getClassLoader());
+        return freeroutingClass.getField("globalSettings");
+      } catch (Throwable _) {
+        return null;
+      }
+    }
   }
 
   /** Sets the currently active GlobalSettings instance. */
