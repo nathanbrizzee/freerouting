@@ -43,8 +43,10 @@ public class ConductionArea extends ObstacleArea implements Connectable {
   }
 
   private transient int cachedBoardRevision = -1;
-  private transient TileShape[] cachedTiles;
-  private transient TileBoxGrid cachedTileBoxGrid;
+
+  /** The tile shapes and the grid built over them, published together for concurrent readers. */
+  private transient volatile TileGrid cachedTileGrid;
+
   private transient java.awt.geom.Area cachedBoardFillArea;
 
   /** Creates a new instance of ConductionArea. */
@@ -398,17 +400,21 @@ public class ConductionArea extends ObstacleArea implements Connectable {
   private TileBoxGrid tileBoxGrid() {
     int count = tileShapeCount();
     TileShape[] tiles = new TileShape[count];
-    boolean same = cachedTiles != null && cachedTiles.length == count;
+    TileGrid cached = cachedTileGrid;
+    boolean same = cached != null && cached.tiles.length == count;
     for (int i = 0; i < count; i++) {
       tiles[i] = getTileShape(i);
-      same = same && cachedTiles[i] == tiles[i];
+      same = same && cached.tiles[i] == tiles[i];
     }
-    if (!same) {
-      cachedTiles = tiles;
-      cachedTileBoxGrid = new TileBoxGrid(tiles);
+    if (same) {
+      return cached.grid;
     }
-    return cachedTileBoxGrid;
+    TileGrid built = new TileGrid(tiles, new TileBoxGrid(tiles));
+    cachedTileGrid = built;
+    return built.grid;
   }
+
+  private record TileGrid(TileShape[] tiles, TileBoxGrid grid) {}
 
   @Override
   public TileShape getTraceConnectionShape(ShapeSearchTree searchTree, int index) {
