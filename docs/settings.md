@@ -171,8 +171,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       doubling each pass. Not set by default, which keeps the time limit (100 s in pass 1, doubling
       each pass). When set, it replaces the time limit, so a connection stops at the same point on
       every run and machine. Each pass logs `Auto-routing pass #N: Search work: ...` with the
-      searches, the steps, how many stopped at the limit, and the steps the routed connections
-      needed, which shows what budget a board needs. CLI:
+      searches, the steps, how many stopped at the limit, the steps the routed connections
+      needed, and how many searches did not route and what they cost, which shows what budget a
+      board needs and how much of a pass goes into searches that fail. CLI:
       `--router.autorouter.max_search_steps_per_connection=<steps>`.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
     - **`ignore_net_classes`**: Net class names the autorouter should skip.

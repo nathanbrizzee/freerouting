@@ -17,12 +17,14 @@ final class SearchWork {
   private int searches;
   private int limitHits;
   private long totalSteps;
+  private long routedTotal;
 
   void reset() {
     this.routedCount = 0;
     this.searches = 0;
     this.limitHits = 0;
     this.totalSteps = 0;
+    this.routedTotal = 0;
   }
 
   /**
@@ -43,11 +45,29 @@ final class SearchWork {
         this.routedSteps = Arrays.copyOf(this.routedSteps, this.routedCount * 2);
       }
       this.routedSteps[this.routedCount++] = limit.steps();
+      this.routedTotal += limit.steps();
     }
   }
 
   int limitHits() {
     return this.limitHits;
+  }
+
+  /** The share of the steps of {@code sorted} (ascending) used by its costliest tenth, in %. */
+  private static long costliestTenthPercent(long[] sorted) {
+    long total = 0;
+    for (long steps : sorted) {
+      total += steps;
+    }
+    if (total == 0) {
+      return 0;
+    }
+    long top = 0;
+    int count = Math.max(1, sorted.length / 10);
+    for (int i = sorted.length - count; i < sorted.length; i++) {
+      top += sorted[i];
+    }
+    return Math.round(100.0 * top / total);
   }
 
   /** One sentence for the pass log, or null when nothing was searched. */
@@ -62,17 +82,30 @@ final class SearchWork {
             ? "none routed"
             : String.format(
                 Locale.US,
-                "routed ones took median %d, p99 %d, max %d steps",
+                "routed ones took median %d, p99 %d, max %d steps,"
+                    + " the costliest tenth %d%% of them",
                 sorted[sorted.length / 2],
                 sorted[Math.min(sorted.length - 1, (int) Math.ceil(sorted.length * 0.99) - 1)],
-                sorted[sorted.length - 1]);
+                sorted[sorted.length - 1],
+                costliestTenthPercent(sorted));
+    int failed = this.searches - this.routedCount;
+    String failedPart =
+        failed == 0
+            ? ""
+            : String.format(
+                Locale.US,
+                "; %d did not route and took %d steps (%d%%)",
+                failed,
+                this.totalSteps - this.routedTotal,
+                Math.round(100.0 * (this.totalSteps - this.routedTotal) / this.totalSteps));
     return String.format(
         Locale.US,
-        "Search work: %d %s searches, %d steps, %d stopped at the search limit; %s.",
+        "Search work: %d %s searches, %d steps, %d stopped at the search limit; %s%s.",
         this.searches,
         what,
         this.totalSteps,
         this.limitHits,
-        routed);
+        routed,
+        failedPart);
   }
 }
