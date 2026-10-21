@@ -43,6 +43,29 @@ class RoutingFallbackTest {
   }
 
   @Test
+  void aRaceRunsTheRaceList() {
+    RouterSettings settings = new DefaultSettings().getSettings();
+    assertEquals(names(RoutingFallback.parse(settings, null)), stageNames(settings));
+    settings.autorouter.fallbackRace = true;
+    assertEquals(
+        names(RoutingFallback.parse(settings, null)),
+        stageNames(settings),
+        "one fallback thread: no race");
+    settings.autorouter.fallbackThreads = 0;
+    assertEquals(List.of("direct-first", "no-fanout", "seed-1"), stageNames(settings));
+    settings.autorouter.fallbackStrategies = "none";
+    assertTrue(stageNames(settings).isEmpty(), "none turns the race off too");
+  }
+
+  private static List<String> stageNames(RouterSettings settings) {
+    return names(RoutingFallback.parseForStage(settings, null));
+  }
+
+  private static List<String> names(List<RoutingFallback.Strategy> strategies) {
+    return strategies.stream().map(strategy -> strategy.name).toList();
+  }
+
+  @Test
   void seedStrategiesSetTheItemOrderSeed() {
     RouterSettings settings = new DefaultSettings().getSettings();
     List<String> unknown = new ArrayList<>();

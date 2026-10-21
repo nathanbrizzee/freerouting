@@ -112,6 +112,9 @@ public class DefaultSettings implements SettingsSource {
   // fallback work budget may end the stage before the later ones run.
   public static final String DEFAULT_FALLBACK_STRATEGIES =
       "fanout-retry,short-escape,direct-first,open-escape,no-fanout";
+  // A race of three gave the same boards as a race of eight on eight hard PCBench boards, for a
+  // third of the CPU time, and more on L6, where eight attempts slowed the default run.
+  public static final String DEFAULT_FALLBACK_RACE_STRATEGIES = "direct-first,no-fanout,seed-1";
   public static final double DEFAULT_FALLBACK_WORK_RATIO = 1.0;
   public static final int DEFAULT_FALLBACK_THREADS = 1;
 
@@ -195,6 +198,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.fallbackThreads = DEFAULT_FALLBACK_THREADS;
     settings.autorouter.fallbackRace = false;
+    settings.autorouter.fallbackRaceStrategies = DEFAULT_FALLBACK_RACE_STRATEGIES;
     settings.autorouter.springOverOverlaps = false;
     settings.autorouter.maxSearchStepsPerConnection = DEFAULT_MAX_SEARCH_STEPS_PER_CONNECTION;
     settings.autorouter.explorePatience = 0;

@@ -191,11 +191,18 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       EncoderBoard clean in 64 s instead of 123 s).
       It costs CPU time for every attempt, and on a board the default run finishes the attempts
       slow it down through shared cores and memory (LimeSDR 84 -> 122 s, TX5823 41 -> 84 s). At the
-      job timeout the attempts are stopped and their boards merged as they are. On large boards a
-      short list does better than a long one: with `fallback_strategies=direct-first,no-fanout,seed-1`
-      (10-minute cap, optimizer off) L6 ends with 15 open instead of 27 with the defaults and 30
-      with eight attempts, at 3,030 CPU s instead of 6,810; the synthetic board 4 open (defaults 5,
-      eight attempts 3).
+      job timeout the attempts are stopped and their boards merged as they are. The race runs the
+      list in `fallback_race_strategies`, not `fallback_strategies`.
+    - **`fallback_race_strategies`**: The strategies a race starts, used in place of
+      `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
+      Default `direct-first,no-fanout,seed-1`. `none` in `fallback_strategies` turns the race off
+      too. A short list does as well as a long one for less CPU time: on the eight hard PCBench
+      boards above (8-minute cap, optimizer off, `fallback_threads=0`, `fallback_work_ratio=0`) the
+      default list and the eight attempts both left 6 open connections, but the default list took
+      5,476 CPU s instead of 15,237 and 1,551 s instead of 2,066 in all, and Unifying, lpa96 and
+      reworkctf finished before the cap. On L6 (10-minute cap) it ends with 15 open instead of 30
+      with eight attempts (27 without a race), at 3,030 CPU s instead of 6,810, because eight
+      attempts slow the default run; the synthetic board 4 open (eight attempts 3, no race 5).
     - **`spring_over_overlaps`**: Lets the insert spring over obstacles that overlap without
       either containing the other, such as a fixed trace on a foreign pin, as one octagon. Without
       it the insert refuses a path the search found past such a pair, after ripping neighbours for

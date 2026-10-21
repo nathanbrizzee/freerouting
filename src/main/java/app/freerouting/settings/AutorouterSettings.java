@@ -143,6 +143,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Boolean fallbackRace;
 
   /**
+   * The strategies a race starts beside the default run, used in place of {@code
+   * fallback_strategies} when the race runs. {@code none} in {@code fallback_strategies} still
+   * turns the fallback off.
+   */
+  @SerializedName("fallback_race_strategies")
+  @Schema(description = "Comma-separated fallback strategies a fallback race runs")
+  public String fallbackRaceStrategies;
+
+  /**
    * Lets the insert spring over obstacles that overlap without either containing the other, such as
    * a fixed trace on a foreign pin, as one octagon instead of giving up on the path.
    */

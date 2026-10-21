@@ -108,7 +108,7 @@ public final class RoutingPipeline {
 
     if (routerEnabled && !this.job.thread.isStopAutoRouterRequested()) {
       List<RoutingFallback.Strategy> strategies =
-          RoutingFallback.parse(
+          RoutingFallback.parseForStage(
               this.job.routerSettings,
               name ->
                   this.job.logWarning(

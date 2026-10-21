@@ -27,6 +27,7 @@ class FallbackRaceTest extends RoutingFixtureTest {
     job.routerSettings.autorouter.maxPasses = 4;
     job.routerSettings.autorouter.fallbackThreads = threads;
     job.routerSettings.autorouter.fallbackRace = true;
+    job.routerSettings.autorouter.fallbackRaceStrategies = "short-escape,seed-1,seed-2";
     return runRoutingJob(job);
   }
 
@@ -59,6 +60,7 @@ class FallbackRaceTest extends RoutingFixtureTest {
     RoutingJob job = getRoutingJob("Issue508-DAC2020_bm05.dsn", testSettingsSource);
     job.routerSettings.autorouter.fallbackThreads = 3;
     job.routerSettings.autorouter.fallbackRace = true;
+    job.routerSettings.autorouter.fallbackRaceStrategies = "seed-1,seed-2";
     RoutingJob stopped = job;
     Thread stopper =
         new Thread(

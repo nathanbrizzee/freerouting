@@ -7,6 +7,7 @@ import app.freerouting.drc.ClearanceBaseline;
 import app.freerouting.drc.ClearanceViolation;
 import app.freerouting.drc.DesignRulesChecker;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.settings.AutorouterSettings;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -129,8 +130,32 @@ public final class RoutingFallback {
    * skipped. {@code none} anywhere in the list disables the fallback.
    */
   public static List<Strategy> parse(RouterSettings settings, Consumer<String> unknown) {
+    return parse(
+        settings.autorouter != null ? settings.autorouter.fallbackStrategies : null, unknown);
+  }
+
+  /**
+   * The strategies the routing stage runs: {@code fallback_race_strategies} when a race runs
+   * ({@code fallback_race} on and {@code fallback_threads} other than 1), otherwise {@code
+   * fallback_strategies}. {@code none} in {@code fallback_strategies} disables both.
+   */
+  public static List<Strategy> parseForStage(RouterSettings settings, Consumer<String> unknown) {
+    List<Strategy> listed = parse(settings, unknown);
+    AutorouterSettings autorouter = settings.autorouter;
+    if (listed.isEmpty()
+        || autorouter == null
+        || !Boolean.TRUE.equals(autorouter.fallbackRace)
+        || autorouter.fallbackThreads == null
+        || autorouter.fallbackThreads == 1
+        || autorouter.fallbackRaceStrategies == null
+        || autorouter.fallbackRaceStrategies.isBlank()) {
+      return listed;
+    }
+    return parse(autorouter.fallbackRaceStrategies, unknown);
+  }
+
+  private static List<Strategy> parse(String spec, Consumer<String> unknown) {
     List<Strategy> result = new ArrayList<>();
-    String spec = settings.autorouter != null ? settings.autorouter.fallbackStrategies : null;
     if (spec == null || spec.isBlank()) {
       return result;
     }
