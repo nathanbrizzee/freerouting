@@ -1,7 +1,27 @@
 # Global planner: design (draft)
 
-Status: draft, reviewed 2026-10-20 (changes from the review are folded in below). Roadmap sections 7.1 and
-7.2, phase 5.
+Status: on hold after the oracle experiment (2026-10-20, results below). Reviewed 2026-10-20 (changes from
+the review are folded in). Roadmap sections 7.1 and 7.2, phase 5.
+
+## Oracle result (step 2)
+
+Each board was routed to completion with the original router (optimizer and fallback off), its final copper
+written as corridors, and the same board routed again with a cost for leaving them (1 mm cells, margin 1).
+
+| Board | Run | CPU s | Wall s | Passes | Search steps | Open |
+|---|---|---|---|---|---|---|
+| M4 | original | 107 | 65 | 18 | 3.5 M | 9 |
+| M4 | corridors, k 1.5 / 2 / 3 | 141 / 122 / 131 | 85 / 67 / 77 | 18 / 26 / 23 | 5.4 / 2.8 / 3.7 M | 8 |
+| synthetic, 6 layers, full pours | original | 333 | 268 | 27 | 30.1 M | 5 |
+| synthetic | corridors, k 2 / 3 | 425 / 377 | 341 / 304 | 33 / 25 | 36.1 / 33.6 M | 3 / 5 |
+
+A perfect plan saves no time on either board and finishes at most two more connections. On M4 the last
+connections are blocked locally (the open count reaches 9 by pass 7 and then swings between 9 and 14). On
+the synthetic board pass 1 alone is 69 of 268 s and passes 1 to 5 are half the run; with corridors pass 1
+leaves 98 open instead of 68, because each net is pushed onto its final path before the routes it bent
+around exist. The time goes into the cost of each maze search, not into conflicts a plan would avoid, so the
+planner below is not the next step. The corridor experiment stays in the code (`OracleCorridors`, off unless
+its system properties are set) for later tests.
 
 ## Why
 
