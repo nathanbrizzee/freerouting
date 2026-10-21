@@ -9,6 +9,7 @@ import app.freerouting.core.BoardFileDetails;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.StoppableThread;
+import app.freerouting.drc.OpenConnections;
 import app.freerouting.io.FileFormat;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.management.HeadlessBoardManager;
@@ -18,6 +19,7 @@ import com.sun.management.ThreadMXBean;
 import java.io.ByteArrayOutputStream;
 import java.lang.management.ManagementFactory;
 import java.time.Instant;
+import java.util.List;
 
 /** Runs a stoppable routing action on behalf of the job scheduler. */
 public class RoutingJobSchedulerActionThread extends StoppableThread {
@@ -25,6 +27,8 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
   private static final long MAX_TIMEOUT = 24 * 60 * 60; // 24 hours
   private static final int GRACE_PERIOD = 30; // 30 seconds
   private static final long LIVE_OUTPUT_INTERVAL_MILLIS = 10_000;
+  // The result JSON lists all open connections; the log names the first ones.
+  private static final int OPEN_CONNECTIONS_LOGGED = 50;
   private final Object terminalStateLock = new Object();
   RoutingJob job;
 
@@ -240,6 +244,12 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
               + ", finished at UTC: "
               + job.finishedAt.toString()
               + ").");
+      if (job.board != null) {
+        List<OpenConnections.Entry> open = OpenConnections.of(job.board);
+        if (!open.isEmpty()) {
+          job.logInfo(OpenConnections.summary(open, OPEN_CONNECTIONS_LOGGED));
+        }
+      }
 
       JobLifecycleStatus lifecycleStatus =
           switch (job.state) {

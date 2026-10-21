@@ -6,6 +6,7 @@ import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.core.scoring.BoardStatisticsBounds;
+import app.freerouting.drc.OpenConnections;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.util.gson.GsonProvider;
 import com.google.gson.annotations.SerializedName;
@@ -17,6 +18,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 
 /** Machine-readable summary of a headless CLI routing run for benchmark and autopilot harnesses. */
 public final class RoutingResultManifest {
@@ -73,6 +75,10 @@ public final class RoutingResultManifest {
 
   @SerializedName("cpu_score")
   public Integer cpuScore;
+
+  /** The connections the routed board still lacks, by net and the items at both ends. */
+  @SerializedName("open_connections")
+  public List<OpenConnections.Entry> openConnections;
 
   /** Input fixture identity for the run. */
   public static class FixtureInfo {
@@ -231,6 +237,7 @@ public final class RoutingResultManifest {
     if (job.board != null) {
       manifest.boardStatistics = new BoardStatistics(job.board);
       manifest.bounds = manifest.boardStatistics.bounds;
+      manifest.openConnections = OpenConnections.of(job.board);
       if (job.routerSettings != null && job.routerSettings.scoring != null) {
         manifest.normalizedScore = manifest.boardStatistics.getRouterScore(job.routerSettings);
         if (manifest.phases.optimizer.before != null || manifest.phases.optimizer.after != null) {
