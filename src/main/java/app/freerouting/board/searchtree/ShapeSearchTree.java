@@ -469,6 +469,46 @@ public class ShapeSearchTree extends MinAreaTree {
     }
   }
 
+  /**
+   * Returns true if {@link #overlappingObjects(ConvexShape, int)} for shape and layer would return
+   * item. It applies the same tests to the item's own leaves only, so a caller that already knows
+   * its candidates (for example the items of one net) need not collect every item in the area.
+   */
+  public boolean overlapsObject(Item item, ConvexShape shape, int layer) {
+    if (shape == null) {
+      return false;
+    }
+    RegularTileShape bounds = shape.boundingShape(boundingDirections);
+    if (bounds == null) {
+      return false;
+    }
+    boolean is45Degree = shape instanceof IntOctagon;
+    Lock lock = readLock();
+    lock.lock();
+    try {
+      Leaf[] leaves = item.getSearchTreeEntries(this);
+      if (leaves == null) {
+        return false;
+      }
+      for (Leaf currentLeaf : leaves) {
+        if (currentLeaf == null || !currentLeaf.boundingShape.intersects(bounds)) {
+          continue;
+        }
+        int shapeIndex = currentLeaf.shapeIndexInObject;
+        if (layer >= 0 && item.shapeLayer(shapeIndex) != layer) {
+          continue;
+        }
+        TileShape currentShape = item.getTreeShape(this, shapeIndex);
+        if (is45Degree && currentShape instanceof IntOctagon || currentShape.intersects(shape)) {
+          return true;
+        }
+      }
+      return false;
+    } finally {
+      lock.unlock();
+    }
+  }
+
   private void overlappingTreeEntriesUnlocked(
       ConvexShape shape, int layer, int[] ignoreNetNos, Collection<TreeEntry> treeEntries) {
     if (shape == null) {

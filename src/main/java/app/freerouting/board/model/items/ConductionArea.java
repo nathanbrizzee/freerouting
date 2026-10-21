@@ -17,6 +17,9 @@ import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.geometry.planar.Vector;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.util.TextManager;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
@@ -40,6 +43,8 @@ public class ConductionArea extends ObstacleArea implements Connectable {
   }
 
   private transient int cachedBoardRevision = -1;
+  private transient TileShape[] cachedTiles;
+  private transient TileBoxGrid cachedTileBoxGrid;
   private transient java.awt.geom.Area cachedBoardFillArea;
 
   /** Creates a new instance of ConductionArea. */
@@ -336,28 +341,73 @@ public class ConductionArea extends ObstacleArea implements Connectable {
   @Override
   public Set<Item> getNormalContacts() {
     Set<Item> result = new TreeSet<>();
-    for (int i = 0; i < tileShapeCount(); i++) {
-      TileShape currentShape = getTileShape(i);
-      Set<SearchTreeObject> overlaps = board.overlappingObjects(currentShape, getLayer());
-      for (SearchTreeObject currentObject : overlaps) {
-        if (!(currentObject instanceof Item currentItem)) {
-          continue;
+    ShapeSearchTree tree = board.searchTreeManager.getDefaultTree();
+    int layer = getLayer();
+    TileBoxGrid grid = tileBoxGrid();
+    // Only items of a net of this area can be contacts, so test those instead of collecting every
+    // item that overlaps the area; overlapsObject applies the overlap query's own test.
+    Collection<Item> candidates;
+    if (netCount() == 1) {
+      candidates = board.getConnectableItems(getNetNumber(0));
+    } else {
+      candidates = new TreeSet<>();
+      for (int i = 0; i < netCount(); i++) {
+        candidates.addAll(board.getConnectableItems(getNetNumber(i)));
+      }
+    }
+    List<Integer> containing = new ArrayList<>();
+    for (Item currentItem : candidates) {
+      if (currentItem == this || !currentItem.sharesLayer(this)) {
+        continue;
+      }
+      if (currentItem instanceof Trace currentTrace) {
+        if (touches(grid, tree, currentItem, currentTrace.firstCorner(), layer, containing)
+            || touches(grid, tree, currentItem, currentTrace.lastCorner(), layer, containing)) {
+          result.add(currentItem);
         }
-        if (currentItem != this && currentItem.sharesNet(this) && currentItem.sharesLayer(this)) {
-          if (currentItem instanceof Trace currentTrace) {
-            if (currentShape.contains(currentTrace.firstCorner())
-                || currentShape.contains(currentTrace.lastCorner())) {
-              result.add(currentItem);
-            }
-          } else if (currentItem instanceof DrillItem currentDrillItem) {
-            if (currentShape.contains(currentDrillItem.getCenter())) {
-              result.add(currentItem);
-            }
-          }
+      } else if (currentItem instanceof DrillItem currentDrillItem) {
+        if (touches(grid, tree, currentItem, currentDrillItem.getCenter(), layer, containing)) {
+          result.add(currentItem);
         }
       }
     }
     return result;
+  }
+
+  /**
+   * True if a tile of this area contains point and the overlap query over that tile would return
+   * item.
+   */
+  private static boolean touches(
+      TileBoxGrid grid,
+      ShapeSearchTree tree,
+      Item item,
+      Point point,
+      int layer,
+      List<Integer> containing) {
+    grid.tilesContaining(point, containing);
+    for (int tileIndex : containing) {
+      if (tree.overlapsObject(item, grid.tile(tileIndex), layer)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** The grid over the current tile shapes, rebuilt when they change. */
+  private TileBoxGrid tileBoxGrid() {
+    int count = tileShapeCount();
+    TileShape[] tiles = new TileShape[count];
+    boolean same = cachedTiles != null && cachedTiles.length == count;
+    for (int i = 0; i < count; i++) {
+      tiles[i] = getTileShape(i);
+      same = same && cachedTiles[i] == tiles[i];
+    }
+    if (!same) {
+      cachedTiles = tiles;
+      cachedTileBoxGrid = new TileBoxGrid(tiles);
+    }
+    return cachedTileBoxGrid;
   }
 
   @Override
