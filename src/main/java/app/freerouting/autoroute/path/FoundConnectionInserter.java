@@ -10,6 +10,7 @@ import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.geometry.planar.FloatPoint;
+import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
@@ -28,7 +29,7 @@ public final class FoundConnectionInserter {
   private IntPoint firstCorner;
 
   /** Creates a new instance of FoundConnectionInserter. */
-  private FoundConnectionInserter(RoutingBoard board, AutorouteControl ctrl) {
+  FoundConnectionInserter(RoutingBoard board, AutorouteControl ctrl) {
     this.board = board;
     this.ctrl = ctrl;
   }
@@ -348,6 +349,12 @@ public final class FoundConnectionInserter {
               "Net #" + ctrl.netNumber,
               new Point[0]);
         }
+      } else if (endPin != null
+          && i == trace.corners.length - 1
+          && okPoint != null
+          && insertAlongPinAxis(okPoint, insertPolyline.lastCorner(), trace.layer, endPin)) {
+        // the last segment reached the pin along the axis of its pad
+        fromCornerNo = i;
       } else {
         FRLogger.debug(
             "FoundConnectionInserter: insert trace failed for net #"
@@ -481,6 +488,105 @@ public final class FoundConnectionInserter {
     }
     this.lastCorner = trace.corners[trace.corners.length - 1];
     return result;
+  }
+
+  /**
+   * Inserts the end of a trace from {@code fromCorner} into the centre of {@code pin} along the
+   * long axis of its pad: at full width to a point beyond the end of the pad by the trace half
+   * width plus the clearance, then straight into the centre, necked down where the full width does
+   * not fit. A trace that comes in at an angle crosses the clearance of the neighbouring pads of a
+   * fine-pitch row when the gap between them leaves no room. Returns true when the trace reaches
+   * the centre.
+   */
+  boolean insertAlongPinAxis(Point fromCorner, Point pinCenter, int layer, Pin pin) {
+    if (!pin.isOnLayer(layer) || !pin.getCenter().equals(pinCenter)) {
+      return false;
+    }
+    if (!(fromCorner instanceof IntPoint from) || !(pinCenter instanceof IntPoint centre)) {
+      return false;
+    }
+    IntBox pad = pin.boundingBox();
+    boolean horizontal = pad.width() >= pad.height();
+    int along = horizontal ? from.x - centre.x : from.y - centre.y;
+    if (along == 0) {
+      return false;
+    }
+    int halfWidth = ctrl.traceHalfWidth[layer];
+    int clearance =
+        (int)
+            Math.ceil(
+                this.board.rules.clearanceMatrix.getValue(
+                    ctrl.traceClearanceClassIndex, pin.clearanceClassIndex(), layer, true));
+    int beyond = halfWidth + clearance;
+    IntPoint entry;
+    if (horizontal) {
+      entry = new IntPoint(along > 0 ? pad.ur.x + beyond : pad.ll.x - beyond, centre.y);
+    } else {
+      entry = new IntPoint(centre.x, along > 0 ? pad.ur.y + beyond : pad.ll.y - beyond);
+    }
+    if (entry.equals(from)) {
+      return false;
+    }
+    int[] netNumbers = {ctrl.netNumber};
+    // With an angle restriction a corner keeps the approach on the allowed directions, the last leg
+    // along the axis where it can be.
+    IntPoint corner =
+        FoundConnectionLocator.calculateAdditionalCorner(
+                from.toFloat(),
+                entry.toFloat(),
+                !horizontal,
+                board.rules.getTraceAngleRestriction())
+            .round();
+    Point[] approach =
+        corner.equals(from) || corner.equals(entry)
+            ? new Point[] {from, entry}
+            : new Point[] {from, corner, entry};
+    Point okPoint =
+        board.insertForcedTracePolyline(
+            new Polyline(approach),
+            halfWidth,
+            layer,
+            netNumbers,
+            ctrl.traceClearanceClassIndex,
+            ctrl.maxShoveTraceRecursionDepth,
+            ctrl.maxShoveViaRecursionDepth,
+            ctrl.maxSpringOverRecursionDepth,
+            Integer.MAX_VALUE,
+            ctrl.pullTightAccuracy,
+            true,
+            null);
+    if (!entry.equals(okPoint)) {
+      return false;
+    }
+    okPoint =
+        board.insertForcedTraceSegment(
+            entry,
+            centre,
+            halfWidth,
+            layer,
+            netNumbers,
+            ctrl.traceClearanceClassIndex,
+            ctrl.maxShoveTraceRecursionDepth,
+            ctrl.maxShoveViaRecursionDepth,
+            ctrl.maxSpringOverRecursionDepth,
+            Integer.MAX_VALUE,
+            ctrl.pullTightAccuracy,
+            true,
+            null);
+    if (centre.equals(okPoint)) {
+      return true;
+    }
+    if (okPoint == null || !ctrl.withNeckdown) {
+      return false;
+    }
+    Point necked = tryNeckDown(okPoint, centre, layer, pin, false);
+    if (centre.equals(necked)) {
+      return true;
+    }
+    // When the gap between the pads equals the clearance, the pin's neckdown leaves one unit to
+    // spare, which the check can lose; narrower widths as at a fanout.
+    return insertFanoutMicroNeckdown(
+        necked != null ? necked : okPoint, centre, layer, netNumbers, null, pin);
   }
 
   private boolean insertFanoutMicroNeckdown(
