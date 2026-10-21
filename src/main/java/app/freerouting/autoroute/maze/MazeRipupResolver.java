@@ -144,15 +144,17 @@ final class MazeRipupResolver {
                   .toFloat()
                   .distance(obstacleConnection.endPoint.toFloat());
         }
-        StringBuilder sb = new StringBuilder("[");
-        for (Item connectionItem : obstacleConnection.itemList) {
-          if (sb.length() > 1) {
-            sb.append(",");
+        if (FRLogger.isTraceEnabled()) {
+          StringBuilder sb = new StringBuilder("[");
+          for (Item connectionItem : obstacleConnection.itemList) {
+            if (sb.length() > 1) {
+              sb.append(",");
+            }
+            sb.append(connectionItem.getId());
           }
-          sb.append(connectionItem.getId());
+          sb.append("]");
+          connectionItemIds = sb.toString();
         }
-        sb.append("]");
-        connectionItemIds = sb.toString();
       }
     }
     boolean randomize = ctrl.ripupPassNo >= 4 && ctrl.ripupPassNo % 3 != 0;
@@ -166,6 +168,9 @@ final class MazeRipupResolver {
     int result = Math.max((int) ripupCost, 1);
     final int maxRipupCosts = Integer.MAX_VALUE / 100;
     result = Math.min(result, maxRipupCosts);
+    if (!FRLogger.isTraceEnabled()) {
+      return result;
+    }
     int[] nets = new int[obstacleItem.netCount()];
     for (int i = 0; i < nets.length; i++) {
       nets[i] = obstacleItem.getNetNumber(i);

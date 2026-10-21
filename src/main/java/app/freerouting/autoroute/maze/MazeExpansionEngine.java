@@ -99,16 +99,18 @@ final class MazeExpansionEngine {
             MazeSearchElement.Adjustment.NONE,
             false);
     search.mazeExpansionList.add(newElement);
-    search.fanoutDiagnostics.trace(
-        "drill_accepted",
-        "drill="
-            + MazeSearchEngine.describeExpandable(drill)
-            + ", room="
-            + MazeSearchEngine.describeRoom(fromElement.nextRoom)
-            + ", nearestPoint="
-            + nearestPoint
-            + ", expansionValue="
-            + expansionValue);
+    if (search.fanoutDiagnostics.enabled()) {
+      search.fanoutDiagnostics.trace(
+          "drill_accepted",
+          "drill="
+              + MazeSearchEngine.describeExpandable(drill)
+              + ", room="
+              + MazeSearchEngine.describeRoom(fromElement.nextRoom)
+              + ", nearestPoint="
+              + nearestPoint
+              + ", expansionValue="
+              + expansionValue);
+    }
   }
 
   /** Inserts a drill page between a room and its candidate drills. */
@@ -167,25 +169,29 @@ final class MazeExpansionEngine {
     for (ExpansionDrill currentDrill : drillList) {
       int sectionIndex = fromRoomLayer - currentDrill.firstLayer;
       if (sectionIndex < 0 || sectionIndex >= currentDrill.roomArr.length) {
-        search.fanoutDiagnostics.trace(
-            "drill_rejected_section_out_of_range",
-            "drill="
-                + MazeSearchEngine.describeExpandable(currentDrill)
-                + ", section="
-                + sectionIndex
-                + ", room_arr_len="
-                + currentDrill.roomArr.length);
+        if (search.fanoutDiagnostics.enabled()) {
+          search.fanoutDiagnostics.trace(
+              "drill_rejected_section_out_of_range",
+              "drill="
+                  + MazeSearchEngine.describeExpandable(currentDrill)
+                  + ", section="
+                  + sectionIndex
+                  + ", room_arr_len="
+                  + currentDrill.roomArr.length);
+        }
         continue;
       }
       if (currentDrill.roomArr[sectionIndex] != fromElement.nextRoom) {
-        search.fanoutDiagnostics.trace(
-            "drill_rejected_room_mismatch",
-            "drill="
-                + MazeSearchEngine.describeExpandable(currentDrill)
-                + ", expected_room="
-                + MazeSearchEngine.describeRoom(fromElement.nextRoom)
-                + ", drill_room="
-                + MazeSearchEngine.describeRoom(currentDrill.roomArr[sectionIndex]));
+        if (search.fanoutDiagnostics.enabled()) {
+          search.fanoutDiagnostics.trace(
+              "drill_rejected_room_mismatch",
+              "drill="
+                  + MazeSearchEngine.describeExpandable(currentDrill)
+                  + ", expected_room="
+                  + MazeSearchEngine.describeRoom(fromElement.nextRoom)
+                  + ", drill_room="
+                  + MazeSearchEngine.describeRoom(currentDrill.roomArr[sectionIndex]));
+        }
         if (!firstMismatchLogged && search.fanoutDiagnostics.enabled()) {
           firstMismatchLogged = true;
           CompleteExpansionRoom expansionRoom = fromElement.nextRoom;
@@ -222,12 +228,14 @@ final class MazeExpansionEngine {
         continue;
       }
       if (currentDrill.getMazeSearchElement(sectionIndex).isOccupied) {
-        search.fanoutDiagnostics.trace(
-            "drill_rejected_section_occupied",
-            "drill="
-                + MazeSearchEngine.describeExpandable(currentDrill)
-                + ", section="
-                + sectionIndex);
+        if (search.fanoutDiagnostics.enabled()) {
+          search.fanoutDiagnostics.trace(
+              "drill_rejected_section_occupied",
+              "drill="
+                  + MazeSearchEngine.describeExpandable(currentDrill)
+                  + ", section="
+                  + sectionIndex);
+        }
         continue;
       }
       expandToDrill(currentDrill, fromElement, 0);

@@ -164,6 +164,11 @@ public class ClearanceMatrix implements Serializable {
     int valueFromTheMatrix = row[classJ].column[classI].layer[layer];
     int finalValue =
         addSafetyMargin ? valueFromTheMatrix + clearance_safety_margin : valueFromTheMatrix;
+    // Called for every obstacle the search tree compares, so the message is built only when a
+    // trace can be seen.
+    if (!FRLogger.isGranularTraceWanted()) {
+      return finalValue;
+    }
 
     FRLogger.trace(
         "ClearanceMatrix.get_value",

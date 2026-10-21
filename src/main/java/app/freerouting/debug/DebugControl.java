@@ -153,6 +153,15 @@ public final class DebugControl {
   }
 
   /**
+   * Whether single stepping or a trace insertion delay is on, the only cases in which {@link
+   * #check(String, String)} can return true.
+   */
+  public boolean isSteppingOrDelayed() {
+    DebugSettings ds = getDebugSettings();
+    return ds != null && (ds.singleStepExecution || ds.traceInsertionDelay != 0);
+  }
+
+  /**
    * Called by the logging framework at potential breakpoints. Parses the impactedItems string to
    * extract net numbers for filtering.
    *
