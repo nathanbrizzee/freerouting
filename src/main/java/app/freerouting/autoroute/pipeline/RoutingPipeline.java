@@ -4,7 +4,6 @@ import app.freerouting.autoroute.events.BoardUpdatedEventListener;
 import app.freerouting.autoroute.events.TaskStateChangedEventListener;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingStage;
-import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -175,14 +174,21 @@ public final class RoutingPipeline {
 
   private static void normalizeRouterAlgorithm(RoutingJob job) {
     String algorithm = job.routerSettings.autorouter.algorithm;
-    if (!RouterSettings.ALGORITHM_CURRENT.equals(algorithm)) {
+    if (!RouterAlgorithms.isKnown(algorithm)) {
       job.logWarning(
           "The algorithm '"
               + algorithm
-              + "' is not supported. The default algorithm '"
-              + RouterSettings.ALGORITHM_CURRENT
+              + "' is not supported (known: "
+              + RouterAlgorithms.names()
+              + "). The default algorithm '"
+              + RouterAlgorithms.ORIGINAL
               + "' will be used instead.");
-      job.routerSettings.autorouter.algorithm = RouterSettings.ALGORITHM_CURRENT;
+      job.routerSettings.autorouter.algorithm = RouterAlgorithms.ORIGINAL;
+    } else if (RouterAlgorithms.usesPlanner(job.routerSettings)) {
+      job.logInfo(
+          "Router algorithm '"
+              + algorithm
+              + "': the global planner is under construction; routing with the original router.");
     }
   }
 }

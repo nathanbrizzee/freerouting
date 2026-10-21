@@ -129,7 +129,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   `--router.autorouter.max_passes`. Flat keys (`--router.max_passes`, `-mp`,
   `FREEROUTING__ROUTER__MAX_PASSES`) still apply and warn until they are removed.
     - **`enabled`**: Whether the autorouter stage runs after fanout.
-    - **`algorithm`**: Algorithm identifier (`freerouting-router` by default; legacy identifiers such as `freerouting-router-v19` safely normalize to `freerouting-router`).
+    - **`algorithm`**: Algorithm identifier (`freerouting-router` by default; legacy identifiers such as `freerouting-router-v19` safely normalize to `freerouting-router`, and an unknown name falls back to it with a warning that lists the known names). Known algorithms:
+      - `freerouting-router`: the original router (fanout, rip-up passes, fallbacks, optimizer).
+      - `freerouting-planned`: a global plan with negotiated congestion first, then the original
+        router guided by the plan (`docs/research/global-planner-design.md`). Under construction:
+        until the planner lands it routes exactly like `freerouting-router`.
     - **`max_passes`**: Maximum autorouter passes. `0` means no limit.
     - **`max_items`**: Maximum items attempted in the autorouter stage.
     - **`fallback_strategies`**: Comma-separated attempts tried in order when the pass loop stops
