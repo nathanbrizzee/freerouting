@@ -1,6 +1,7 @@
 package app.freerouting.autoroute.pipeline;
 
 import app.freerouting.autoroute.maze.AutorouteControl;
+import app.freerouting.autoroute.path.Connection;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ComponentOutline;
 import app.freerouting.board.model.items.ConductionArea;
@@ -8,6 +9,7 @@ import app.freerouting.board.model.items.DrillItem;
 import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.items.ViaObstacleArea;
 import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.board.searchtree.SearchTreeObject;
@@ -16,6 +18,7 @@ import app.freerouting.core.StoppableThread;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.drc.AirLine;
 import app.freerouting.drc.DesignRulesChecker;
+import app.freerouting.drc.NetIncompletes;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
@@ -28,9 +31,11 @@ import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Closes open connections left after the maze passes with an A* search on a fine grid, one
@@ -45,6 +50,9 @@ import java.util.Set;
  * the snapshot is undone. The grid is conservative (a cell is free only if a trace through its
  * whole width is), so it may miss a gap the exact geometry would allow, but it never keeps a
  * violation.
+ *
+ * <p>With {@code autorouter.grid_finisher_ripup}, a connection walled in by other nets' movable
+ * copper may lift those connections and route them again (see {@link #lift}).
  *
  * <p>Deterministic: the airline order, the grid and the search depend only on the board.
  */
@@ -68,13 +76,22 @@ final class GridFinisher {
   /** A via costs as much as this many mm of trace. */
   private static final double VIA_COST_MM = 3.0;
 
+  /** Connections one open connection may lift ({@code autorouter.grid_finisher_ripup}). */
+  static final int MAX_LIFTED_CONNECTIONS = 4;
+
+  /** Extra cost of a cell inside another net's movable copper, in cells of trace. */
+  private static final double LIFT_CELL_COST = 10.0;
+
   private static final int[][] DIRECTIONS = {
     {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
   };
 
   private GridFinisher() {}
 
-  record Summary(int open, int tried, int closed, long expansions) {}
+  record Summary(int open, int tried, int closed, long expansions, int lifted) {}
+
+  /** The outcome of lifting other copper for one connection. */
+  private record Lift(boolean closed, long expansions, String outcome) {}
 
   /**
    * Tries every open connection once, until the stage's step budget ({@code
@@ -82,34 +99,35 @@ final class GridFinisher {
    * finished keeps its open connections; nothing is retried. Returns what it did.
    */
   static Summary run(RoutingBoard board, RouterSettings settings, StoppableThread thread) {
-    long budget =
+    final long budget =
         settings.autorouter != null && settings.autorouter.gridFinisherMaxSteps != null
             ? settings.autorouter.gridFinisherMaxSteps
             : DEFAULT_MAX_STEPS;
+    final boolean lift =
+        settings.autorouter != null && Boolean.TRUE.equals(settings.autorouter.gridFinisherRipup);
     final long started = System.currentTimeMillis();
-    AirLine[] airlines = new DesignRulesChecker(board, null).getAllAirlines();
     List<AirLine> sorted = new ArrayList<>();
-    for (AirLine airline : airlines) {
+    for (AirLine airline : new DesignRulesChecker(board, null).getAllAirlines()) {
       if (airline != null && airline.net != null) {
         sorted.add(airline);
       }
     }
-    sorted.sort(
-        (a, b) -> {
-          int byNet = Integer.compare(a.net.netNumber, b.net.netNumber);
-          if (byNet != 0) {
-            return byNet;
-          }
-          int byX = Double.compare(a.fromCorner.x, b.fromCorner.x);
-          return byX != 0 ? byX : Double.compare(a.fromCorner.y, b.fromCorner.y);
-        });
+    sortAirlines(sorted);
+    if (lift) {
+      // Connection.get caches on the items; the maze passes may have left stale entries.
+      board.clearTransientAutorouteState();
+    }
     int tried = 0;
     int closed = 0;
+    int lifted = 0;
     long expansions = 0;
     java.util.Map<String, Integer> outcomes = new java.util.TreeMap<>();
     for (AirLine airline : sorted) {
       if ((thread != null && thread.isStopRequested()) || expansions >= budget) {
         break;
+      }
+      if (!airline.fromItem.isOnTheBoard() || !airline.toItem.isOnTheBoard()) {
+        continue; // its copper was lifted and routed again for another connection
       }
       int net = airline.net.netNumber;
       if (airline.fromItem.getConnectedSet(net).contains(airline.toItem)) {
@@ -118,8 +136,28 @@ final class GridFinisher {
       tried++;
       Attempt attempt =
           new Attempt(
-              board, settings, airline, thread, Math.min(MAX_EXPANSIONS, budget - expansions));
-      if (attempt.route()) {
+              board,
+              settings,
+              airline,
+              thread,
+              Math.min(MAX_EXPANSIONS, budget - expansions),
+              false);
+      boolean done = attempt.route();
+      String outcome = attempt.outcome;
+      long used = attempt.expansions;
+      if (!done
+          && lift
+          && expansions + used < budget
+          && (outcome.equals("no path") || outcome.equals("end copper boxed in"))) {
+        Lift result = lift(board, settings, airline, thread, budget - expansions - used);
+        used += result.expansions();
+        outcome = result.outcome();
+        done = result.closed();
+        if (done) {
+          lifted++;
+        }
+      }
+      if (done) {
         closed++;
       }
       FRLogger.debug(
@@ -128,12 +166,12 @@ final class GridFinisher {
               + " at "
               + airline.fromCorner
               + ": "
-              + attempt.outcome
+              + outcome
               + " after "
-              + attempt.expansions
+              + used
               + " states.");
-      expansions += attempt.expansions;
-      outcomes.merge(attempt.outcome.split(" at ")[0], 1, Integer::sum);
+      expansions += used;
+      outcomes.merge(outcome.split(" at ")[0], 1, Integer::sum);
     }
     if (closed > 0) {
       board.clearTransientAutorouteState();
@@ -145,7 +183,8 @@ final class GridFinisher {
             + tried
             + " tried, "
             + closed
-            + " closed "
+            + " closed"
+            + (lift ? " (" + lifted + " by lifting other copper) " : " ")
             + outcomes
             + ", "
             + expansions
@@ -154,7 +193,141 @@ final class GridFinisher {
             + ", in "
             + (System.currentTimeMillis() - started) / 1000.0
             + " s.");
-    return new Summary(sorted.size(), tried, closed, expansions);
+    return new Summary(sorted.size(), tried, closed, expansions, lifted);
+  }
+
+  /** Orders airlines by net, then by the position of their first end, for a deterministic run. */
+  private static void sortAirlines(List<AirLine> airlines) {
+    airlines.sort(
+        (a, b) -> {
+          int byNet = Integer.compare(a.net.netNumber, b.net.netNumber);
+          if (byNet != 0) {
+            return byNet;
+          }
+          int byX = Double.compare(a.fromCorner.x, b.fromCorner.x);
+          return byX != 0 ? byX : Double.compare(a.fromCorner.y, b.fromCorner.y);
+        });
+  }
+
+  /** The net's open connections, in run order. */
+  private static List<AirLine> netAirlines(RoutingBoard board, int net) {
+    List<AirLine> result =
+        new ArrayList<>(
+            new NetIncompletes(net, board.getConnectableItems(net), board).getIncompletes());
+    sortAirlines(result);
+    return result;
+  }
+
+  private static int openCount(RoutingBoard board, Collection<Integer> nets) {
+    int result = 0;
+    for (int net : nets) {
+      result += new NetIncompletes(net, board.getConnectableItems(net), board).count();
+    }
+    return result;
+  }
+
+  /**
+   * Lifts the other nets' movable connections that wall in a connection, routes it, and routes the
+   * lifted ones again, all inside one board snapshot ({@code autorouter.grid_finisher_ripup},
+   * window search and repair). The path to lift for comes from a search that may cross other nets'
+   * unfixed traces and vias at a cost per cell, so it crosses as few as it can; every connection it
+   * crosses is lifted whole, up to {@link #MAX_LIFTED_CONNECTIONS}. The result is kept only if the
+   * nets involved then have fewer open connections and no new item has a clearance violation, so a
+   * lift never trades one open connection for another.
+   */
+  private static Lift lift(
+      RoutingBoard board,
+      RouterSettings settings,
+      AirLine airline,
+      StoppableThread thread,
+      long budget) {
+    final int net = airline.net.netNumber;
+    Attempt probe =
+        new Attempt(board, settings, airline, thread, Math.min(MAX_EXPANSIONS, budget), true);
+    List<Item> crossed = probe.findLifts();
+    long used = probe.expansions;
+    if (crossed == null) {
+      return new Lift(false, used, "lift: " + probe.outcome);
+    }
+    Set<Item> lifted = new TreeSet<>(Comparator.comparingInt(Item::getId));
+    int connections = 0;
+    for (Item item : crossed) {
+      if (lifted.contains(item)) {
+        continue; // part of a connection already lifted
+      }
+      connections++;
+      Connection connection = Connection.get(item);
+      if (connection != null) {
+        lifted.addAll(connection.itemList);
+      } else {
+        // A via of more than one connection: lift it with every trace connection it ends.
+        lifted.add(item);
+        for (Item contact : item.getNormalContacts()) {
+          Connection ended = contact instanceof Trace ? Connection.get(contact) : null;
+          if (ended != null) {
+            lifted.addAll(ended.itemList);
+          }
+        }
+      }
+    }
+    for (Item item : lifted) {
+      item.getAutorouteInfo().setPrecalculatedConnection(null);
+    }
+    if (connections > MAX_LIFTED_CONNECTIONS) {
+      return new Lift(false, used, "too many connections to lift");
+    }
+    Set<Integer> nets = new TreeSet<>();
+    nets.add(net);
+    for (Item item : lifted) {
+      if (!probe.isLiftable(item)) {
+        return new Lift(false, used, "fixed copper in a connection to lift");
+      }
+      for (int i = 0; i < item.netCount(); i++) {
+        nets.add(item.getNetNumber(i));
+      }
+    }
+    final int before = openCount(board, nets);
+    board.generateSnapshot();
+    boolean ok = board.removeItems(new ArrayList<>(lifted));
+    String outcome = "lifted copper could not be removed";
+    if (ok) {
+      Attempt main =
+          new Attempt(
+              board, settings, airline, thread, Math.min(MAX_EXPANSIONS, budget - used), false);
+      ok = main.route();
+      used += main.expansions;
+      outcome = "lift: " + main.outcome;
+    }
+    if (ok) {
+      for (int other : nets) {
+        if (other == net) {
+          continue;
+        }
+        for (AirLine gap : netAirlines(board, other)) {
+          if (used >= budget || (thread != null && thread.isStopRequested())) {
+            break;
+          }
+          if (gap.fromItem.getConnectedSet(other).contains(gap.toItem)) {
+            continue;
+          }
+          Attempt again =
+              new Attempt(
+                  board, settings, gap, thread, Math.min(MAX_EXPANSIONS, budget - used), false);
+          // It must now go round the new path, which may leave its own window.
+          again.include = probe.windowBox();
+          again.route();
+          used += again.expansions;
+        }
+      }
+      ok = openCount(board, nets) < before;
+      outcome = ok ? "closed after lifting" : "lifted copper not routed again";
+    }
+    if (ok) {
+      board.popSnapshot();
+    } else {
+      board.undo(null);
+    }
+    return new Lift(ok, used, outcome);
   }
 
   /** One connection: its grid, search and insertion. */
@@ -209,15 +382,31 @@ final class GridFinisher {
     long expansions;
     String outcome = "not tried";
 
+    /** Whether other nets' movable copper is crossed at a cost instead of blocking. */
+    private final boolean lift;
+
+    /** In lift mode, per routable layer: cells inside other nets' movable copper. */
+    private boolean[][] soft;
+
+    /** In lift mode: the movable items painted into {@link #soft}. */
+    private final List<Blocker> blockers = new ArrayList<>();
+
+    private record Blocker(Item item, int li, double need) {}
+
+    /** A box the window must also cover, or null. */
+    private IntBox include;
+
     Attempt(
         RoutingBoard board,
         RouterSettings settings,
         AirLine airline,
         StoppableThread thread,
-        long maxExpansions) {
+        long maxExpansions,
+        boolean lift) {
       this.board = board;
       this.thread = thread;
       this.maxExpansions = maxExpansions;
+      this.lift = lift;
       this.net = airline.net.netNumber;
       FloatPoint a = airline.fromCorner;
       FloatPoint b = airline.toCorner;
@@ -258,6 +447,65 @@ final class GridFinisher {
       return insert(path);
     }
 
+    /**
+     * In lift mode: the other nets' movable items the cheapest path crosses, ordered by id, or null
+     * with the outcome set when even lifting them all would leave no path.
+     */
+    List<Item> findLifts() {
+      if (layers.isEmpty() || !buildWindow()) {
+        outcome = "no window";
+        return null;
+      }
+      paintObstacles();
+      paintEnds();
+      if (!hasFreeEnd(start) || !hasFreeEnd(goal)) {
+        outcome = "end copper boxed in by fixed copper";
+        return null;
+      }
+      int[] path = search();
+      if (path == null) {
+        outcome = "no path past fixed copper";
+        return null;
+      }
+      int cells = cols * rows;
+      Set<Item> crossed = new TreeSet<>(Comparator.comparingInt(Item::getId));
+      for (int state : path) {
+        int li = state / 2 / cells;
+        int i = (state / 2) % cells;
+        if (!soft[li][i] || start[li][i] || goal[li][i]) {
+          continue;
+        }
+        FloatPoint centre = new FloatPoint(cx(i % cols), cy(i / cols));
+        for (Blocker blocker : blockers) {
+          if (blocker.li() == li
+              && !crossed.contains(blocker.item())
+              && distance(blocker.item(), layers.get(li), centre) < blocker.need()) {
+            crossed.add(blocker.item());
+          }
+        }
+      }
+      return new ArrayList<>(crossed);
+    }
+
+    private static double distance(Item item, int layer, FloatPoint point) {
+      double result = Double.POSITIVE_INFINITY;
+      for (int i = 0; i < item.tileShapeCount(); i++) {
+        if (item.shapeLayer(i) == layer) {
+          result = Math.min(result, item.getTileShape(i).distance(point));
+        }
+      }
+      return result;
+    }
+
+    /** Another net's trace or via that the router may rip up: not fixed by the user. */
+    boolean isLiftable(Item item) {
+      return (item instanceof Trace || item instanceof Via)
+          && item.netCount() > 0
+          && !item.containsNet(net)
+          && !item.isUserFixed()
+          && !item.isDeletionForbidden();
+    }
+
     private double unitsPerMm() {
       return board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM);
     }
@@ -275,6 +523,9 @@ final class GridFinisher {
               (int) Math.floor(Math.min(a.y, b.y) - margin),
               (int) Math.ceil(Math.max(a.x, b.x) + margin),
               (int) Math.ceil(Math.max(a.y, b.y) + margin));
+      if (include != null) {
+        window = window.union(include);
+      }
       IntBox boardBox = board.getBoundingBox();
       if (boardBox != null) {
         window = window.intersection(boardBox);
@@ -306,6 +557,7 @@ final class GridFinisher {
       goal = new boolean[n][cols * rows];
       startOwner = new Item[n][cols * rows];
       goalOwner = new Item[n][cols * rows];
+      soft = lift ? new boolean[n][cols * rows] : null;
       viaFree = new boolean[vias.size()][];
       return true;
     }
@@ -348,7 +600,12 @@ final class GridFinisher {
           double need =
               board.clearanceValue(ctrl.traceClearanceClassIndex, item.clearanceClassIndex(), layer)
                   + halfWidth;
-          paint(item, layer, need, blocked[li]);
+          if (lift && isLiftable(item)) {
+            paint(item, layer, need, soft[li]);
+            blockers.add(new Blocker(item, li, need));
+          } else {
+            paint(item, layer, need, blocked[li]);
+          }
         }
       }
     }
@@ -607,7 +864,7 @@ final class GridFinisher {
             continue; // no cutting between two blocked cells
           }
           double step = d < 2 ? stepCost[li][0] : d < 4 ? stepCost[li][1] : stepCost[li][2];
-          relax(state, (li * cells + ni) * 2, cost[state] + step, ni);
+          relax(state, (li * cells + ni) * 2, cost[state] + step + liftCost(li, ni), ni);
         }
         if (byVia) {
           continue; // two vias in a row would stack at one point
@@ -632,11 +889,16 @@ final class GridFinisher {
             if (blocked[lj][i] && !goal[lj][i] && !start[lj][i]) {
               continue;
             }
-            relax(state, (lj * cells + i) * 2 + 1, cost[state] + viaCost, i);
+            relax(state, (lj * cells + i) * 2 + 1, cost[state] + viaCost + liftCost(lj, i), i);
           }
         }
       }
       return null;
+    }
+
+    /** In lift mode, the extra cost of entering a cell inside movable copper. */
+    private double liftCost(int li, int i) {
+      return soft != null && soft[li][i] && !start[li][i] && !goal[li][i] ? LIFT_CELL_COST : 0;
     }
 
     private void relax(int from, int to, double newCost, int cellIndex) {

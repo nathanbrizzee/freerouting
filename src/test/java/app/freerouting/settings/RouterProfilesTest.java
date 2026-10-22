@@ -25,6 +25,7 @@ class RouterProfilesTest {
     assertTrue(settings.optimizer.enabled);
     assertFalse(settings.autorouter.gridFinisher, "not before it is measured");
     assertTrue(settings.sessionRoutesMovable, "a continued board's routes may be ripped up");
+    assertFalse(settings.autorouter.gridFinisherRipup);
   }
 
   @Test
@@ -55,6 +56,7 @@ class RouterProfilesTest {
     assertEquals(0, settings.autorouter.fallbackThreads);
     assertEquals(0.0, settings.autorouter.fallbackWorkRatio);
     assertTrue(settings.autorouter.gridFinisher);
+    assertTrue(settings.autorouter.gridFinisherRipup);
   }
 
   @Test

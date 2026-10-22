@@ -15,9 +15,11 @@ finish such boards far faster. The measure of success is wall time to a finished
 **Where things stand (2026-10-22).** Documents: this plan; `router-overhaul-progress.md`, one row per change with
 its measurement; `bga-escape-design.md`; `docs/settings.md` for every option. Built: phase 1 bugs, phase 2 speed
 and control items, BGA escape planning (batch A), run profiles (section 5.4: `standard` is the default, `classic`
-the original router, plus `quick` and `thorough`), and a first grid finisher without rip-up (section 5.3).
-Next, in the order the measurements and the literature check (section 7.6) support: the grid finisher with
-rip-up in a window; pin access planning for every pad and rule checks during the search; history costs with
+the original router, plus `quick` and `thorough`), a grid finisher (section 5.3) that may lift other
+connections in a window (`grid_finisher_ripup`, in `thorough`), and movable routes on a continued board
+(`session_routes_movable`, every profile but `classic`; 46 -> 33 open on 11 boards). Next, in the order the
+measurements and the literature check (section 7.6) support: pin access planning for every pad and rule checks
+during the search; history costs with
 rip-up of only the failing connections; a parallel portfolio of seeds; a leftover report with placement hints;
 `thorough` measured alone with a longer cap; then BGA direction matching per layer (BGA design 4.4).
 

@@ -126,7 +126,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`profile`**: The run profile (CLI `--router.profile=<name>`). A profile is a set of defaults; any setting given in a file, environment variable, the CLI, the GUI or the API still overrides it, and the log names the profile at the start of each job. Profiles set passes, budgets and strategies, never time limits, so runs stay repeatable.
     - `"standard"` (default): the most complete board in the least time. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`. On the 19-board benchmark set this left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU.
     - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage (`fallback_strategies=none`) and without the optimizer. Use it to see how far a board gets and where it is stuck.
-    - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`) and the grid finisher (`grid_finisher=true`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
+    - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`) and the grid finisher with lifting (`grid_finisher=true`, `grid_finisher_ripup=true`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
     - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default.
 - **`session_routes_movable`**: When `true`, the traces and vias of a session file loaded to continue routing (`-de board.dsn earlier.ses`) come in unfixed, so the router may rip them up and route them again, like its own routes. Those the file marks `(type protect)` or `(type fix)` stay fixed; Freerouting writes those types for routes that were fixed before. When `false`, every loaded route is user-fixed and the router can only add to them, which was the original behaviour. Default `false`; `true` in every profile but `classic`. It does not change how the GUI or `DrcRunner` loads a session.
 - **`default_preferred_direction_trace_cost`**: Cost factor for routing traces in the preferred direction.
@@ -212,6 +212,17 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       and stops at this budget, at a stop request or at `job_timeout`, so a board that cannot be
       finished keeps its open connections instead of searching on. Counting states, not time,
       keeps the result the same on every machine.
+    - **`grid_finisher_ripup`**: When `true` (with `grid_finisher`), a connection the finisher
+      cannot close through free space may lift other nets' copper. A second search may cross other
+      nets' traces and vias that are not user-fixed, at a cost per cell, so it crosses as few as it
+      can. Each connection it crosses (at most four) is removed whole, the open connection is
+      routed, then the lifted ones are routed again on the grid. The change is kept only if the
+      nets involved end with fewer open connections and no new clearance violation; otherwise the
+      board is restored. Lifting uses the same step budget. Default `false`; on in the `thorough`
+      profile. The log line adds `(L by lifting other copper)`. When it helps: a continued board
+      (with `session_routes_movable`) whose last connections are walled in by other nets' routes;
+      on 11 boards after one maze pass it closed 4 more (L6 2, TX5823 1, Unifying 1) in seconds.
+      With every route fixed it can lift nothing.
     - **`fallback_race_strategies`**: The strategies a race starts, used in place of
       `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
       Default `direct-first,no-fanout,seed-1`. `none` in `fallback_strategies` turns the race off

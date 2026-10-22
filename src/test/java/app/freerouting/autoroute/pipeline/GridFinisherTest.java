@@ -93,6 +93,84 @@ class GridFinisherTest {
     assertEquals(first.getHash(), second.getHash());
   }
 
+  /**
+   * One signal layer. Net A's pads sit {@code padX} from the left and right edges; net B's unrouted
+   * (movable) trace runs from edge to edge between them. B can go round A's trace only when A's
+   * pads leave room for it at the board edge.
+   */
+  private static String liftDsn(int padX) {
+    return "(pcb t (resolution um 10) (unit um)\n"
+        + "  (structure (layer top (type signal))\n"
+        + "    (boundary (rect pcb 0 0 20000 20000)) (via V)"
+        + " (rule (width 250) (clearance 200)))\n"
+        + "  (placement (component P (place A1 "
+        + padX
+        + " 10000 front 0) (place A2 "
+        + (20000 - padX)
+        + " 10000 front 0)\n"
+        + "    (place B1 10000 1500 front 0) (place B2 10000 18500 front 0)))\n"
+        + "  (library (image P (pin S 1 0 0))\n"
+        + "    (padstack S (shape (circle top 600)) (attach off))\n"
+        + "    (padstack V (shape (circle top 600)) (attach off)))\n"
+        + "  (network (net A (pins A1-1 A2-1)) (net B (pins B1-1 B2-1)))\n"
+        + "  (wiring (wire (path top 250 10000 1500 10000 18500) (net B)))))\n";
+  }
+
+  private static RouterSettings liftSettings(RoutingBoard board, boolean ripup) {
+    RouterSettings settings = settings(board);
+    settings.autorouter.gridFinisherRipup = ripup;
+    return settings;
+  }
+
+  @Test
+  void liftsTheWallAndRoutesItAgain() {
+    RoutingBoard board = GridBoard.board(liftDsn(7000));
+    assertEquals(1, board.routingLedger().incompleteCount());
+
+    GridFinisher.Summary summary = GridFinisher.run(board, liftSettings(board, true), null);
+
+    assertEquals(1, summary.closed());
+    assertEquals(1, summary.lifted());
+    assertEquals(0, board.routingLedger().incompleteCount(), "B is routed again round A");
+    for (Item item : board.getItems()) {
+      assertTrue(item.clearanceViolations().isEmpty(), item + " has a clearance violation");
+    }
+  }
+
+  @Test
+  void liftsNothingWhenRipupIsOff() {
+    RoutingBoard board = GridBoard.board(liftDsn(7000));
+    String before = items(board);
+
+    GridFinisher.Summary summary = GridFinisher.run(board, liftSettings(board, false), null);
+
+    assertEquals(0, summary.closed());
+    assertEquals(before, items(board));
+  }
+
+  @Test
+  void keepsTheWallWhenItCannotBeRoutedAgain() {
+    // A's pads at the edges leave B no way round A's trace: lifting B would only move the gap.
+    RoutingBoard board = GridBoard.board(liftDsn(500));
+    String before = items(board);
+
+    GridFinisher.Summary summary = GridFinisher.run(board, liftSettings(board, true), null);
+
+    assertEquals(0, summary.closed());
+    assertEquals(before, items(board));
+    assertEquals(1, board.routingLedger().incompleteCount());
+  }
+
+  @Test
+  void liftsTheSameWayEveryRun() {
+    RoutingBoard first = GridBoard.board(liftDsn(7000));
+    GridFinisher.run(first, liftSettings(first, true), null);
+    RoutingBoard second = GridBoard.board(liftDsn(7000));
+    GridFinisher.run(second, liftSettings(second, true), null);
+    assertEquals(items(first), items(second));
+    assertEquals(first.getHash(), second.getHash());
+  }
+
   private static String items(RoutingBoard board) {
     StringBuilder result = new StringBuilder();
     for (Item item : board.getItems()) {

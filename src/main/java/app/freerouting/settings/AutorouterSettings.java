@@ -125,6 +125,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Long gridFinisherMaxSteps;
 
   /**
+   * When true, a connection the grid finisher cannot close through free space may lift up to four
+   * other connections whose unfixed copper walls it in, then route them again; kept only if fewer
+   * connections are open after it and no new clearance violation appears.
+   */
+  @SerializedName("grid_finisher_ripup")
+  @Schema(description = "Let the grid finisher lift and reroute other connections in its way")
+  public Boolean gridFinisherRipup;
+
+  /**
    * Deterministic budget per connection in pass 1, in maze search steps, doubling each pass like
    * the time budget it replaces when set (100 s in pass 1). Unlike the time budget, the same board
    * stops at the same point on every run, whatever the machine load.
