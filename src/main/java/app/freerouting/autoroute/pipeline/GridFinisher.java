@@ -6,10 +6,12 @@ import app.freerouting.board.model.items.ComponentOutline;
 import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.DrillItem;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.model.items.ViaObstacleArea;
 import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.board.searchtree.SearchTreeObject;
+import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.core.StoppableThread;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.drc.AirLine;
@@ -104,6 +106,7 @@ final class GridFinisher {
     int tried = 0;
     int closed = 0;
     long expansions = 0;
+    java.util.Map<String, Integer> outcomes = new java.util.TreeMap<>();
     for (AirLine airline : sorted) {
       if ((thread != null && thread.isStopRequested()) || expansions >= budget) {
         break;
@@ -130,6 +133,7 @@ final class GridFinisher {
               + attempt.expansions
               + " states.");
       expansions += attempt.expansions;
+      outcomes.merge(attempt.outcome.split(" at ")[0], 1, Integer::sum);
     }
     if (closed > 0) {
       board.clearTransientAutorouteState();
@@ -141,7 +145,9 @@ final class GridFinisher {
             + tried
             + " tried, "
             + closed
-            + " closed, "
+            + " closed "
+            + outcomes
+            + ", "
             + expansions
             + " grid states expanded of "
             + budget
@@ -235,10 +241,15 @@ final class GridFinisher {
 
     boolean route() {
       if (layers.isEmpty() || !buildWindow()) {
+        outcome = "no window";
         return false;
       }
       paintObstacles();
       paintEnds();
+      if (!hasFreeEnd(start) || !hasFreeEnd(goal)) {
+        outcome = hasAny(start) && hasAny(goal) ? "end copper boxed in" : "no end copper in window";
+        return false;
+      }
       int[] path = search();
       if (path == null) {
         outcome = "no path";
@@ -271,7 +282,8 @@ final class GridFinisher {
       if (window.isEmpty()) {
         return false;
       }
-      // Half a trace pitch, so a channel one trace wide shows as at least one free cell.
+      // A third of a trace pitch, so a channel one trace wide shows as free cells. A trace between
+      // two free cell centres may still graze an obstacle corner; the exact check then rejects it.
       int smallestPitch = Integer.MAX_VALUE;
       for (int layer : layers) {
         int pitch =
@@ -282,7 +294,7 @@ final class GridFinisher {
       }
       double width = window.ur.x - window.ll.x;
       double height = window.ur.y - window.ll.y;
-      cell = Math.max(1.0, smallestPitch / 2.0);
+      cell = Math.max(1.0, smallestPitch / 3.0);
       cell = Math.max(cell, Math.sqrt(width * height / MAX_CELLS_PER_LAYER));
       cols = (int) Math.ceil(width / cell) + 1;
       rows = (int) Math.ceil(height / cell) + 1;
@@ -326,8 +338,6 @@ final class GridFinisher {
     }
 
     private void paintObstacles() {
-      // A trace between two free cell centres stays clear of anything past half a diagonal.
-      double halfDiagonal = cell * Math.sqrt(0.5);
       for (int li = 0; li < layers.size(); li++) {
         int layer = layers.get(li);
         int halfWidth = ctrl.traceHalfWidth[layer];
@@ -337,8 +347,7 @@ final class GridFinisher {
           }
           double need =
               board.clearanceValue(ctrl.traceClearanceClassIndex, item.clearanceClassIndex(), layer)
-                  + halfWidth
-                  + halfDiagonal;
+                  + halfWidth;
           paint(item, layer, need, blocked[li]);
         }
       }
@@ -392,30 +401,52 @@ final class GridFinisher {
         if (!item.boundingBox().intersects(window) || item instanceof ConductionArea) {
           continue;
         }
+        // Only cells inside the copper: cells beside a thin trace needed stubs that then failed the
+        // clearance check more often than they closed a connection (L6, M4).
+        double reach = 0;
         for (int i = 0; i < item.tileShapeCount(); i++) {
           if (item.shapeLayer(i) != layer) {
             continue;
           }
           TileShape shape = item.getTileShape(i);
           IntBox box = shape.boundingBox();
-          int c0 = Math.max(0, (int) Math.ceil((box.ll.x - originX) / cell));
-          int c1 = Math.min(cols - 1, (int) Math.floor((box.ur.x - originX) / cell));
-          int r0 = Math.max(0, (int) Math.ceil((box.ll.y - originY) / cell));
-          int r1 = Math.min(rows - 1, (int) Math.floor((box.ur.y - originY) / cell));
+          int c0 = Math.max(0, (int) Math.ceil((box.ll.x - reach - originX) / cell));
+          int c1 = Math.min(cols - 1, (int) Math.floor((box.ur.x + reach - originX) / cell));
+          int r0 = Math.max(0, (int) Math.ceil((box.ll.y - reach - originY) / cell));
+          int r1 = Math.min(rows - 1, (int) Math.floor((box.ur.y + reach - originY) / cell));
           for (int r = r0; r <= r1; r++) {
             for (int c = c0; c <= c1; c++) {
-              int index = r * cols + c;
-              if (shape.contains(new FloatPoint(cx(c), cy(r)))) {
-                mask[index] = true;
-                if (owner[index] == null
-                    || (owner[index] instanceof Trace && item instanceof DrillItem)) {
-                  owner[index] = item;
-                }
+              if (shape.distance(new FloatPoint(cx(c), cy(r))) <= reach) {
+                mark(r * cols + c, item, mask, owner);
               }
             }
           }
         }
+        // A pad or via smaller than a cell still gets the cell at its centre.
+        if (item instanceof DrillItem drill && item.isOnLayer(layer)) {
+          FloatPoint centre = drill.getCenter().toFloat();
+          int c = (int) Math.round((centre.x - originX) / cell);
+          int r = (int) Math.round((centre.y - originY) / cell);
+          if (c >= 0 && r >= 0 && c < cols && r < rows) {
+            mark(r * cols + c, item, mask, owner);
+          }
+        }
       }
+    }
+
+    private static void mark(int index, Item item, boolean[] mask, Item[] owner) {
+      mask[index] = true;
+      if (owner[index] == null || (owner[index] instanceof Trace && item instanceof DrillItem)) {
+        owner[index] = item;
+      }
+    }
+
+    /** An SMD pad of the net blocks a via whose rule does not allow it in a pad. */
+    private boolean blocksViaInPad(Item item, ViaInfo via) {
+      return !via.attachSmdAllowed()
+          && item instanceof Pin pin
+          && pin.containsNet(net)
+          && pin.firstLayer() == pin.lastLayer();
     }
 
     /** Sites where via {@code v} keeps its clearance on every layer it spans. */
@@ -432,7 +463,8 @@ final class GridFinisher {
         }
         double radius = 0.5 * padstack.getShape(layer).maxWidth();
         for (SearchTreeObject object : board.overlappingObjects(grownWindow(), layer)) {
-          if (!(object instanceof Item item) || !isObstacle(item, true)) {
+          if (!(object instanceof Item item)
+              || !(isObstacle(item, true) || blocksViaInPad(item, via))) {
             continue;
           }
           double need =
@@ -449,8 +481,36 @@ final class GridFinisher {
       return free;
     }
 
-    private int layerIndex(int layer) {
-      return layers.indexOf(layer);
+    private static boolean hasAny(boolean[][] mask) {
+      for (boolean[] layer : mask) {
+        for (boolean cell : layer) {
+          if (cell) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    /** Whether some end cell has a neighbour the trace may enter. */
+    private boolean hasFreeEnd(boolean[][] ends) {
+      for (int li = 0; li < ends.length; li++) {
+        for (int i = 0; i < ends[li].length; i++) {
+          if (!ends[li][i]) {
+            continue;
+          }
+          int c = i % cols;
+          int r = i / cols;
+          for (int[] d : DIRECTIONS) {
+            int nc = c + d[0];
+            int nr = r + d[1];
+            if (nc >= 0 && nr >= 0 && nc < cols && nr < rows && !blocked[li][nr * cols + nc]) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
     }
 
     /**
@@ -656,12 +716,10 @@ final class GridFinisher {
         outcome = "path does not connect";
       }
       if (ok) {
-        for (Item item : board.getConnectableItems(net)) {
-          if (item.getId() > maxIdBefore && !item.clearanceViolations().isEmpty()) {
-            ok = false;
-            outcome = "clearance violation at " + item;
-            break;
-          }
+        Item violating = newViolation(maxIdBefore);
+        if (violating != null) {
+          ok = false;
+          outcome = "clearance violation at " + violating;
         }
       }
       if (ok) {
@@ -672,6 +730,34 @@ final class GridFinisher {
       return ok;
     }
 
+    /**
+     * A new item of the net that has a clearance violation, or null. The check of an item is not
+     * symmetric (another net's pin may see a violation the new via does not), so the items near
+     * each new one are asked as well.
+     */
+    private Item newViolation(int maxIdBefore) {
+      for (Item item : board.getConnectableItems(net)) {
+        if (item.getId() <= maxIdBefore) {
+          continue;
+        }
+        if (!item.clearanceViolations().isEmpty()) {
+          return item;
+        }
+        IntBox near = item.boundingBox().offset(unitsPerMm());
+        for (SearchTreeObject object : board.overlappingObjects(near, -1)) {
+          if (!(object instanceof Item other) || other == item) {
+            continue;
+          }
+          for (app.freerouting.drc.ClearanceViolation violation : other.clearanceViolations()) {
+            if (violation.firstItem == item || violation.secondItem == item) {
+              return item;
+            }
+          }
+        }
+      }
+      return null;
+    }
+
     /** Joins the path's end to a trace it lies on, which it touches only between corners. */
     private boolean joinTrace(Item owner, int state) {
       if (!(owner instanceof Trace trace)) {
@@ -680,6 +766,12 @@ final class GridFinisher {
       int i = (state / 2) % (cols * rows);
       IntPoint point = new FloatPoint(cx(i % cols), cy(i / cols)).round();
       int layer = trace.getLayer();
+      if (trace instanceof PolylineTrace polylineTrace
+          && polylineTrace.polyline().contains(point)) {
+        // On the trace but between its corners: a trace connects only at a corner, so split it.
+        board.splitTraces(point, layer, net);
+        return true;
+      }
       return board.connectToTrace(
           point, trace, ctrl.traceHalfWidth[layer], ctrl.traceClearanceClassIndex);
     }

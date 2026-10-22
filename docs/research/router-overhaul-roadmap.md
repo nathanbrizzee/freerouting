@@ -537,6 +537,42 @@ Only after `connections.ndjson` has collected enough outcomes across a corpus: n
 choosing a strategy per connection. Each learned policy must beat the deterministic one on the benchmark, and none may
 relax a rule.
 
+### 7.6 Literature check (2026-10-22)
+
+A web survey of recent PCB, packaging, FPGA and VLSI routing work and of the AI layout tools. Citations were
+checked for title, venue and year; most numbers come from abstracts, and vendor figures are marketing.
+
+- **AI routers are not ahead of Freerouting yet.** The only independent benchmark that includes Freerouting,
+  PCBWorld-Bench (Song et al., arXiv 2607.05915, 2026; 679 KiCad boards), has Freerouting at 0.78 clean and 1.00
+  routed on boards with 5-42 nets in 10 s, against 0.45 / 0.85 for PPO and 0.00 / 0.62 for an LLM. Learned routers
+  win only on toy sizes. DeepPCB and Quilter publish no method or third-party numbers (DeepPCB reports hours per
+  board and lower completion above about 1,200 airwires); Quilter describes generating many candidates in parallel
+  and scoring them, a portfolio. A GPU PathFinder on a Manhattan lattice (OrthoRoute) routed 0.34-0.53 of the
+  connections there.
+- **Plan access and escapes first.** The packaging routers (RDL with dynamic via insertion, DAC 2024; any-angle
+  die-to-die, ISPD 2026; the InFO line, DAC 2020 / TCAD 2022) plan vias and fan-out with flow or ILP, then route
+  geometrically. The academic PCB routers that beat Freerouting do escape routing first, then concurrent area
+  routing (Lin et al., DAC 2021; Liu et al., DAC 2023). VLSI routers precompute DRC-clean pin access points per
+  pin ("The Tao of PAO", DAC 2020), and Dr. CU (ICCAD 2019) checks the rules during the search, so a found path
+  can always be inserted. This matches the batch A result and the refused inserts (section 12).
+- **Repair in windows.** TritonRoute-WXL (Kahng et al., TCAD 2021) routes, then rips and reroutes in clip windows
+  that move and grow each iteration, in parallel, and converges on every ISPD test case. That is the window
+  finisher.
+- **FPGA: reroute connections, not nets, and tune the schedule.** CRoute (FPGA 2019), RWRoute (TRETS 2022) and
+  VTR 8 reroute only the illegal connections, bound each connection's search box and tune the present/history
+  cost schedule; a learned schedule alone gave 1.56x in a detailed router (DATE 2026). Deterministic parallel
+  routing by partition exists (Potter-S, ICCAD 2024; Gort and Anderson, FPT 2010). PathFinder relies on exact
+  resource capacities, which a gridless board lacks.
+- **Small placement moves** during routing are a recognised problem (ICCAD 2020/2021 contests, "routing with cell
+  movement"); as a report of hints it carries little risk.
+
+What follows for the plan, in order of evidence: (1) pin access and escape planning for every pad, not only BGA
+balls, and rule checks during the search so found paths insert; (2) the window finisher with rip-up and
+reroute, its windows moving and growing; (3) history costs with rip-up of only the failing connections and a
+logged, tunable schedule; (4) a parallel portfolio of seeds, each deterministic; (5) placement hints; (6) a new
+track-graph negotiated engine last, since nothing published shows it winning on PCBs and a perfect global plan
+alone saved no time here.
+
 ## 8. Plan and order
 
 Each step is a commit, measured against the baseline. Benchmarks use the default settings, so fallbacks are on.
@@ -701,3 +737,4 @@ following. Accepted points are already reflected in sections 2 and 8.
 | 2026-10-22 | batch A, 8 result: which gate to scope | 19 boards, all gates on, pitch window on grid balls only and protection on every pin (`batchA-pg`): open 958, CPU 8888 s, 3 clean, against 854, 6681 s, 4 clean with both gates scoped. Without logicbone: 223 against 180 (226 with both gates on every pin, 305 before batch A). Protection on every pin wins LimeSDR (25 -> 0), reworkctf (4 -> 0) and Encoder (2 -> 1) and loses Librecalc (9 -> 43), sdi_mipi (82 -> 106), Unifying (5 -> 11), lpa96 (1 -> 6); most of these boards stop at the cap, so single counts are noisy, but the totals favour scoping both. Recommended BGA set: `strategy=bga`, both gates with both `_grid_only` switches, `via_span_cost_factor=0.5`, `force_via_in_pad=false`. Protection on every pin is a board-dependent option: it helps where the fanout passes oscillate (the pass log re-fans the same tens of pins every pass, as on LimeSDR). CPU on the fast group is dominated by the 21-thread optimizer once a board routes clean (reworkctf 2323 s, Starling 788 s), so the fast group should be judged by time to a clean route, not CPU to the cap. | `runs/batchA-grid`, `runs/batchA-pg` in `bench/overhaul`. |
 | 2026-10-22 | run profiles (5.4) | `router.profile` = `quick`, `standard` (default), `thorough`, `classic` (`RouterProfiles`, applied by `SettingsMerger` to the hardcoded defaults, so a profile can switch settings off and every other source still wins; the log names the profile). `standard` is the batch A set with both escape gates on grid balls; `quick` drops fallbacks and optimizer; `thorough` races the fallbacks on all cores without a budget and runs the grid finisher; `classic` keeps every overhaul gate off. | `RouterProfilesTest`. Board runs per profile follow. |
 | 2026-10-22 | grid finisher, first version (5.3) | `autorouter.grid_finisher` (off by default, on in `thorough`), `grid_finisher_max_steps` (default 50,000,000 states; at most 2,000,000 per connection). After the fallbacks, `GridFinisher` takes each airline once: a window around the gap (30% of its length, 2-20 mm margin), cells of half the trace pitch (coarser above 250,000 cells per layer), trace and via-site masks from the clearance matrix, A* with the layer's trace costs and any via of the rule, the path's ends on the owning pin or via centre or joined to the trace (`connectToTrace`), since a trace connects only at a drill item's centre or another trace's corner. Kept only if the two pieces connect and no new item has a clearance violation; otherwise the snapshot is undone. Stops at the step budget, a stop request or the job timeout, so an impossible board keeps its open connections. No rip-up yet. | `GridFinisherTest`: a wall of another net across the top layer is crossed on the bottom with two vias and no violation; with both layers walled the board keeps its items; the step budget stops it; the same board twice gives the same hash. |
+| 2026-10-22 | grid finisher, measured and fixed | Measured by continuing each board's `standard` result (`-de board.dsn result.ses`, one maze pass, no fallbacks, no optimizer) with the finisher on. Fixes: an outcome count in the log line (`closed`, `no path`, `end copper boxed in`, `no end copper in window`, `insert failed`, `path does not connect`, `clearance violation`); cells of a third of the trace pitch, without the half-diagonal margin (every exit of a fine-pitch pad was blocked by it; the exact check rejects a path that grazes a corner); an own-net SMD pad blocks a via whose rule does not allow vias in pads (a via on TX5823 overlapped one: the pin reported the violation, the via did not, so the new-item check also asks the items near each new one); a path ending on a trace between its corners splits the trace there; the cell at a pad's centre always counts. Marking the cells beside a thin trace was tried and dropped: its stubs failed the clearance check more often than they closed a connection. | 11 boards, 59 open: 7 closed, no new violation. TX5823 1 -> 0 (clean), M4 8 -> 7, L6 29 -> 24; none on Unifying, ddr5, lpa96, DoroidOscillo, hard6f, Encoder, reworkctf. The rest are `end copper boxed in` or `no path`: walled in by other nets' copper, so free-space search cannot close them; the next step is rip-up in the window (section 7.6). LimeSDR: one more maze pass from its `standard` result closed all 25 leftovers, so continuing from a result already finishes boards. Profiles on the board set (2-/6-minute caps): `quick` 201 open outside logicbone (standard 180) at 5266 s CPU against 6681, boards done 1.5-2.5x sooner (Starling 23 s, sensor 26 s); `thorough` 235 at 19,595 s with three runs sharing the machine, its race starving each main run; it needs a run alone with a longer cap. |
