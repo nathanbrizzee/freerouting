@@ -122,7 +122,11 @@ public class MazeSearchEngine {
                     autorouteEngine.board.communication.getResolution(
                         app.freerouting.board.model.structure.Unit.UM);
                 double drillDist = drill.location.toFloat().distance(pinCenterFloat);
-                if (drillDist < minLen * resolution) {
+                double minDist =
+                    ctrl.fanoutMinEscapeDistance >= 0
+                        ? ctrl.fanoutMinEscapeDistance
+                        : minLen * resolution;
+                if (drillDist < minDist) {
                   return false;
                 }
               }

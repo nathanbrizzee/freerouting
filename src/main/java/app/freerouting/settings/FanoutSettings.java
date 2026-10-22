@@ -74,6 +74,15 @@ public class FanoutSettings implements Serializable, Cloneable {
   public Double minEscapeLengthMm;
 
   /**
+   * When true, the minimum escape length of a pin is at most half the distance to the nearest other
+   * pin of its component, so a ball in a pin grid may drill in the diagonal gap next to it. The
+   * default minimum (2.5 mm from the pin centre) puts the nearest legal via three pitches away on a
+   * 0.8 mm BGA, which no inner ball can reach.
+   */
+  @SerializedName("min_escape_by_pitch")
+  public Boolean minEscapeByPitch;
+
+  /**
    * The maximum physical escape wire length (in millimeters). The search tree expansion and via
    * placement during fanout will be restricted to this distance.
    */

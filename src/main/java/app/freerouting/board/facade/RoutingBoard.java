@@ -997,6 +997,22 @@ public class RoutingBoard extends BasicBoard implements Serializable {
    * only 1 layer. Ripup is allowed if ripupCosts is {@literal >}= 0. Returns an enum of type
    * AutorouteEngine.AutorouteResult
    */
+  /** Distance from the pin centre to the nearest other pin of its component, or -1 if none. */
+  public double nearestPinDistance(Pin pin) {
+    app.freerouting.geometry.planar.FloatPoint center = pin.getCenter().toFloat();
+    double best = -1;
+    for (Pin other : getPins()) {
+      if (other == pin || other.getComponentId() != pin.getComponentId()) {
+        continue;
+      }
+      double distance = center.distance(other.getCenter().toFloat());
+      if (best < 0 || distance < best) {
+        best = distance;
+      }
+    }
+    return best;
+  }
+
   public AutorouteAttemptResult fanout(
       Pin pin,
       RouterSettings routerSettings,
@@ -1073,6 +1089,21 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     }
     ctrlSettings.fanoutStartPinCenter = pin.getCenter();
     ctrlSettings.fanoutStartPinLayer = pin.firstLayer();
+    if (routerSettings.fanout != null
+        && Boolean.TRUE.equals(routerSettings.fanout.minEscapeByPitch)) {
+      // Half the pitch admits the diagonal gap of a pin grid (at 0.707 pitches) and keeps the
+      // via off the neighbouring pads; an isolated pin keeps the configured minimum.
+      double minLenUm =
+          routerSettings.fanout.minEscapeLengthMm != null
+              ? routerSettings.fanout.minEscapeLengthMm * 1000.0
+              : 500.0;
+      double setting =
+          minLenUm
+              * this.communication.getResolution(app.freerouting.board.model.structure.Unit.UM);
+      double nearest = nearestPinDistance(pin);
+      ctrlSettings.fanoutMinEscapeDistance =
+          nearest > 0 ? Math.min(setting, 0.5 * nearest) : setting;
+    }
     ctrlSettings.removeUnconnectedVias = false;
     if (ripupCosts >= 0) {
       ctrlSettings.ripupAllowed = true;

@@ -75,6 +75,12 @@ public class AutorouteControl {
   /** Erik Gavriluk (freerouting.net): retry a failed fanout escape without the distance window. */
   public boolean ignoreEscapeWindow;
 
+  /**
+   * Minimum distance in board units from the fanout start pin to a via, or negative to use the
+   * {@code min_escape_length_mm} setting. Set per pin when {@code min_escape_by_pitch} is on.
+   */
+  public double fanoutMinEscapeDistance = -1;
+
   /** Normally true, if the autorouter contains no fanout pass. */
   public boolean removeUnconnectedVias;
 
