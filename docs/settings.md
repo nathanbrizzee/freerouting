@@ -278,7 +278,16 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   killing the process, which loses the output. Equivalent CLI flag: `--router.stop_file=<path>`.
 - **`result_json`**: Optional path for a machine-readable routing result manifest written at the
   end of a headless `-de`/`-do` run. Used by the benchmark and autopilot harnesses. Equivalent CLI
-  flag: `--router.result_json=<path>`.
+  flag: `--router.result_json=<path>`. Its `open_connections` list gives each connection the
+  routed board still lacks: the net, both ends (pins by component and pin name), the end points
+  in millimetres (`from_mm`, `to_mm`), the airline length, and for each pin end an `exit`: `free`
+  when a trace of the net's width can still leave the pin in one of eight directions on one of its
+  layers, `necked` when only the pin's neck-down width fits, `closed` when nothing fits, with
+  `closed_by` naming what is in the way (own pads, pads of another part, routes or fixed copper of
+  a net, a copper area, a keepout, the board edge). `placement_hints` groups the pin ends by
+  component, most open ends first, and says whether the part's pins are closed in by the design
+  (its own pads, fixed copper, keepouts) or by other parts and routes, where moving a part or
+  fanning it out by hand may help. The log ends with the first ten of these hints.
 - **`status_file`**: Optional path for a live status file (JSON) for agents and scripts that poll a
   headless run. Rewritten every 2 seconds and once at the end, through a temporary file and a
   rename, so a reader never sees a partial file. It holds the stage, the fallback attempt, the pass

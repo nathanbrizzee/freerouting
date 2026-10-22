@@ -80,6 +80,10 @@ public final class RoutingResultManifest {
   @SerializedName("open_connections")
   public List<OpenConnections.Entry> openConnections;
 
+  /** Per component with open ends: whether its pins can be left and what closes them in. */
+  @SerializedName("placement_hints")
+  public List<OpenConnections.Hint> placementHints;
+
   /** Input fixture identity for the run. */
   public static class FixtureInfo {
     @SerializedName("filename")
@@ -238,6 +242,7 @@ public final class RoutingResultManifest {
       manifest.boardStatistics = new BoardStatistics(job.board);
       manifest.bounds = manifest.boardStatistics.bounds;
       manifest.openConnections = OpenConnections.of(job.board);
+      manifest.placementHints = OpenConnections.hints(manifest.openConnections);
       if (job.routerSettings != null && job.routerSettings.scoring != null) {
         manifest.normalizedScore = manifest.boardStatistics.getRouterScore(job.routerSettings);
         if (manifest.phases.optimizer.before != null || manifest.phases.optimizer.after != null) {

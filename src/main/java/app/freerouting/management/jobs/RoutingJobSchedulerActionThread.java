@@ -29,6 +29,7 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
   private static final long LIVE_OUTPUT_INTERVAL_MILLIS = 10_000;
   // The result JSON lists all open connections; the log names the first ones.
   private static final int OPEN_CONNECTIONS_LOGGED = 50;
+  private static final int PLACEMENT_HINTS_LOGGED = 10;
   private final Object terminalStateLock = new Object();
   RoutingJob job;
 
@@ -248,6 +249,10 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
         List<OpenConnections.Entry> open = OpenConnections.of(job.board);
         if (!open.isEmpty()) {
           job.logInfo(OpenConnections.summary(open, OPEN_CONNECTIONS_LOGGED));
+          List<OpenConnections.Hint> hints = OpenConnections.hints(open);
+          for (int i = 0; i < Math.min(PLACEMENT_HINTS_LOGGED, hints.size()); i++) {
+            job.logInfo("Placement hint: " + hints.get(i));
+          }
         }
       }
 
