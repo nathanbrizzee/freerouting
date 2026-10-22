@@ -1,0 +1,31 @@
+(pcb blind_via_stack
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (layer In1.Cu (type signal))
+    (layer In2.Cu (type signal))
+    (layer B.Cu (type signal))
+    (boundary (rect pcb 0 0 20000 20000))
+    (keepout (rect In2.Cu 0 0 20000 20000))
+    (keepout (rect B.Cu 0 0 20000 20000))
+    (via "Via[0-1]_500:250_um" "Via[0-3]_500:250_um")
+    (rule (width 250) (clearance 150)))
+  (placement
+    (component R_pad (place R1 5000 10000 front 0))
+    (component R_inner (place R2 15000 10000 front 0)))
+  (library
+    (image R_pad (pin Pad_800_um 1 0 0))
+    (image R_inner (pin Pad_inner_800_um 1 0 0))
+    (padstack Pad_800_um (shape (circle F.Cu 800)) (attach off))
+    (padstack Pad_inner_800_um (shape (circle In1.Cu 800)) (attach off))
+    (padstack "Via[0-1]_500:250_um"
+      (shape (circle F.Cu 500)) (shape (circle In1.Cu 500)) (attach off))
+    (padstack "Via[0-3]_500:250_um"
+      (shape (circle F.Cu 500)) (shape (circle In1.Cu 500))
+      (shape (circle In2.Cu 500)) (shape (circle B.Cu 500)) (attach off)))
+  (network
+    (net A (pins R1-1 R2-1))
+    (class kicad_default "" A
+      (circuit (use_via "Via[0-1]_500:250_um" "Via[0-3]_500:250_um"))
+      (rule (width 250) (clearance 150)))))

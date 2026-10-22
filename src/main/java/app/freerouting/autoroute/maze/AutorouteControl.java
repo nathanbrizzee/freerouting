@@ -99,6 +99,13 @@ public class AutorouteControl {
   /** The array of possible via ranges used by the autorouter. */
   public ViaMask[] viaInfos;
 
+  /**
+   * Distinct layer ranges {first, last} of the vias in {@link #viaRule}, sorted. One range over the
+   * whole stack on a board with through vias only; the drill pages cut the sites of each range by
+   * the copper on its own layers.
+   */
+  public java.util.List<int[]> viaSpans = java.util.List.of();
+
   /** The lower bound for the first layer of vias. */
   public int viaLowerBound;
 
@@ -281,6 +288,23 @@ public class AutorouteControl {
       }
       viaInfos[i] = new ViaMask(fromLayer, toLayer, currentVia.attachSmdAllowed());
     }
+    java.util.List<int[]> spans = new java.util.ArrayList<>();
+    for (ViaMask mask : viaInfos) {
+      boolean known = false;
+      for (int[] span : spans) {
+        if (span[0] == mask.fromLayer && span[1] == mask.toLayer) {
+          known = true;
+          break;
+        }
+      }
+      if (!known) {
+        spans.add(new int[] {mask.fromLayer, mask.toLayer});
+      }
+    }
+    spans.sort(
+        java.util.Comparator.<int[]>comparingInt(span -> span[0])
+            .thenComparingInt(span -> span[1]));
+    this.viaSpans = java.util.List.copyOf(spans);
 
     boolean pureSmdNet = isPureSmdNet(board, netNumber);
     boolean hasSmd = hasSmdPin(board, netNumber);

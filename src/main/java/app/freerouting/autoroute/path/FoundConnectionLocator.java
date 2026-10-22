@@ -251,8 +251,8 @@ public abstract class FoundConnectionLocator {
     if (currentBacktrackDoor instanceof TargetItemExpansionDoor door) {
       currentNextRoom = door.room;
     } else if (currentBacktrackDoor instanceof ExpansionDrill currentDrill) {
-      currentNextRoom =
-          currentDrill.roomArr[currentDrill.firstLayer + mazeSearchResult.sectionNoOfDoor];
+      // roomArr is indexed from the drill's first layer, like sectionNoOfDoor.
+      currentNextRoom = currentDrill.roomArr[mazeSearchResult.sectionNoOfDoor];
       if (currentMazeSearchElement.roomRipped) {
         for (CompleteExpansionRoom tmpRoom : currentDrill.roomArr) {
           if (tmpRoom instanceof ObstacleExpansionRoom room) {

@@ -149,7 +149,7 @@ final class MazeExpansionEngine {
     int fromRoomLayer = fromElement.sectionNoOfDoor;
     DrillPage drillPage = (DrillPage) fromElement.door;
     Collection<ExpansionDrill> drillList =
-        drillPage.getDrills(search.autorouteEngine, ctrl.attachSmdAllowed);
+        drillPage.getDrills(search.autorouteEngine, ctrl.attachSmdAllowed, ctrl.viaSpans);
     if (search.fanoutDiagnostics.enabled()) {
       search.fanoutDiagnostics.trace(
           "drill_page_scan",
@@ -294,9 +294,11 @@ final class MazeExpansionEngine {
         }
         --currentLayer;
       }
-      if (viaLowerBound > currentDrill.firstLayer) {
-        return;
-      }
+      // The drillable run around fromLayer may be shorter than the drill's full stack. The mask
+      // loop below admits only vias inside [viaLowerBound, viaUpperBound], so a through via
+      // still needs the whole stack while a blind or buried via needs only its own layers.
+      // (Until 2026-10-21 the method returned here when the run did not reach the stack's first
+      // or last layer, which rejected blind vias wherever a through via would not fit.)
       currentLayer = fromLayer + 1;
       for (; ; ) {
         if (currentLayer > viaUpperLimit) {
@@ -316,9 +318,6 @@ final class MazeExpansionEngine {
           }
         }
         ++currentLayer;
-      }
-      if (viaUpperBound < currentDrill.lastLayer) {
-        return;
       }
     }
 

@@ -60,14 +60,51 @@ public class DrillPage implements ExpandableObject {
     return result;
   }
 
-  /** Returns the drills on this page. If attachSmd, drilling to smd pins is allowed. */
+  /** Returns the drills on this page for through vias; attachSmd allows drilling to SMD pins. */
   public Collection<ExpansionDrill> getDrills(AutorouteEngine autorouteEngine, boolean attachSmd) {
+    return getDrills(autorouteEngine, attachSmd, null);
+  }
+
+  /**
+   * Returns the drills on this page; attachSmd allows drilling to SMD pins. The list holds the
+   * distinct layer ranges {first, last} of the net's vias. The drills of a range are cut only by
+   * the copper on its layers, so a blind or buried via gets sites where a through via has none.
+   * Null means one range over the whole stack, as on a board with through vias only.
+   */
+  public Collection<ExpansionDrill> getDrills(
+      AutorouteEngine autorouteEngine, boolean attachSmd, java.util.List<int[]> viaSpans) {
     if (this.drills == null || autorouteEngine.getNetNumber() != this.netNumber) {
       this.netNumber = autorouteEngine.getNetNumber();
       this.drills = new LinkedList<>();
+      int lastBoardLayer = this.board.getLayerCount() - 1;
+      java.util.List<int[]> spans =
+          viaSpans == null || viaSpans.isEmpty()
+              ? java.util.List.of(new int[] {0, lastBoardLayer})
+              : viaSpans;
+      for (int[] span : spans) {
+        if (!addDrills(autorouteEngine, attachSmd, span[0], span[1])) {
+          // Interrupted, not failed: do not cache an empty page for later searches.
+          this.drills = null;
+          return new LinkedList<>();
+        }
+      }
+    }
+    return this.drills;
+  }
+
+  /** Adds the drills of one layer range to the page. Returns false when the search was stopped. */
+  private boolean addDrills(
+      AutorouteEngine autorouteEngine, boolean attachSmd, int drillFirstLayer, int drillLastLayer) {
+    {
       ShapeSearchTree searchTree = autorouteEngine.autorouteSearchTree;
       Collection<TreeEntry> overlaps = new LinkedList<>();
-      searchTree.overlappingTreeEntries(this.shape, -1, overlaps);
+      if (drillFirstLayer == 0 && drillLastLayer == this.board.getLayerCount() - 1) {
+        searchTree.overlappingTreeEntries(this.shape, -1, overlaps);
+      } else {
+        for (int layer = drillFirstLayer; layer <= drillLastLayer; layer++) {
+          searchTree.overlappingTreeEntries(this.shape, layer, overlaps);
+        }
+      }
       Collection<TileShape> cutoutShapes = new LinkedList<>();
       // drills on top of existing vias are used in the ripup algorithm
       TileShape prevObstacleShape = IntBox.EMPTY;
@@ -106,17 +143,10 @@ public class DrillPage implements ExpandableObject {
       // otherwise run far past the connection's budget.
       TileShape[] drillShapes = shapeWithHoles.splitToConvex(new EngineStop(autorouteEngine));
       if (drillShapes == null) {
-        if (autorouteEngine.isStopRequested()) {
-          // Interrupted, not failed: do not cache an empty page for later searches.
-          this.drills = null;
-          return new LinkedList<>();
-        }
-        return this.drills;
+        return !autorouteEngine.isStopRequested();
       }
 
       // Use the center points of these drill shapes to try making a via.
-      int drillFirstLayer = 0;
-      int drillLastLayer = this.board.getLayerCount() - 1;
       for (int i = 0; i < drillShapes.length; i++) {
         TileShape currentDrillShape = drillShapes[i];
         Point pinCenter = null;
@@ -151,7 +181,7 @@ public class DrillPage implements ExpandableObject {
         }
       }
     }
-    return this.drills;
+    return true;
   }
 
   @Override

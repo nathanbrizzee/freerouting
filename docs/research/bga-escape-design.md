@@ -64,10 +64,12 @@ Six boards with BGAs, 6-minute cap, optimizer off, default settings. The open co
 3. **Nothing detects a pin grid.** `PlannedFanout` knows only the component centroid; in a grid it tries outward
    and side sites before the diagonal gap, and takes the first via of the rule that leaves the pad layer
    (`escapeVia`), whatever its span.
-4. **Blind vias are accepted only where a through via fits.** `DrillPage.getDrills` creates every drill with the
-   full layer range, and `expandToOtherLayers` returns early when the drillable run at the site does not reach the
-   drill's first or last layer, before a blind via's own layers are considered. The mask loop that follows already
-   limits a via to the drillable run, so the two early returns are the only obstacle.
+4. **Blind vias were accepted only where a through via fits** (fixed 2026-10-21, batch A item 3). Two causes:
+   `DrillPage.getDrills` cut the via sites by the copper on every layer before any layer check ran, so a site
+   under a bottom-layer track never existed, and `expandToOtherLayers` returned early when the drillable run at
+   the site did not reach the drill's first or last layer. Now the page computes its sites once per distinct via
+   span of the net's rule, cut only by that span's layers (`AutorouteControl.viaSpans`), and the mask loop limits
+   each via to the drillable run. A board with through vias only takes the old path (one span, same SES).
 5. **Every via costs the same.** `addViaCosts[from][to]` is all zero, but a flat `minNormalViaCost` is added at
    every drill entry (`MazeExpansionEngine`, two places), and `DestinationDistance` uses the same flat cost as its
    lower bound. A microvia and a through via therefore cost alike.
@@ -88,8 +90,9 @@ Six boards with BGAs, 6-minute cap, optimizer off, default settings. The open co
   writer puts the span back the same way. `(attach on|off)` on a padstack and `via_at_smd` in the rules are both
   parsed.
 - **Per-net assignment is by net class, as in the spec.** `(via_rule name padstacks...)` in `network` and
-  `(rule (via_rule name))` in a class are parsed and applied (`Network.insertViaRules`, class scope). Every net in
-  the class may use the rule's vias. There is no via-type setting: `allowed_via_types` is a Boolean
+  `(rule (via_rule name))` in a class are parsed and applied (`Network.insertViaRules`, class scope), and so is
+  `(circuit (use_via ...))` inside a class, which is the form KiCad's export writes (`fixtures/FixedTrackJoin.dsn`).
+  Every net in the class may use the rule's vias. There is no via-type setting: `allowed_via_types` is a Boolean
   (`RouterSettings.viasAllowed`). The only way a user "allows" a blind via is to list its padstack in a via rule.
 - **KiCad's DSN export likely writes one through via per net class** (not verified in KiCad's source), so blind
   and buried padstacks reach Freerouting only when added to the DSN by hand or by a script. The variant DSN in
