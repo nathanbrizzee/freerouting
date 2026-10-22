@@ -254,7 +254,7 @@ public class Wiring extends ScopeKeyword {
     return false;
   }
 
-  static FixedState calcFixed(IJFlexScanner scanner) {
+  public static FixedState calcFixed(IJFlexScanner scanner) {
     try {
       FixedState result = FixedState.UNFIXED;
       Object nextToken = scanner.nextToken();

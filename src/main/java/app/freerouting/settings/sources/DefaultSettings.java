@@ -183,6 +183,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.enabled = true;
     settings.autorouter.algorithm = RouterSettings.ALGORITHM_CURRENT;
     settings.jobTimeoutString = "12:00:00";
+    settings.sessionRoutesMovable = false;
     settings.autorouter.maxPasses = 0;
     settings.autorouter.maxItems = Integer.MAX_VALUE;
     settings.tracePullTightAccuracy = 500;

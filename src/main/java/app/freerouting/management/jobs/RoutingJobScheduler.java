@@ -243,7 +243,10 @@ public final class RoutingJobScheduler {
                                     SesImportSummary summary =
                                         SesReader.read(
                                             new ByteArrayInputStream(sessionBytesToLoad),
-                                            job.board);
+                                            job.board,
+                                            job.routerSettings != null
+                                                && Boolean.TRUE.equals(
+                                                    job.routerSettings.sessionRoutesMovable));
                                     FRLogger.info(
                                         "SES session loaded: "
                                             + summary.wiresImported()

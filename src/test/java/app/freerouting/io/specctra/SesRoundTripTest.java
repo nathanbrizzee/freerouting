@@ -9,6 +9,10 @@ import static org.junit.jupiter.api.Assertions.fail;
 import app.freerouting.Freerouting;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.DrillItem;
+import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.items.Via;
+import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.settings.GlobalSettings;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -49,6 +53,46 @@ class SesRoundTripTest {
         0,
         imported.errorsEncountered(),
         "No errors should occur importing a valid SES file; got: " + imported.errorsEncountered());
+  }
+
+  /**
+   * Loaded to continue routing ({@code router.session_routes_movable}), the routes come in unfixed
+   * except where the file says {@code (type protect)}; loaded otherwise, every route is user-fixed.
+   */
+  @Test
+  void sesRoutesComeInMovableUnlessTheFileProtectsThem() throws Exception {
+    String ses;
+    try (InputStream in = DsnTestFixtures.openResource("Issue593-BBD_Mars-64.ses")) {
+      ses = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    }
+    String protectedVia = "(via \"Via[0-1]_800:400_um\" 797091 -588633";
+    assertTrue(ses.contains(protectedVia));
+    ses = ses.replace(protectedVia, protectedVia + " (type protect)");
+
+    RoutingBoard movable = DsnTestFixtures.loadBoard("Issue593-BBD_Mars-64.dsn");
+    SesReader.read(new ByteArrayInputStream(ses.getBytes(StandardCharsets.UTF_8)), movable, true);
+    int unfixed = 0;
+    int fixed = 0;
+    for (Item item : movable.getItems()) {
+      if (item instanceof Trace || item instanceof Via) {
+        if (item.getFixedState() == FixedState.UNFIXED) {
+          unfixed++;
+        } else if (item.getFixedState() == FixedState.USER_FIXED) {
+          assertTrue(item instanceof Via, item + " is fixed");
+          fixed++;
+        }
+      }
+    }
+    assertEquals(1, fixed, "only the protected via stays fixed");
+    assertTrue(unfixed > 0);
+
+    RoutingBoard locked = DsnTestFixtures.loadBoard("Issue593-BBD_Mars-64.dsn");
+    SesReader.read(new ByteArrayInputStream(ses.getBytes(StandardCharsets.UTF_8)), locked);
+    for (Item item : locked.getItems()) {
+      if (item instanceof Trace || item instanceof Via) {
+        assertEquals(FixedState.USER_FIXED, item.getFixedState(), item.toString());
+      }
+    }
   }
 
   /**

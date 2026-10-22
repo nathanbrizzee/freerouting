@@ -102,6 +102,15 @@ public class RouterSettings implements Serializable, Cloneable {
   public String profile;
 
   /**
+   * When true, the traces and vias of a session file (.ses) loaded to continue routing come in
+   * movable, so the router may rip them up; those the file marks {@code (type protect)} or {@code
+   * (type fix)} stay fixed. When false (the original behaviour, the {@code classic} profile), every
+   * loaded route is user-fixed.
+   */
+  @SerializedName("session_routes_movable")
+  public Boolean sessionRoutesMovable;
+
+  /**
    * Maze search steps the whole job may use (fanout, autorouter and fallback searches; not the
    * optimizer). The job stops after the search that reaches it and ends as timed out. Unlike {@code
    * job_timeout}, it stops at the same point on every run, so capped benchmark runs do not depend
@@ -673,6 +682,7 @@ public class RouterSettings implements Serializable, Cloneable {
     result.minTraceWidthUm = this.minTraceWidthUm;
     result.fixKicadFootprints = this.fixKicadFootprints;
     result.profile = this.profile;
+    result.sessionRoutesMovable = this.sessionRoutesMovable;
     // Job outputs: a fallback attempt runs on a clone, and a timeout during it leaves the clone in
     // place, so without these the result manifest and the status file were lost.
     result.resultJsonPath = this.resultJsonPath;

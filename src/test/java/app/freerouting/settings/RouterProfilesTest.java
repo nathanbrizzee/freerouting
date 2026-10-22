@@ -24,6 +24,7 @@ class RouterProfilesTest {
     assertFalse(settings.autorouter.forceViaInPad, "a profile can switch a setting off");
     assertTrue(settings.optimizer.enabled);
     assertFalse(settings.autorouter.gridFinisher, "not before it is measured");
+    assertTrue(settings.sessionRoutesMovable, "a continued board's routes may be ripped up");
   }
 
   @Test
@@ -35,6 +36,7 @@ class RouterProfilesTest {
     assertEquals(hardcoded.fanout.protectEscapes, settings.fanout.protectEscapes);
     assertEquals(hardcoded.autorouter.forceViaInPad, settings.autorouter.forceViaInPad);
     assertEquals(hardcoded.autorouter.viaSpanCostFactor, settings.autorouter.viaSpanCostFactor);
+    assertFalse(settings.sessionRoutesMovable, "the original router keeps loaded routes fixed");
   }
 
   @Test

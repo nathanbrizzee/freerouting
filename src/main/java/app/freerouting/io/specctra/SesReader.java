@@ -12,6 +12,7 @@ import app.freerouting.io.specctra.parser.PolygonPath;
 import app.freerouting.io.specctra.parser.ScopeKeyword;
 import app.freerouting.io.specctra.parser.Shape;
 import app.freerouting.io.specctra.parser.SpecctraDsnStreamReader;
+import app.freerouting.io.specctra.parser.Wiring;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.Net;
 import java.io.IOException;
@@ -36,9 +37,13 @@ public final class SesReader {
   private int viasImported;
   private int errorsEncountered;
 
-  private SesReader(IJFlexScanner scanner, BasicBoard board, double scaleFactor) {
+  /** Whether routes without a {@code (type ...)} come in movable instead of user-fixed. */
+  private final boolean movable;
+
+  private SesReader(IJFlexScanner scanner, BasicBoard board, double scaleFactor, boolean movable) {
     this.scanner = scanner;
     this.board = board;
+    this.movable = movable;
     this.specctraLayerStructure = new LayerStructure(board.layerStructure);
     this.sessionToBoardScale = scaleFactor;
   }
@@ -58,6 +63,16 @@ public final class SesReader {
    *     reading the stream
    */
   public static SesImportSummary read(InputStream in, BasicBoard board) throws IOException {
+    return read(in, board, false);
+  }
+
+  /**
+   * Reads a SES file like {@link #read(InputStream, BasicBoard)}. With {@code movable}, the wires
+   * and vias come in unfixed, so a router continuing the board may rip them up, except those the
+   * file marks {@code (type protect)} or {@code (type fix)}; without it every one is user-fixed.
+   */
+  public static SesImportSummary read(InputStream in, BasicBoard board, boolean movable)
+      throws IOException {
     if (in == null) {
       throw new IOException("SesReader.read: input stream must not be null");
     }
@@ -71,7 +86,7 @@ public final class SesReader {
     double scaleFactor =
         board.communication.coordinateTransform.dsnToBoard(1) / board.communication.resolution;
 
-    SesReader reader = new SesReader(scanner, board, scaleFactor);
+    SesReader reader = new SesReader(scanner, board, scaleFactor, movable);
 
     try {
       reader.processSessionScope();
@@ -301,6 +316,7 @@ public final class SesReader {
    */
   private boolean processWireScope(int[] netNumbers) throws IOException {
     PolygonPath wirePath = null;
+    FixedState type = null;
     Object nextToken = null;
     for (; ; ) {
       final Object prevToken = nextToken;
@@ -318,6 +334,8 @@ public final class SesReader {
       if (prevToken == Keyword.OPEN_BRACKET) {
         if (nextToken == Keyword.POLYGON_PATH) {
           wirePath = Shape.readPolygonPathScope(this.scanner, this.specctraLayerStructure);
+        } else if (nextToken == Keyword.TYPE) {
+          type = Wiring.calcFixed(this.scanner);
         } else {
           ScopeKeyword.skipScope(this.scanner);
         }
@@ -350,7 +368,7 @@ public final class SesReader {
               .get(app.freerouting.rules.DefaultItemClearanceClasses.ItemClass.TRACE);
 
       board.insertTrace(
-          polyline, layerIndex, halfWidth, netNumbers, clearanceClass, FixedState.USER_FIXED);
+          polyline, layerIndex, halfWidth, netNumbers, clearanceClass, fixedState(type));
 
       wiresImported++;
       return true;
@@ -359,6 +377,14 @@ public final class SesReader {
       FRLogger.warn("SesReader.processWireScope: failed to import wire — " + e.getMessage());
       return false;
     }
+  }
+
+  /** The fixed state of a loaded route whose scope gave {@code type}, or null when it gave none. */
+  private FixedState fixedState(FixedState type) {
+    if (!movable) {
+      return FixedState.USER_FIXED;
+    }
+    return type == null ? FixedState.UNFIXED : type;
   }
 
   /**
@@ -394,10 +420,15 @@ public final class SesReader {
       }
     }
 
-    // Skip any additional sub-scopes (e.g. type, lock_type)
+    // Read the type; skip other sub-scopes (e.g. lock_type)
+    FixedState type = null;
     nextToken = this.scanner.nextToken();
     while (nextToken == Keyword.OPEN_BRACKET) {
-      ScopeKeyword.skipScope(this.scanner);
+      if (this.scanner.nextToken() == Keyword.TYPE) {
+        type = Wiring.calcFixed(this.scanner);
+      } else {
+        ScopeKeyword.skipScope(this.scanner);
+      }
       nextToken = this.scanner.nextToken();
     }
 
@@ -428,8 +459,7 @@ public final class SesReader {
               .defaultItemClearanceClasses
               .get(app.freerouting.rules.DefaultItemClearanceClasses.ItemClass.VIA);
 
-      board.insertVia(
-          viaPadstack, viaLocation, netNumbers, clearanceClass, FixedState.USER_FIXED, true);
+      board.insertVia(viaPadstack, viaLocation, netNumbers, clearanceClass, fixedState(type), true);
 
       viasImported++;
       return true;

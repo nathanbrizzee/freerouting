@@ -76,7 +76,7 @@ public final class RouterProfiles {
   /**
    * The batch A set that measured best (19 boards: 1239 -> 854 open, 1 -> 4 clean, less CPU):
    * planned BGA escapes, both escape gates on grid balls only, via cost by span, via-in-pad as the
-   * DSN says.
+   * DSN says; and a continued board's routes movable.
    */
   private static void applyStandard(RouterSettings defaults) {
     defaults.fanout.strategy = "bga";
@@ -86,5 +86,7 @@ public final class RouterProfiles {
     defaults.fanout.protectEscapesGridOnly = true;
     defaults.autorouter.viaSpanCostFactor = 0.5;
     defaults.autorouter.forceViaInPad = false;
+    // A continued board (-de board.dsn earlier.ses) keeps its earlier routes movable.
+    defaults.sessionRoutesMovable = true;
   }
 }
