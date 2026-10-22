@@ -91,6 +91,16 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Double viaSpanCostFactor;
 
   /**
+   * Whether the router may drill a via into an SMD pad of its own net even when the DSN marks the
+   * via padstacks {@code (attach off)}. True keeps the long-standing behaviour; false honours the
+   * DSN, as the planned and BGA fanouts do, because via-in-pad changes what the board house must
+   * build.
+   */
+  @SerializedName("force_via_in_pad")
+  @Schema(description = "Allow a via in an own-net SMD pad even when the DSN says attach off")
+  public Boolean forceViaInPad;
+
+  /**
    * Erik Gavriluk (freerouting.net): a board with at most this many open connections is continued
    * from its best routing before the other fallback attempts. {@code 0} disables that continuation.
    */

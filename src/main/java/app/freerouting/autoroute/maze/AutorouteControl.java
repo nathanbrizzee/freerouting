@@ -327,7 +327,11 @@ public class AutorouteControl {
 
     boolean pureSmdNet = isPureSmdNet(board, netNumber);
     boolean hasSmd = hasSmdPin(board, netNumber);
-    if (!this.attachSmdAllowed && layerCount > 1 && hasSmd) {
+    boolean forceViaInPad =
+        this.settings == null
+            || this.settings.autorouter == null
+            || !Boolean.FALSE.equals(this.settings.autorouter.forceViaInPad);
+    if (forceViaInPad && !this.attachSmdAllowed && layerCount > 1 && hasSmd) {
       // Nets containing SMD pins on multi-layer boards must be able to escape congested
       // component pads via layer transitions, even if the DSN marks padstacks as attach-off
       // or the net also connects to through-hole pins. This only relaxes the routing gate
