@@ -133,14 +133,23 @@ public class AutorouteControl {
   public double minCheapViaCost;
 
   /**
-   * Extra cost per layer a via drills beyond its first two, as a fraction of {@link
-   * #minNormalViaCost} ({@code via_span_cost_factor}). 0 prices every via the same.
+   * Extra cost per layer a via drills beyond the shortest via of {@link #viaRule}, as a fraction of
+   * {@link #minNormalViaCost} ({@code via_span_cost_factor}). 0 prices every via the same.
    */
   public double viaSpanCostFactor;
 
-  /** The extra cost of a via spanning {@code firstLayer} to {@code lastLayer}, 0 for two layers. */
+  /**
+   * Layers crossed by the shortest via of {@link #viaRule} minus one, so a board with through vias
+   * only pays no span cost.
+   */
+  public int shortestViaSpan = 1;
+
+  /**
+   * The extra cost of a via spanning {@code firstLayer} to {@code lastLayer}, 0 for the shortest
+   * via the rule offers.
+   */
   public double viaSpanCost(int firstLayer, int lastLayer) {
-    int extraLayers = lastLayer - firstLayer - 1;
+    int extraLayers = lastLayer - firstLayer - shortestViaSpan;
     if (extraLayers <= 0 || viaSpanCostFactor <= 0) {
       return 0;
     }
@@ -324,6 +333,13 @@ public class AutorouteControl {
         java.util.Comparator.<int[]>comparingInt(span -> span[0])
             .thenComparingInt(span -> span[1]));
     this.viaSpans = java.util.List.copyOf(spans);
+    this.shortestViaSpan = Integer.MAX_VALUE;
+    for (int[] span : spans) {
+      this.shortestViaSpan = Math.min(this.shortestViaSpan, span[1] - span[0]);
+    }
+    if (spans.isEmpty()) {
+      this.shortestViaSpan = 1;
+    }
 
     boolean pureSmdNet = isPureSmdNet(board, netNumber);
     boolean hasSmd = hasSmdPin(board, netNumber);
