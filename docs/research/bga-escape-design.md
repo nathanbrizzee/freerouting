@@ -176,11 +176,29 @@ hard groups at their caps (`bench/overhaul/run-batch.sh`). The report per board 
 at BGA pins, and balls with a via per ring from the SES. A regression is bisected by gate on that board only.
 
 1. Escape window by pitch (4.1). Routes change on boards with dense pins; expected to fix most of logicbone.
+   Built 2026-10-21 as `fanout.min_escape_by_pitch` (7ca702d20).
 2. No rip-up of another pin's escape during fanout (4.1). Also targets the eager oscillation on non-BGA boards.
-3. The two early returns in `expandToOtherLayers` (4.5). Same SES on all twelve boards.
+   Built as `fanout.protect_escapes` (6ca1c9f43).
+3. Blind vias where the stack is blocked (4.5). Same SES on through-via boards. Built without a gate
+   (be616e031): the drill pages compute their sites per via span, and the two early returns are gone.
 4. Grid detection, site matching and dog-bones with through vias (4.2, 4.3, 4.4 item 2), opt-in first
-   (`--router.fanout.strategy=bga`), default only after the measurements.
-5. A logicbone variant DSN with a microvia padstack (layers 0-1) and a buried padstack (layers 2-7) in a via rule
-   on a class, as a fixture test; then layer and direction assignment with blind and buried vias (4.4 item 1).
-6. Via cost by span (4.5).
-7. Via-in-pad under one rule (4.5), measured on the SMD boards of the set.
+   (`--router.fanout.strategy=bga`), default only after the measurements. Built (2a0d9fcfa).
+5. Layer assignment with blind and buried vias (4.4 item 1), per ring by channel capacity; the direction
+   matching per layer is still open. Built (99df4e452) with a synthetic 4-layer grid test; the logicbone variant
+   with blind vias 0-2 and 0-5 (`bench/overhaul/dsn_blind.py`) is in the hard group of the board set.
+6. Via cost by span (4.5). Built as `autorouter.via_span_cost_factor` (dd82a96d6), counted from
+   the shortest via of the rule so through-only boards pay nothing (e24b5607a).
+7. Via-in-pad under one rule (4.5), measured on the SMD boards of the set. Built as `autorouter.force_via_in_pad`
+   (e55afb94a).
+
+Smoke before the batch run (logicbone, gates 1, 2 and 4 on, 6-minute cap): fanout stage done in 21 s with 93% of
+pins escaped, open 461 -> 187 with 0 violations.
+
+Batch run (2026-10-22, 19 boards, roadmap progress table): with the gates off nothing changes. With all gates on
+the open total drops 1256 -> 835 and LimeSDR, reworkctf and the blind logicbone variant gain most, but Starling,
+hard6f, DoroidOscillo and Encoder regress. The bisect puts the regressions on steps 1 and 2, which today act on
+every SMD pin of every component; without them the regressions go away and so do the BGA gains. Next: limit steps
+1 and 2 to balls of grids the planner detected (4.2), then the direction matching per layer (4.4).
+
+logicbone does not finish its first pass within the 6-minute cap, so its open count measures how far that pass got
+and moves with machine load; compare it only between runs at the same load, or with a longer cap.
