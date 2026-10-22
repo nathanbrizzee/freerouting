@@ -1,17 +1,11 @@
 package app.freerouting.autoroute.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Pin;
-import app.freerouting.io.BoardReadResult;
-import app.freerouting.io.specctra.DsnReader;
 import app.freerouting.settings.RouterSettings;
-import app.freerouting.settings.sources.DefaultSettings;
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
@@ -25,77 +19,15 @@ class FanoutEscapeWindowTest {
 
   private static final int GRID = 8;
   private static final int PITCH_UM = 800; // DSN coordinates are in um
-  private static final int PITCH = PITCH_UM * 10; // board units, resolution 10 per um
-
-  private static String dsn() {
-    StringBuilder image = new StringBuilder("(image BGA");
-    StringBuilder target = new StringBuilder("(image J");
-    StringBuilder nets = new StringBuilder();
-    int pinNo = 0;
-    for (int row = 0; row < GRID; row++) {
-      for (int col = 0; col < GRID; col++) {
-        pinNo++;
-        int x = (2 * col - (GRID - 1)) * PITCH_UM / 2;
-        int y = (2 * row - (GRID - 1)) * PITCH_UM / 2;
-        image
-            .append(" (pin P ")
-            .append(pinNo)
-            .append(' ')
-            .append(x)
-            .append(' ')
-            .append(y)
-            .append(')');
-        target
-            .append(" (pin T ")
-            .append(pinNo)
-            .append(' ')
-            .append(col * 1200)
-            .append(' ')
-            .append(row * 1200)
-            .append(')');
-        nets.append(" (net N")
-            .append(pinNo)
-            .append(" (pins U1-")
-            .append(pinNo)
-            .append(" J1-")
-            .append(pinNo)
-            .append("))");
-      }
-    }
-    image.append(')');
-    target.append(')');
-    return "(pcb grid (resolution um 10) (unit um)\n"
-        + "  (structure (layer top (type signal)) (layer bottom (type signal))\n"
-        + "    (boundary (rect pcb 0 0 40000 40000)) (via V) (rule (width 250) (clearance 100)))\n"
-        + "  (placement (component BGA (place U1 10000 10000 front 0))\n"
-        + "             (component J (place J1 25000 25000 front 0)))\n"
-        + "  (library "
-        + image
-        + ' '
-        + target
-        + "\n    (padstack P (shape (circle top 400)) (attach off))\n"
-        + "    (padstack T (shape (circle top 600)) (shape (circle bottom 600)) (attach off))\n"
-        + "    (padstack V (shape (circle top 450)) (shape (circle bottom 450)) (attach off)))\n"
-        + "  (network"
-        + nets
-        + "))\n";
-  }
+  private static final int PITCH = PITCH_UM * GridBoard.UNITS_PER_UM; // board units
 
   private static RoutingBoard board() {
-    BoardReadResult result =
-        DsnReader.readBoard(
-            new ByteArrayInputStream(dsn().getBytes(StandardCharsets.UTF_8)), null, null, "grid");
-    assertInstanceOf(BoardReadResult.Success.class, result);
-    return (RoutingBoard) ((BoardReadResult.Success) result).board();
+    return GridBoard.board(GRID, PITCH_UM);
   }
 
   private static RouterSettings settings(RoutingBoard board, boolean byPitch) {
-    RouterSettings settings = new DefaultSettings().getSettings();
-    settings.setLayerCount(board.getLayerCount());
-    settings.applyBoardSpecificOptimizations(board);
+    RouterSettings settings = GridBoard.settings(board);
     settings.fanout.minEscapeByPitch = byPitch;
-    settings.fanout.maxPasses = 2;
-    settings.fanout.maxSearchStepsPerPin = 20000L;
     return settings;
   }
 

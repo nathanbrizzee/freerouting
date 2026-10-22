@@ -103,6 +103,9 @@ public final class BatchFanout {
       return DirectPinRouting.run(board, settings, thread);
     }
     long fanoutStart = System.currentTimeMillis();
+    if (settings.usesBgaFanout()) {
+      BgaEscapePlanner.run(board, settings, thread);
+    }
     if (settings.usesPlannedFanout()) {
       PlannedFanout.run(board, settings, thread);
     }

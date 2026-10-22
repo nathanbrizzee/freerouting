@@ -124,7 +124,7 @@ final class PlannedFanout {
   /**
    * A single-layer pin whose copper is all on its layer and that still has a connection to make.
    */
-  private static boolean needsEscape(Pin pin, int net, int layer) {
+  static boolean needsEscape(Pin pin, int net, int layer) {
     for (Item item : pin.getConnectedSet(net)) {
       if (item.firstLayer() != layer || item.lastLayer() != layer) {
         return false;
@@ -224,7 +224,12 @@ final class PlannedFanout {
     return null;
   }
 
-  private static boolean tryInsert(
+  /**
+   * Inserts a stub from the pin centre to {@code site} and the via there when both pass the
+   * clearance check and the strict DRC; otherwise leaves the board as it was. Also used by the BGA
+   * planner.
+   */
+  static boolean tryInsert(
       RoutingBoard board,
       Pin pin,
       int net,

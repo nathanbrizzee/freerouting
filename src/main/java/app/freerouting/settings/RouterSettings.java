@@ -716,6 +716,11 @@ public class RouterSettings implements Serializable, Cloneable {
     return "planned".equalsIgnoreCase(fanoutStrategy());
   }
 
+  /** Returns whether the BGA escape planner (dog-bones for pin grids first) is configured. */
+  public boolean usesBgaFanout() {
+    return "bga".equalsIgnoreCase(fanoutStrategy());
+  }
+
   private String fanoutStrategy() {
     String strategy = this.fanout != null ? this.fanout.strategy : null;
     if (strategy == null || strategy.isEmpty()) {
@@ -723,9 +728,10 @@ public class RouterSettings implements Serializable, Cloneable {
     }
     if (!"eager".equalsIgnoreCase(strategy)
         && !"direct_first".equalsIgnoreCase(strategy)
-        && !"planned".equalsIgnoreCase(strategy)) {
+        && !"planned".equalsIgnoreCase(strategy)
+        && !"bga".equalsIgnoreCase(strategy)) {
       throw new IllegalArgumentException(
-          "router.fanout.strategy must be eager, direct_first or planned");
+          "router.fanout.strategy must be eager, direct_first, planned or bga");
     }
     return strategy;
   }
