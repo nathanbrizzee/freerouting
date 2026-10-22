@@ -134,6 +134,16 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Boolean gridFinisherRipup;
 
   /**
+   * History cost of rip-ups: each item ripped in a pass counts in the cells it covered, and from
+   * the next pass a maze move through those cells, or a rip of an item in them, costs {@code 1 +
+   * factor * history} times as much, so connections that rip each other back and forth look for
+   * another way. 0 turns it off.
+   */
+  @SerializedName("rip_history_cost")
+  @Schema(description = "History cost factor for space where earlier passes ripped (0 = off)")
+  public Double ripHistoryCost;
+
+  /**
    * Deterministic budget per connection in pass 1, in maze search steps, doubling each pass like
    * the time budget it replaces when set (100 s in pass 1). Unlike the time budget, the same board
    * stops at the same point on every run, whatever the machine load.

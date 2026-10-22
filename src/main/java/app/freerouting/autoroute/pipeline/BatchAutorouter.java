@@ -4,6 +4,7 @@ import app.freerouting.autoroute.AutorouteAttemptResult;
 import app.freerouting.autoroute.AutorouteAttemptState;
 import app.freerouting.autoroute.BoardHistory;
 import app.freerouting.autoroute.maze.AutorouteControl;
+import app.freerouting.autoroute.maze.RipHistory;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.Connectable;
@@ -92,6 +93,9 @@ public final class BatchAutorouter extends NamedAlgorithm {
 
   /** Rip-ups of the current pass and the net pairs that ripped each other over the run. */
   final RipLedger ripLedger = new RipLedger();
+
+  /** Where earlier passes ripped, when {@code rip_history_cost} is set; made on the first pass. */
+  RipHistory ripHistory;
 
   private final AutoroutePassRunner passRunner;
   private final AutorouteBatchLoop batchLoop;
@@ -556,7 +560,29 @@ public final class BatchAutorouter extends NamedAlgorithm {
   boolean autoroutePass(int passNo) {
     this.passSearchWork.reset();
     this.ripLedger.startPass();
-    return passRunner.runSingleThread(passNo);
+    if (this.ripHistory == null && ripHistoryFactor() > 0) {
+      this.ripHistory = RipHistory.forBoard(this.board);
+    }
+    boolean result = passRunner.runSingleThread(passNo);
+    if (this.ripHistory != null) {
+      this.ripHistory.endPass();
+    }
+    return result;
+  }
+
+  /** The history cost factor of {@code rip_history_cost}, 0 when off. */
+  double ripHistoryFactor() {
+    Double factor =
+        this.settings.autorouter != null ? this.settings.autorouter.ripHistoryCost : null;
+    return factor != null && factor > 0 ? factor : 0;
+  }
+
+  /** Lets a connection search pay for the rip history, when it is on. */
+  void applyRipHistory(AutorouteControl ctrl) {
+    if (this.ripHistory != null) {
+      ctrl.ripHistory = this.ripHistory;
+      ctrl.ripHistoryFactor = ripHistoryFactor();
+    }
   }
 
   void resetAntiOscillationState() {

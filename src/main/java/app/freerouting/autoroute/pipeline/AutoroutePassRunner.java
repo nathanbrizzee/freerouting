@@ -180,6 +180,13 @@ final class AutoroutePassRunner {
 
           logRippedItems(currentItem, i, rippedItemList, rippedItemCosts);
           router.ripLedger.record(currentItem.getNetNumber(i), rippedItemList);
+          if (router.ripHistory != null) {
+            for (Item ripped : rippedItemList) {
+              if (!ripped.containsNet(currentItem.getNetNumber(i))) {
+                router.ripHistory.recordRipped(ripped);
+              }
+            }
+          }
           if (FRLogger.isTraceEnabled()) {
             logTraceRouteComparison(
                 currentItem, i, autorouterResult, rippedItemList, netItemsBefore);

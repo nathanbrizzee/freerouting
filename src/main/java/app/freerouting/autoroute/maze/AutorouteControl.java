@@ -60,6 +60,12 @@ public class AutorouteControl {
   public int ripupCosts;
   public int ripupPassNo;
 
+  /** Where earlier passes ripped, or null: moves and rips there cost more. */
+  public RipHistory ripHistory;
+
+  /** The history cost factor: a move or rip costs {@code 1 + factor * history} times as much. */
+  public double ripHistoryFactor;
+
   /** If true, the autoroute algorithm completes after the first drill. */
   public boolean isFanout;
 

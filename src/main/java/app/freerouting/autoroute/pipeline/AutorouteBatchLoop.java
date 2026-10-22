@@ -491,6 +491,9 @@ final class AutorouteBatchLoop {
           job.logInfo("Auto-routing pass #" + currentPass + ": " + work);
         }
         String rips = router.ripLedger.describe();
+        if (rips != null && router.ripHistory != null) {
+          rips = rips.substring(0, rips.length() - 1) + "; " + router.ripHistory.describe() + ".";
+        }
         if (rips != null) {
           job.logInfo("Auto-routing pass #" + currentPass + ": " + rips);
         }

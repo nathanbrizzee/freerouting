@@ -905,6 +905,10 @@ public class MazeSearchEngine {
                   * this.corridors.outsideFraction(
                       ctrl.netNumber, layer, fromMiddle, shapeEntryMiddle);
     }
+    if (ctrl.ripHistory != null) {
+      moveCost *=
+          1 + ctrl.ripHistoryFactor * ctrl.ripHistory.along(layer, fromMiddle, shapeEntryMiddle);
+    }
     double expansionValue = fromElement.expansionValue + addCosts + bendCostPenalty + moveCost;
     double sortingValue =
         expansionValue + this.destinationDistance.calculate(shapeEntryMiddle, layer);

@@ -172,6 +172,9 @@ final class MazeRipupResolver {
     }
     ripupCost /= detour;
     ripupCost *= fanoutViaCostFactor;
+    if (ctrl.ripHistory != null) {
+      ripupCost *= 1 + ctrl.ripHistoryFactor * ctrl.ripHistory.over(obstacleItem);
+    }
     int result = Math.max((int) ripupCost, 1);
     final int maxRipupCosts = Integer.MAX_VALUE / 100;
     result = Math.min(result, maxRipupCosts);

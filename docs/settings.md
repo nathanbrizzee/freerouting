@@ -223,6 +223,19 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       (with `session_routes_movable`) whose last connections are walled in by other nets' routes;
       on 11 boards after one maze pass it closed 4 more (L6 2, TX5823 1, Unifying 1) in seconds.
       With every route fixed it can lift nothing.
+    - **`rip_history_cost`**: History cost of rip-ups (negotiated congestion's history term). Each
+      item ripped in a pass counts in the cells of a coarse grid it covered (cells 4 trace pitches
+      wide); from the next pass a maze move through those cells, and a rip of an item in them,
+      costs `1 + factor * history` times as much, so connections that rip each other back and
+      forth look for another way. The rip-up line of the pass log adds how many cells have
+      history. Default `0` (off), in no profile. When it helps: a board whose later passes
+      route every connection they try but only by ripping another one, so the open count swings
+      between the same values (the rip-up line shows few rips and the search work line few
+      failures); EncoderBoard 2 -> 0 open and reworkctf 4 -> 0 at factor 1, L6 39 -> 25. It
+      hurts boards whose leftovers have no path, and dense boards still converging: on the
+      19-board set factor 1 gave 1151 open against 881, 1 clean board against 4, and boards that
+      finished early ran to the cap. Factor 2 was worse than 1; 0.5 and 0.25 gained less.
+      CLI: `--router.autorouter.rip_history_cost=1`.
     - **`fallback_race_strategies`**: The strategies a race starts, used in place of
       `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
       Default `direct-first,no-fanout,seed-1`. `none` in `fallback_strategies` turns the race off
