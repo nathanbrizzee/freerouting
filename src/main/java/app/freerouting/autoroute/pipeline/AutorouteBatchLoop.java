@@ -497,6 +497,10 @@ final class AutorouteBatchLoop {
         if (rips != null) {
           job.logInfo("Auto-routing pass #" + currentPass + ": " + rips);
         }
+        if (router.pinAccess != null) {
+          job.logInfo(
+              "Auto-routing pass #" + currentPass + ": " + router.pinAccess.describe() + ".");
+        }
       }
 
       DesignRulesChecker tempDrc = new DesignRulesChecker(router.board, null);

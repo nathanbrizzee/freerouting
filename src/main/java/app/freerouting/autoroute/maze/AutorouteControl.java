@@ -66,6 +66,12 @@ public class AutorouteControl {
   /** The history cost factor: a move or rip costs {@code 1 + factor * history} times as much. */
   public double ripHistoryFactor;
 
+  /** Exits held for unconnected pins, or null: a move across one of another net costs more. */
+  public PinAccess pinAccess;
+
+  /** A move costs {@code 1 + factor * count} times as much for the held exits it crosses. */
+  public double pinAccessFactor;
+
   /** If true, the autoroute algorithm completes after the first drill. */
   public boolean isFanout;
 

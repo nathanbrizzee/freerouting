@@ -4,6 +4,7 @@ import app.freerouting.autoroute.AutorouteAttemptResult;
 import app.freerouting.autoroute.AutorouteAttemptState;
 import app.freerouting.autoroute.BoardHistory;
 import app.freerouting.autoroute.maze.AutorouteControl;
+import app.freerouting.autoroute.maze.PinAccess;
 import app.freerouting.autoroute.maze.RipHistory;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ConductionArea;
@@ -96,6 +97,11 @@ public final class BatchAutorouter extends NamedAlgorithm {
 
   /** Where earlier passes ripped, when {@code rip_history_cost} is set; made on the first pass. */
   RipHistory ripHistory;
+
+  /**
+   * Exits held for unconnected pins when {@code pin_access_cost} is set; made on the first pass.
+   */
+  PinAccess pinAccess;
 
   private final AutoroutePassRunner passRunner;
   private final AutorouteBatchLoop batchLoop;
@@ -563,6 +569,12 @@ public final class BatchAutorouter extends NamedAlgorithm {
     if (this.ripHistory == null && ripHistoryFactor() > 0) {
       this.ripHistory = RipHistory.forBoard(this.board);
     }
+    if (pinAccessFactor() > 0) {
+      if (this.pinAccess == null) {
+        this.pinAccess = PinAccess.forBoard(this.board);
+      }
+      this.pinAccess.refresh();
+    }
     boolean result = passRunner.runSingleThread(passNo);
     if (this.ripHistory != null) {
       this.ripHistory.endPass();
@@ -577,11 +589,22 @@ public final class BatchAutorouter extends NamedAlgorithm {
     return factor != null && factor > 0 ? factor : 0;
   }
 
-  /** Lets a connection search pay for the rip history, when it is on. */
-  void applyRipHistory(AutorouteControl ctrl) {
+  /** The cost factor of {@code pin_access_cost}, 0 when off. */
+  double pinAccessFactor() {
+    Double factor =
+        this.settings.autorouter != null ? this.settings.autorouter.pinAccessCost : null;
+    return factor != null && factor > 0 ? factor : 0;
+  }
+
+  /** Lets a connection search pay for the rip history and held pin exits, when they are on. */
+  void applySearchCosts(AutorouteControl ctrl) {
     if (this.ripHistory != null) {
       ctrl.ripHistory = this.ripHistory;
       ctrl.ripHistoryFactor = ripHistoryFactor();
+    }
+    if (this.pinAccess != null) {
+      ctrl.pinAccess = this.pinAccess;
+      ctrl.pinAccessFactor = pinAccessFactor();
     }
   }
 

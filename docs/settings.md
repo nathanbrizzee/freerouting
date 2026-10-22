@@ -148,8 +148,8 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       Most of these route the board again from the start, so each one costs about as much as the
       default run. `seed-N` (N a positive integer) routes the input board again with the item order
       of every pass shuffled by `item_order_seed` N; a different order gives a different board.
-      `history` routes it again with `rip_history_cost=1`, so a race can keep its board where it
-      wins. When `history` helps: added to the `thorough` race
+      `history` routes it again with `rip_history_cost=1` and `pin-access` with
+      `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the `thorough` race
       (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
       (clean, 1 -> 0 open) and reworkctf (6 -> 3), but the 19-board set went from 1126 to 1196
       open at 24% more CPU, because a fourth attempt slows the others (lpa96 lost its clean
@@ -242,6 +242,21 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       19-board set factor 1 gave 1151 open against 881, 1 clean board against 4, and boards that
       finished early ran to the cap. Factor 2 was worse than 1; 0.5 and 0.25 gained less.
       CLI: `--router.autorouter.rip_history_cost=1`.
+    - **`pin_access_cost`**: Holds an exit for every single-layer pin that still needs one. At
+      the first pass each such pin gets one stub that leaves its pad without a clearance
+      violation, in the free direction nearest its net's closest other pin (at the net's trace
+      width, else at the pin's neck-down width). While the pin has no trace or via on it, a maze
+      move of another net that passes within a trace pitch of the stub costs `1 + factor * count`
+      times as much, so other nets route around the front of an unconnected pad instead of
+      closing it in. Each pass log adds a line with how many exits are still held. Default `0`
+      (off), in no profile; the race strategy `pin-access` runs it at factor 1. When it helps:
+      boards where pins stay unconnected into the routing passes, such as boards routed without
+      fanout, and pins the leftover report (`result_json`) shows as `closed` by other nets'
+      routes. With fanout on it holds little: fanout puts a trace on nearly every pin first
+      (Unifying: 4 of 667 exits held in pass 1, 9 in pass 2). On six boards whose open pins were
+      closed in by routes (2- and 6-minute caps, optimizer off, side by side) it gave 154 open
+      against 160, mixed (Unifying 9 -> 7, Doroid 4 -> 3, ddr5 6 -> 8, EncoderBoard 2 open
+      either way but no longer finished early). CLI: `--router.autorouter.pin_access_cost=1`.
     - **`fallback_race_strategies`**: The strategies a race starts, used in place of
       `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
       Default `direct-first,no-fanout,seed-1`. `none` in `fallback_strategies` turns the race off

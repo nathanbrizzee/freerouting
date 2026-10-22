@@ -144,6 +144,16 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Double ripHistoryCost;
 
   /**
+   * Pin access cost: every single-layer pin with something to connect to gets one exit stub that
+   * leaves its pad without a clearance violation, and while the pin has nothing on it a maze move
+   * of another net that passes within a trace pitch of the stub costs {@code 1 + factor * count}
+   * times as much. 0 turns it off.
+   */
+  @SerializedName("pin_access_cost")
+  @Schema(description = "Cost factor for crossing the held exit of an unconnected pin (0 = off)")
+  public Double pinAccessCost;
+
+  /**
    * Deterministic budget per connection in pass 1, in maze search steps, doubling each pass like
    * the time budget it replaces when set (100 s in pass 1). Unlike the time budget, the same board
    * stops at the same point on every run, whatever the machine load.

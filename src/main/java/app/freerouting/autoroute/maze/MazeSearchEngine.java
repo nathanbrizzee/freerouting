@@ -909,6 +909,12 @@ public class MazeSearchEngine {
       moveCost *=
           1 + ctrl.ripHistoryFactor * ctrl.ripHistory.along(layer, fromMiddle, shapeEntryMiddle);
     }
+    if (ctrl.pinAccess != null) {
+      moveCost *=
+          1
+              + ctrl.pinAccessFactor
+                  * ctrl.pinAccess.crossed(layer, ctrl.netNumber, fromMiddle, shapeEntryMiddle);
+    }
     double expansionValue = fromElement.expansionValue + addCosts + bendCostPenalty + moveCost;
     double sortingValue =
         expansionValue + this.destinationDistance.calculate(shapeEntryMiddle, layer);

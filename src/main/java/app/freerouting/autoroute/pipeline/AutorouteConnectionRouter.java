@@ -79,7 +79,7 @@ final class AutorouteConnectionRouter {
       // ripupCosts, so it stays deterministic.
       autorouteControl.ripupPassNo = ripupPassNo;
       autorouteControl.removeUnconnectedVias = router.isRemoveUnconnectedVias();
-      router.applyRipHistory(autorouteControl);
+      router.applySearchCosts(autorouteControl);
 
       Set<Item> unconnectedSet = item.getUnconnectedSet(routeNetNo);
       if (unconnectedSet.isEmpty()) {
@@ -277,7 +277,7 @@ final class AutorouteConnectionRouter {
     neckControl.ripupCosts = router.getStartRipupCosts() * ripupPassNo;
     neckControl.ripupPassNo = ripupPassNo;
     neckControl.removeUnconnectedVias = router.isRemoveUnconnectedVias();
-    router.applyRipHistory(neckControl);
+    router.applySearchCosts(neckControl);
     for (int i = 0; i < neckControl.layerCount; i++) {
       int compensation = neckControl.compensatedTraceHalfWidth[i] - neckControl.traceHalfWidth[i];
       neckControl.traceHalfWidth[i] = Math.min(neckControl.traceHalfWidth[i], neckHalfWidth);
