@@ -132,6 +132,21 @@ public class AutorouteControl {
   /** The minimal cost value of all cheap vias. */
   public double minCheapViaCost;
 
+  /**
+   * Extra cost per layer a via drills beyond its first two, as a fraction of {@link
+   * #minNormalViaCost} ({@code via_span_cost_factor}). 0 prices every via the same.
+   */
+  public double viaSpanCostFactor;
+
+  /** The extra cost of a via spanning {@code firstLayer} to {@code lastLayer}, 0 for two layers. */
+  public double viaSpanCost(int firstLayer, int lastLayer) {
+    int extraLayers = lastLayer - firstLayer - 1;
+    if (extraLayers <= 0 || viaSpanCostFactor <= 0) {
+      return 0;
+    }
+    return viaSpanCostFactor * minNormalViaCost * extraLayers;
+  }
+
   /** Creates a new instance of AutorouteControl for the input net. */
   public AutorouteControl(RoutingBoard board, int netNumber, RouterSettings settings) {
     this(board, settings, settings.getTraceCosts());
@@ -196,6 +211,10 @@ public class AutorouteControl {
       }
     }
     this.traceCosts = traceCosts;
+    viaSpanCostFactor =
+        settings.autorouter != null && settings.autorouter.viaSpanCostFactor != null
+            ? settings.autorouter.viaSpanCostFactor
+            : 0;
     attachSmdAllowed = false;
     viaLowerBound = 0;
     viaUpperBound = layerCount;

@@ -194,6 +194,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.fallbackStrategies = DEFAULT_FALLBACK_STRATEGIES;
     settings.autorouter.exploreFallbackStrategies = DEFAULT_EXPLORE_FALLBACK_STRATEGIES;
     settings.autorouter.smdNetViaCostFactor = DEFAULT_SMD_NET_VIA_COST_FACTOR;
+    settings.autorouter.viaSpanCostFactor = 0.0;
     settings.autorouter.residualRepairMaxOpen = 4;
     settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.fallbackThreads = DEFAULT_FALLBACK_THREADS;

@@ -334,7 +334,8 @@ final class MazeExpansionEngine {
         currentFirstLayer = fromLayer;
         currentLastLayer = toLayer;
       }
-      boolean maskFound = false;
+      // The shortest via that fits prices the layer change (via_span_cost_factor).
+      double spanCost = Double.MAX_VALUE;
       for (AutorouteControl.ViaMask currentViaInfo : ctrl.viaInfos) {
         if (currentFirstLayer >= currentViaInfo.fromLayer
             && currentLastLayer <= currentViaInfo.toLayer
@@ -345,12 +346,16 @@ final class MazeExpansionEngine {
                       || currentViaInfo.toLayer == ctrl.layerCount - 1 && smdAttachedOnSolderSide)
                   || currentViaInfo.attachSmdAllowed;
           if (maskOk) {
-            maskFound = true;
-            break;
+            spanCost =
+                Math.min(
+                    spanCost, ctrl.viaSpanCost(currentViaInfo.fromLayer, currentViaInfo.toLayer));
+            if (spanCost == 0) {
+              break;
+            }
           }
         }
       }
-      if (!maskFound) {
+      if (spanCost == Double.MAX_VALUE) {
         continue;
       }
       MazeSearchElement currentDrillLayerInfo =
@@ -359,7 +364,7 @@ final class MazeExpansionEngine {
         continue;
       }
       double expansionValue =
-          listElement.expansionValue + ctrl.addViaCosts[fromLayer].toLayer[toLayer];
+          listElement.expansionValue + ctrl.addViaCosts[fromLayer].toLayer[toLayer] + spanCost;
       FloatPoint shapeEntryMiddle = listElement.shapeEntry.a.middlePoint(listElement.shapeEntry.b);
       double sortingValue =
           expansionValue + search.destinationDistance.calculate(shapeEntryMiddle, toLayer);

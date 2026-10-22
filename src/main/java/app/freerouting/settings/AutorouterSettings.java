@@ -82,6 +82,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Double smdNetViaCostFactor;
 
   /**
+   * Extra cost per layer a via drills beyond its first two, as a fraction of the via cost, so that
+   * a microvia is cheaper than a through via and the search keeps the stack free where it can. 0
+   * (the default) prices every via the same, as before.
+   */
+  @SerializedName("via_span_cost_factor")
+  @Schema(description = "Extra via cost per layer drilled beyond two, as a via cost fraction")
+  public Double viaSpanCostFactor;
+
+  /**
    * Erik Gavriluk (freerouting.net): a board with at most this many open connections is continued
    * from its best routing before the other fallback attempts. {@code 0} disables that continuation.
    */

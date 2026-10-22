@@ -149,6 +149,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       `seed-1`); on PCBench as a whole the best of four item orders made 18 of 24 boards clean where
       the default order made 16. It costs CPU time for every seed, and on a board the default run
       already finishes it can take longer, because every attempt runs to its end.
+    - **`via_span_cost_factor`**: Extra cost for each layer a via drills beyond its first two, as a fraction of the via cost, so a microvia or a short buried via is cheaper than a through via and the search keeps the rest of the stack free. Default is `0`, which prices every via the same. Only matters on boards whose via rules include blind or buried vias.
     - **`fallback_work_ratio`**: The fallback stage may make at most this many times as many
       connection attempts as the default run made, summed over its attempts. The attempt that
       reaches the limit stops and keeps its best board, and no further attempt starts. Default
