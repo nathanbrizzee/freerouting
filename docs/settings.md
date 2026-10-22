@@ -354,11 +354,15 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   fanout neck to half the trace width. Equivalent CLI flag: `--router.min_trace_width_um=<um>`.
 - **`autorouter.pad_neck`**: A trace narrows to a pin's neck-down width near the pin, and that
   width is the pad's narrow side, so a pin whose neighbouring pads sit closer than the clearance
-  to a pad-wide trace can never be left. When `true`, the routing stage gives each such pin the
-  widest narrower neck (in 10% steps) that leaves the pad clear of pads, fixed copper, keepouts
-  and the board edge, never below `min_trace_width_um` or, when that is not set, half the net
-  class width. Only the stretch near the pin is necked. The log lists every planned neck (`Pad
-  necks:`) and, at the end, every one the routed board uses (`Pad neck used:`), for review
+  to a pad-wide trace can never be left. When `true`, the routing stage ends (after the fallback
+  and the grid finisher) with one more step for the connections still open: each pin at one of
+  them that is closed in like that gets the widest narrower neck (in 10% steps) that leaves the
+  pad clear of pads, fixed copper, keepouts and the board edge, never below `min_trace_width_um`
+  or, when that is not set, half the net class width, and a copy of the board is routed on. The
+  copy replaces the board only when it is better, so the step never makes the result worse, and
+  the earlier stages route without necks. Only the stretch near the pin is necked. The log lists
+  every planned neck (`Pad necks:`), the step's result (`Pad neck continuation:`) and, at the
+  end, every neck the routed board uses (`Pad neck used:`), for review
   against the current the net carries; KiCad does not flag them, since a net class width is not a
   design rule. Default `false`, in no profile. When it helps: pins in a row whose pad gap is
   just under the clearance, such as supply pins of a fine-pitch QFP with a wider supply class. On

@@ -1,21 +1,27 @@
 package app.freerouting.autoroute.pipeline;
 
+import app.freerouting.autoroute.PadNecks;
 import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.facade.RoutingBoard;
+import app.freerouting.board.model.items.Pin;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.RoutingStatus;
 import app.freerouting.core.StoppableThread;
 import app.freerouting.core.results.RoutingResultManifest;
+import app.freerouting.drc.AirLine;
 import app.freerouting.drc.ClearanceBaseline;
+import app.freerouting.drc.DesignRulesChecker;
 import app.freerouting.settings.RouterSettings;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,6 +41,9 @@ final class RoutingFallbackRunner {
   private final BatchAutorouter listenerSource;
 
   /** Connection attempts the fallback stage has left, or a negative value for no limit. */
+  /** Planned pad necks the log names at most. */
+  private static final int PAD_NECKS_LOGGED = 30;
+
   private long workBudgetLeft = -1;
 
   RoutingFallbackRunner(BatchAutorouter listenerSource) {
@@ -644,6 +653,67 @@ final class RoutingFallbackRunner {
       to.resultPhaseMetrics.fallback = new RoutingResultManifest.FallbackDetail();
     }
     to.resultPhaseMetrics.fallback.attempts.addAll(from.resultPhaseMetrics.fallback.attempts);
+  }
+
+  /**
+   * The last step for the connections still open ({@code pad_neck}): on a copy of the final board,
+   * the pins at open connections that the design closes in at their pad width get a narrower neck
+   * ({@link PadNecks}), and the copy is routed on; it replaces the board only when the usual rule
+   * says it is better, so the step never makes the result worse. Earlier stages route without the
+   * necks, so the necks change only what is left.
+   */
+  public BatchAutorouter continueWithPadNecks(RoutingJob job, BatchAutorouter current) {
+    RoutingFallback.Outcome incumbent =
+        RoutingFallback.Outcome.of("final", job.board, job.routerSettings);
+    if (incumbent.isCompleteAndClean() || stopped(job)) {
+      return current;
+    }
+    RoutingBoard copy = job.board.deepCopy();
+    Set<Pin> ends = new HashSet<>();
+    for (AirLine airline : new DesignRulesChecker(copy, null).getAllAirlines()) {
+      if (airline.fromItem instanceof Pin pin) {
+        ends.add(pin);
+      }
+      if (airline.toItem instanceof Pin pin) {
+        ends.add(pin);
+      }
+    }
+    List<PadNecks.Neck> necks = PadNecks.plan(copy, ends);
+    if (necks.isEmpty()) {
+      job.logInfo(
+          "Pad necks: none of the "
+              + ends.size()
+              + " pins at open connections needs a neck below its pad width.");
+      return current;
+    }
+    job.logInfo(PadNecks.describe(necks, PAD_NECKS_LOGGED));
+    Attempt best =
+        new Attempt(
+            incumbent,
+            job.board,
+            current,
+            RoutingFallback.captureClearance(job.board, incumbent.violations));
+    RouterSettings settings = job.routerSettings.clone();
+    settings.setFanoutEnabled(false);
+    this.workBudgetLeft = -1;
+    Attempt attempt = runPrepared(job, copy, settings, true, "pad-neck");
+    if (attempt == null) {
+      job.board = best.board;
+      return current;
+    }
+    boolean kept = replaces(attempt, best);
+    job.logInfo(
+        "Pad neck continuation: "
+            + attempt.outcome
+            + " after "
+            + RoutingFallback.describe(attempt.router.lastStopReason)
+            + (kept ? "; kept." : "; not better, the board before it is kept."));
+    if (kept) {
+      job.board = attempt.board;
+      return attempt.router;
+    }
+    job.board = best.board;
+    return current;
   }
 
   private Attempt runContinuations(

@@ -19,6 +19,7 @@ import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetClass;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -65,8 +66,18 @@ public final class PadNecks {
    * returns them sorted by pin name. Pins needing a neck below the floor keep their pad width.
    */
   public static List<Neck> plan(BasicBoard board) {
+    return plan(board, board.getSmdPins());
+  }
+
+  /** As {@link #plan(BasicBoard)}, for the SMD pins among candidates only. */
+  public static List<Neck> plan(BasicBoard board, Collection<Pin> candidates) {
     List<Neck> result = new ArrayList<>();
-    List<Pin> pins = new ArrayList<>(board.getSmdPins());
+    List<Pin> pins = new ArrayList<>();
+    for (Pin pin : candidates) {
+      if (pin.firstLayer() == pin.lastLayer()) {
+        pins.add(pin);
+      }
+    }
     pins.sort(Comparator.comparingInt(Item::getId));
     double toMm =
         Unit.scale(1.0, board.communication.unit, Unit.MM)
@@ -120,6 +131,23 @@ public final class PadNecks {
     }
     result.sort(Comparator.comparing(Neck::pin));
     return result;
+  }
+
+  /** One log line naming at most limit of the planned necks. */
+  public static String describe(List<Neck> necks, int limit) {
+    StringBuilder line =
+        new StringBuilder(
+            "Pad necks: "
+                + necks.size()
+                + " pin(s) at open connections that the design closes in at their pad width may"
+                + " neck narrower near the pad: ");
+    for (int i = 0; i < Math.min(limit, necks.size()); i++) {
+      line.append(i > 0 ? "; " : "").append(necks.get(i));
+    }
+    if (necks.size() > limit) {
+      line.append("; and ").append(necks.size() - limit).append(" more");
+    }
+    return line.append('.').toString();
   }
 
   /**

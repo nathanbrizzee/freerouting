@@ -1,6 +1,5 @@
 package app.freerouting.autoroute.pipeline;
 
-import app.freerouting.autoroute.PadNecks;
 import app.freerouting.autoroute.events.BoardUpdatedEventListener;
 import app.freerouting.autoroute.events.TaskStateChangedEventListener;
 import app.freerouting.autoroute.plan.OracleCorridors;
@@ -12,9 +11,6 @@ import java.util.function.Function;
 
 /** Sequences the shared fanout, autoroute, and optimization stages for a routing job. */
 public final class RoutingPipeline {
-
-  /** Planned pad necks the log names at most. */
-  private static final int PAD_NECKS_LOGGED = 30;
 
   /** Receives lifecycle callbacks between pipeline stages. */
   public interface StageListener {
@@ -110,6 +106,7 @@ public final class RoutingPipeline {
       this.job.stage = RoutingStage.ROUTING;
     }
 
+    RoutingFallbackRunner fallback = null;
     if (routerEnabled && !this.job.thread.isStopAutoRouterRequested()) {
       List<RoutingFallback.Strategy> strategies =
           RoutingFallback.parseForStage(
@@ -121,10 +118,6 @@ public final class RoutingPipeline {
                           + "' ignored; known strategies: "
                           + knownStrategyNames()
                           + "."));
-      if (this.job.board != null
-          && Boolean.TRUE.equals(this.job.routerSettings.autorouter.padNeck)) {
-        logPadNecks(PadNecks.plan(this.job.board));
-      }
       byte[] input = null;
       if (!strategies.isEmpty() && this.job.board != null) {
         try {
@@ -142,7 +135,7 @@ public final class RoutingPipeline {
         RoutingFallbackRunner.cancelRace(this.job, race, "the default run failed");
         throw e;
       }
-      RoutingFallbackRunner fallback = new RoutingFallbackRunner(this.autorouter);
+      fallback = new RoutingFallbackRunner(this.autorouter);
       if (input != null) {
         this.autorouter = fallback.run(this.job, this.autorouter, strategies, input, race);
       }
@@ -168,6 +161,15 @@ public final class RoutingPipeline {
       GridFinisher.run(this.job.board, this.job.routerSettings, this.job.thread);
     }
 
+    // Last, for the connections still open: necks below the pad width at their pins.
+    if (fallback != null
+        && this.job.board != null
+        && Boolean.TRUE.equals(this.job.routerSettings.autorouter.padNeck)
+        && !this.job.thread.isStopRequested()
+        && this.job.board.routingLedger().incompleteCount() > 0) {
+      this.autorouter = fallback.continueWithPadNecks(this.job, this.autorouter);
+    }
+
     this.job.board.finishAutoroute();
     OracleCorridors.writeIfRequested(this.job.board, this.job::logInfo);
     for (StageListener listener : this.stageListeners) {
@@ -188,27 +190,6 @@ public final class RoutingPipeline {
     for (StageListener listener : this.stageListeners) {
       listener.afterOptimization(this.optimizer);
     }
-  }
-
-  /** Logs the planned pad necks, at most {@link #PAD_NECKS_LOGGED} by name. */
-  private void logPadNecks(List<PadNecks.Neck> necks) {
-    if (necks.isEmpty()) {
-      this.job.logInfo("Pad necks: no pin needs a neck below its pad width.");
-      return;
-    }
-    StringBuilder line =
-        new StringBuilder(
-            "Pad necks: "
-                + necks.size()
-                + " pin(s) the design closes in at their pad width may neck narrower near the"
-                + " pad: ");
-    for (int i = 0; i < Math.min(PAD_NECKS_LOGGED, necks.size()); i++) {
-      line.append(i > 0 ? "; " : "").append(necks.get(i));
-    }
-    if (necks.size() > PAD_NECKS_LOGGED) {
-      line.append("; and ").append(necks.size() - PAD_NECKS_LOGGED).append(" more");
-    }
-    this.job.logInfo(line + ".");
   }
 
   private static String knownStrategyNames() {
