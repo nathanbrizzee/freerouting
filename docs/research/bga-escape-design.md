@@ -197,8 +197,12 @@ pins escaped, open 461 -> 187 with 0 violations.
 Batch run (2026-10-22, 19 boards, roadmap progress table): with the gates off nothing changes. With all gates on
 the open total drops 1256 -> 835 and LimeSDR, reworkctf and the blind logicbone variant gain most, but Starling,
 hard6f, DoroidOscillo and Encoder regress. The bisect puts the regressions on steps 1 and 2, which today act on
-every SMD pin of every component; without them the regressions go away and so do the BGA gains. Next: limit steps
-1 and 2 to balls of grids the planner detected (4.2), then the direction matching per layer (4.4).
+every SMD pin of every component; without them the regressions go away and so do the BGA gains. Steps 1 and 2
+can now each be limited to balls of grids the planner detected (`min_escape_by_pitch_grid_only`,
+`protect_escapes_grid_only`, 24c961ab9 and e5da1098e). With both limited, the 17 boards that finish their first
+pass total 180 open, against 226 with the gates on every pin and 305 before the batch, at less CPU; the one loss is
+LimeSDR, whose fanout passes oscillate unless every pin is protected (roadmap progress table). Next: the direction
+matching per layer (4.4).
 
 logicbone does not finish its first pass within the 6-minute cap, so its open count measures how far that pass got
 and moves with machine load; compare it only between runs at the same load, or with a longer cap.
