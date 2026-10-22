@@ -190,16 +190,10 @@ public final class OpenConnections {
     if (open.isEmpty()) {
       return null;
     }
-    int design = 0;
-    int closedIn = 0;
-    for (Entry entry : open) {
-      if (closedByDesign(entry.fromExit) || closedByDesign(entry.toExit)) {
-        design++;
-      } else if (closed(entry.fromExit) || closed(entry.toExit)) {
-        closedIn++;
-      }
-    }
-    int between = open.size() - design - closedIn;
+    int[] counts = verdictCounts(open);
+    int design = counts[0];
+    int closedIn = counts[1];
+    int between = counts[2];
     return String.format(
         Locale.ROOT,
         "%d connection%s open: %d at a pin the design closes in, so no route reaches it as"
@@ -211,6 +205,23 @@ public final class OpenConnections {
         design,
         closedIn,
         between);
+  }
+
+  /**
+   * The verdict's three counts: open connections at a pin the design closes in, at a pin routes or
+   * parts close in, and the rest, held by the space between their ends.
+   */
+  public static int[] verdictCounts(List<Entry> open) {
+    int design = 0;
+    int closedIn = 0;
+    for (Entry entry : open) {
+      if (closedByDesign(entry.fromExit) || closedByDesign(entry.toExit)) {
+        design++;
+      } else if (closed(entry.fromExit) || closed(entry.toExit)) {
+        closedIn++;
+      }
+    }
+    return new int[] {design, closedIn, open.size() - design - closedIn};
   }
 
   private static boolean closed(Exit exit) {

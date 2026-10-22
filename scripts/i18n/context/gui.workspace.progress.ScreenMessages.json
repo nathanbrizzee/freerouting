@@ -131,6 +131,31 @@
     ],
     "related_keys": [
       "autoroute",
+      "autoroute_verdict_message",
+      "autorouter_started"
+    ],
+    "ui_role": "message"
+  },
+  "autoroute_verdict_message": {
+    "bundle_desc": "GUI (graphical user interface)",
+    "code_references": [
+      "app.freerouting.gui.workspace.progress.GuiRoutingJobWorker"
+    ],
+    "english_hash": "5a0fde96fbfce7a8aefbbf48af2cd4fd920af56f701eb7a402b673eab0fce024",
+    "grammatical_role": "fragment",
+    "has_placeholders": true,
+    "is_html": false,
+    "java_class": "app.freerouting.gui.workspace.progress.ScreenMessages",
+    "max_length_hint": null,
+    "needs_retranslation": false,
+    "placeholders": [
+      "{{closed_in}}",
+      "{{crowded}}",
+      "{{design_blocked}}"
+    ],
+    "related_keys": [
+      "autoroute",
+      "autoroute_end_message",
       "autorouter_started"
     ],
     "ui_role": "message"

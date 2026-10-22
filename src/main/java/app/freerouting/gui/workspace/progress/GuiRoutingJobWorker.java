@@ -17,6 +17,7 @@ import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.scoring.BoardStatistics;
+import app.freerouting.drc.OpenConnections;
 import app.freerouting.geometry.planar.FloatLine;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.gui.workspace.ports.BoardReplacement;
@@ -671,6 +672,17 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
                 ? terminalText.getText("interrupted")
                 : terminalText.getText("completed"),
             Integer.toString(incompleteCount));
+    if (incompleteCount > 0 && routingJob.board != null) {
+      // What holds the rest, so the person watching knows whether to move parts or change rules.
+      int[] counts = OpenConnections.verdictCounts(OpenConnections.of(routingJob.board));
+      terminalStatus +=
+          " "
+              + terminalText.getText(
+                  "autoroute_verdict_message",
+                  Integer.toString(counts[0]),
+                  Integer.toString(counts[1]),
+                  Integer.toString(counts[2]));
+    }
     sessionPort.finishRoute(
         new RouteCompletion(
             generation, this.isStopRequested(), terminalStatus, incompleteCount, true, true));
