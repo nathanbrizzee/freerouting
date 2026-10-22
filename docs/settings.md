@@ -249,7 +249,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       pass logs `Auto-routing pass #N: Search work: ...` with the searches, the steps, how many
       stopped at the limit, the steps the routed connections needed, and how many searches did not
       route and what they cost, which shows what budget a board needs and how much of a pass goes
-      into searches that fail. CLI: `--router.autorouter.max_search_steps_per_connection=<steps>`.
+      into searches that fail. A second line, `Auto-routing pass #N: Rip-up: ...`, counts the
+      other nets' items the pass ripped and the net pairs that have ripped each other back and
+      forth so far. CLI: `--router.autorouter.max_search_steps_per_connection=<steps>`.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
     - **`ignore_net_classes`**: Net class names the autorouter should skip.
     - **`max_threads`**: Canonical CLI is `--router.autorouter.max_threads`. The autorouter pass

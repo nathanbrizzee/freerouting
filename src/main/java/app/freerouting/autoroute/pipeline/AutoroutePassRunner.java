@@ -179,6 +179,7 @@ final class AutoroutePassRunner {
               System.nanoTime() - itemStart);
 
           logRippedItems(currentItem, i, rippedItemList, rippedItemCosts);
+          router.ripLedger.record(currentItem.getNetNumber(i), rippedItemList);
           if (FRLogger.isTraceEnabled()) {
             logTraceRouteComparison(
                 currentItem, i, autorouterResult, rippedItemList, netItemsBefore);

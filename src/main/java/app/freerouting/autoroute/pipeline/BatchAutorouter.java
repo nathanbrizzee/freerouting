@@ -90,6 +90,9 @@ public final class BatchAutorouter extends NamedAlgorithm {
   /** Search steps of the current pass, for the pass log. */
   final SearchWork passSearchWork = new SearchWork();
 
+  /** Rip-ups of the current pass and the net pairs that ripped each other over the run. */
+  final RipLedger ripLedger = new RipLedger();
+
   private final AutoroutePassRunner passRunner;
   private final AutorouteBatchLoop batchLoop;
   protected RoutingJob job;
@@ -552,6 +555,7 @@ public final class BatchAutorouter extends NamedAlgorithm {
    */
   boolean autoroutePass(int passNo) {
     this.passSearchWork.reset();
+    this.ripLedger.startPass();
     return passRunner.runSingleThread(passNo);
   }
 
