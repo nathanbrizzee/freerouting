@@ -247,9 +247,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       a connection at the same point on every run and machine, which a time limit does not under
       load. A negative value restores the time limit (100 s in pass 1, doubling each pass). Each
       pass logs `Auto-routing pass #N: Search work: ...` with the searches, the steps, how many
-      stopped at the limit, the steps the routed connections needed, and how many searches did not
-      route and what they cost, which shows what budget a board needs and how much of a pass goes
-      into searches that fail. A second line, `Auto-routing pass #N: Rip-up: ...`, counts the
+      stopped at the limit, the steps the routed connections needed, how many searches did not
+      route and what they cost, and how many items were already connected when their turn came,
+      which shows what budget a board needs and how much of a pass goes into searches that fail. A second line, `Auto-routing pass #N: Rip-up: ...`, counts the
       other nets' items the pass ripped and the net pairs that have ripped each other back and
       forth so far. CLI: `--router.autorouter.max_search_steps_per_connection=<steps>`.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
