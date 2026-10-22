@@ -10,6 +10,7 @@ import app.freerouting.gui.workspace.GuiBoardManager;
 import app.freerouting.gui.workspace.WorkspaceSettings;
 import app.freerouting.gui.workspace.session.EditorEvent;
 import app.freerouting.gui.workspace.session.EditorStateHandle;
+import app.freerouting.gui.workspace.session.EditorStateKind;
 import java.awt.geom.Point2D;
 import java.util.Set;
 
@@ -38,7 +39,9 @@ public final class GuiBoardInteractionController {
   }
 
   public void leftButtonClicked(Point2D point) {
-    if (manager.isBoardReadOnly()) {
+    // While a run is going a click stops it, except while dragging a region to zoom to: a click
+    // without a drag there only leaves the zoom unchanged.
+    if (manager.isBoardReadOnly() && !isZoomRegionState()) {
       manager.stopAutorouterAndRouteOptimizer();
       return;
     }
@@ -326,6 +329,12 @@ public final class GuiBoardInteractionController {
           .getPanel()
           .moveMouse(manager.getGraphicsContext().coordinateTransform.boardToScreen(toLocation));
     }
+  }
+
+  private boolean isZoomRegionState() {
+    return stateController() != null
+        && stateController().currentState() != null
+        && stateController().currentState().kind() == EditorStateKind.ZOOM;
   }
 
   private boolean isReadOnlyInspectedState() {
