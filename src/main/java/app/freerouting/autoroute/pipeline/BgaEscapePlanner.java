@@ -293,6 +293,15 @@ final class BgaEscapePlanner {
     int noVia = 0;
     double unitsPerMm = board.communication.getResolution(Unit.UM) * 1000.0;
     Map<Integer, Integer> gridByRing = new TreeMap<>();
+    Map<Integer, Integer> gridByLayer = new TreeMap<>();
+    int[] targetLayer =
+        candidates.isEmpty()
+            ? new int[0]
+            : assignLayers(
+                board,
+                grid,
+                candidates,
+                new AutorouteControl(board, candidates.get(0).pin().getNetNumber(0), settings));
     for (int i = 0; i < candidates.size(); i++) {
       Ball ball = candidates.get(i);
       Pin pin = ball.pin();
@@ -300,7 +309,8 @@ final class BgaEscapePlanner {
       if (!PlannedFanout.needsEscape(pin, net, grid.layer())) {
         continue;
       }
-      if (ball.ring() == 0 && !isPlaneNet(board, net)) {
+      Set<Integer> planeLayers = planeLayers(board, net);
+      if (ball.ring() == 0 && planeLayers.isEmpty()) {
         continue; // keeps its reservation, routes on the surface
       }
       need++;
@@ -314,6 +324,7 @@ final class BgaEscapePlanner {
         noVia++;
         continue;
       }
+      preferVia(vias, grid.layer(), planeLayers.isEmpty() ? targetLayer[i] : -1, planeLayers);
       // The matched gap first; if copper already there refuses it, any free gap of the ball.
       List<Long> gaps = new ArrayList<>();
       gaps.add(assigned[i]);
@@ -340,6 +351,11 @@ final class BgaEscapePlanner {
               ctrl.traceHalfWidth[grid.layer()],
               ctrl.traceClearanceClassIndex)) {
             inserted = true;
+            int farLayer =
+                via.getPadstack().fromLayer() == grid.layer()
+                    ? via.getPadstack().toLayer()
+                    : via.getPadstack().fromLayer();
+            gridByLayer.merge(farLayer, 1, Integer::sum);
             break;
           }
         }
@@ -373,12 +389,136 @@ final class BgaEscapePlanner {
             + placed
             + " placed by ring "
             + gridByRing
+            + " and by via end layer "
+            + gridByLayer
             + ", "
             + noRoom
             + " without room, "
             + noVia
             + " without a usable via.");
     return new int[] {need, placed, noRoom, noVia};
+  }
+
+  /**
+   * The inner layer each ball should escape on when the rule offers blind or buried vias, or -1 for
+   * no preference (the smallest via). Rings are filled from the outside in, ring 1 on the layer
+   * nearest the pads, and a ring moves one layer deeper when the layer's channels are full: a
+   * channel between two dog-bone vias carries {@code floor((pitch - via - clearance) / (width +
+   * clearance))} traces, and the part has one channel per gap column along its perimeter.
+   */
+  static int[] assignLayers(
+      RoutingBoard board, Grid grid, List<Ball> candidates, AutorouteControl ctrl) {
+    int[] target = new int[candidates.size()];
+    Arrays.fill(target, -1);
+    int padLayer = grid.layer();
+    int layerCount = board.getLayerCount();
+    List<ViaInfo> vias = viasSmallestFirst(ctrl.viaRule, padLayer);
+    boolean partialSpan = false;
+    for (ViaInfo via : vias) {
+      if (via.getPadstack().toLayer() - via.getPadstack().fromLayer() < layerCount - 1) {
+        partialSpan = true;
+      }
+    }
+    if (!partialSpan) {
+      return target;
+    }
+    int direction = padLayer == 0 ? 1 : -1;
+    int channels = 2 * (grid.cols() - 1) + 2 * (grid.rows() - 1);
+    List<Integer> layers = new ArrayList<>();
+    List<Integer> capacity = new ArrayList<>();
+    for (int layer = padLayer + direction; layer >= 0 && layer < layerCount; layer += direction) {
+      if (!ctrl.layerActive[layer]) {
+        continue;
+      }
+      ViaInfo via = shortestViaTo(vias, padLayer, layer);
+      if (via == null) {
+        continue;
+      }
+      int clearance =
+          board.rules.clearanceMatrix.getValue(
+              ctrl.traceClearanceClassIndex, via.getClearanceClassIndex(), layer, false);
+      double width = 2.0 * ctrl.traceHalfWidth[layer];
+      int perChannel =
+          (int) Math.floor((grid.pitch() - diameter(via, layer) - clearance) / (width + clearance));
+      if (perChannel <= 0) {
+        continue;
+      }
+      layers.add(layer);
+      capacity.add(channels * perChannel);
+    }
+    if (layers.isEmpty()) {
+      return target;
+    }
+    Integer[] order = new Integer[candidates.size()];
+    for (int i = 0; i < order.length; i++) {
+      order[i] = i;
+    }
+    Arrays.sort(
+        order,
+        Comparator.<Integer>comparingInt(i -> candidates.get(i).ring())
+            .thenComparingInt(i -> candidates.get(i).pin().pinIndex));
+    int layerIndex = 0;
+    int left = capacity.get(0);
+    for (int i : order) {
+      if (candidates.get(i).ring() == 0) {
+        continue;
+      }
+      while (left == 0 && layerIndex < layers.size() - 1) {
+        layerIndex++;
+        left = capacity.get(layerIndex);
+      }
+      if (left == 0) {
+        break;
+      }
+      target[i] = layers.get(layerIndex);
+      left--;
+    }
+    return target;
+  }
+
+  /** The via of the list covering both layers with the shortest span, or null. */
+  static ViaInfo shortestViaTo(List<ViaInfo> vias, int padLayer, int layer) {
+    ViaInfo best = null;
+    int bestSpan = Integer.MAX_VALUE;
+    for (ViaInfo via : vias) {
+      Padstack padstack = via.getPadstack();
+      if (padstack.fromLayer() <= Math.min(padLayer, layer)
+          && padstack.toLayer() >= Math.max(padLayer, layer)) {
+        int span = padstack.toLayer() - padstack.fromLayer();
+        if (span < bestSpan) {
+          bestSpan = span;
+          best = via;
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Moves the via to try first to the front: the shortest via to the target layer, or for a plane
+   * net the shortest via that reaches one of its plane layers.
+   */
+  static void preferVia(
+      List<ViaInfo> vias, int padLayer, int targetLayer, Set<Integer> planeLayers) {
+    ViaInfo preferred = null;
+    if (!planeLayers.isEmpty()) {
+      int bestSpan = Integer.MAX_VALUE;
+      for (int layer : planeLayers) {
+        ViaInfo via = shortestViaTo(vias, padLayer, layer);
+        if (via != null) {
+          int span = via.getPadstack().toLayer() - via.getPadstack().fromLayer();
+          if (span < bestSpan) {
+            bestSpan = span;
+            preferred = via;
+          }
+        }
+      }
+    } else if (targetLayer >= 0) {
+      preferred = shortestViaTo(vias, padLayer, targetLayer);
+    }
+    if (preferred != null && vias.remove(preferred)) {
+      vias.add(0, preferred);
+    }
   }
 
   /** The four diagonal gaps around a ball, the one pointing away from the part's centre first. */
@@ -457,13 +597,14 @@ final class BgaEscapePlanner {
         : 0;
   }
 
-  /** A net with a copper area (plane) to connect to on some layer. */
-  static boolean isPlaneNet(RoutingBoard board, int net) {
+  /** The layers on which the net has a copper area (plane) to connect to; empty for a signal. */
+  static Set<Integer> planeLayers(RoutingBoard board, int net) {
+    Set<Integer> layers = new java.util.TreeSet<>();
     for (Item item : board.getConnectableItems(net)) {
-      if (item instanceof ConductionArea) {
-        return true;
+      if (item instanceof ConductionArea area) {
+        layers.add(area.getLayer());
       }
     }
-    return false;
+    return layers;
   }
 }

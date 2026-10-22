@@ -11,10 +11,11 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * A two-layer test board with a square grid of round SMD pads (component U1, pins numbered row by
- * row from 1) whose channels are too narrow for a trace, each wired to a through-hole pin of a
- * connector J1 placed well away. Pad 400 um, via 450 um, trace 250 um, clearance 100 um, so a via
- * fits only in the diagonal gap between four pads (pitch x 0.707 >= 200 + 100 + 225).
+ * A test board with a square grid of round SMD pads (component U1, pins numbered row by row from 1)
+ * whose channels are too narrow for a trace, each wired to a through-hole pin of a connector J1
+ * placed well away. Pad 400 um, via 450 um, clearance 100 um, trace 250 um unless given, so a via
+ * fits only in the diagonal gap between four pads (pitch x 0.707 >= 200 + 100 + 225). Two layers
+ * unless given; extra blind vias are named by their layer span.
  */
 final class GridBoard {
 
@@ -24,6 +25,19 @@ final class GridBoard {
   static final int UNITS_PER_UM = 10;
 
   static String dsn(int grid, int pitchUm) {
+    return dsn(grid, pitchUm, 2, 250, new int[0][]);
+  }
+
+  /**
+   * The board with {@code layerCount} signal layers (named top, L1 ... and bottom), traces of
+   * {@code widthUm}, and extra blind via padstacks for each {first, last} layer pair in {@code
+   * blindSpans}, named VB first_last.
+   */
+  static String dsn(int grid, int pitchUm, int layerCount, int widthUm, int[][] blindSpans) {
+    String[] layer = new String[layerCount];
+    for (int i = 0; i < layerCount; i++) {
+      layer[i] = i == 0 ? "top" : i == layerCount - 1 ? "bottom" : "L" + i;
+    }
     StringBuilder image = new StringBuilder("(image BGA");
     StringBuilder target = new StringBuilder("(image J");
     StringBuilder nets = new StringBuilder();
@@ -60,9 +74,38 @@ final class GridBoard {
     }
     image.append(')');
     target.append(')');
+    StringBuilder layers = new StringBuilder();
+    for (String name : layer) {
+      layers.append("(layer ").append(name).append(" (type signal)) ");
+    }
+    StringBuilder padstacks = new StringBuilder();
+    padstacks.append("    (padstack T");
+    for (String name : layer) {
+      padstacks.append(" (shape (circle ").append(name).append(" 600))");
+    }
+    padstacks.append(" (attach off))\n    (padstack V");
+    for (String name : layer) {
+      padstacks.append(" (shape (circle ").append(name).append(" 450))");
+    }
+    padstacks.append(" (attach off))\n");
+    StringBuilder viaNames = new StringBuilder("V");
+    for (int[] span : blindSpans) {
+      String name = "VB" + span[0] + "_" + span[1];
+      viaNames.append(' ').append(name);
+      padstacks.append("    (padstack ").append(name);
+      for (int i = span[0]; i <= span[1]; i++) {
+        padstacks.append(" (shape (circle ").append(layer[i]).append(" 450))");
+      }
+      padstacks.append(" (attach off))\n");
+    }
     return "(pcb grid (resolution um 10) (unit um)\n"
-        + "  (structure (layer top (type signal)) (layer bottom (type signal))\n"
-        + "    (boundary (rect pcb 0 0 40000 40000)) (via V) (rule (width 250) (clearance 100)))\n"
+        + "  (structure "
+        + layers
+        + "\n    (boundary (rect pcb 0 0 40000 40000)) (via "
+        + viaNames
+        + ") (rule (width "
+        + widthUm
+        + ") (clearance 100)))\n"
         + "  (placement (component BGA (place U1 10000 10000 front 0))\n"
         + "             (component J (place J1 25000 25000 front 0)))\n"
         + "  (library "
@@ -70,20 +113,20 @@ final class GridBoard {
         + ' '
         + target
         + "\n    (padstack P (shape (circle top 400)) (attach off))\n"
-        + "    (padstack T (shape (circle top 600)) (shape (circle bottom 600)) (attach off))\n"
-        + "    (padstack V (shape (circle top 450)) (shape (circle bottom 450)) (attach off)))\n"
-        + "  (network"
+        + padstacks
+        + "  )\n  (network"
         + nets
         + "))\n";
   }
 
   static RoutingBoard board(int grid, int pitchUm) {
+    return board(dsn(grid, pitchUm));
+  }
+
+  static RoutingBoard board(String dsn) {
     BoardReadResult result =
         DsnReader.readBoard(
-            new ByteArrayInputStream(dsn(grid, pitchUm).getBytes(StandardCharsets.UTF_8)),
-            null,
-            null,
-            "grid");
+            new ByteArrayInputStream(dsn.getBytes(StandardCharsets.UTF_8)), null, null, "grid");
     assertInstanceOf(BoardReadResult.Success.class, result);
     return (RoutingBoard) ((BoardReadResult.Success) result).board();
   }
