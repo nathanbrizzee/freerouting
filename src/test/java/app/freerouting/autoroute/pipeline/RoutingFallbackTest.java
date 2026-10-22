@@ -82,6 +82,15 @@ class RoutingFallbackTest {
   }
 
   @Test
+  void historyStrategySetsTheRipHistoryCost() {
+    RouterSettings settings = new DefaultSettings().getSettings();
+    RouterSettings copy = settings.clone();
+    RoutingFallback.find("History").apply(copy);
+    assertEquals(1.0, copy.autorouter.ripHistoryCost);
+    assertEquals(0.0, settings.autorouter.ripHistoryCost);
+  }
+
+  @Test
   void directFirstAndOpenEscapeChangeACloneOnly() {
     RouterSettings defaults = new DefaultSettings().getSettings();
     RouterSettings directFirst = defaults.clone();

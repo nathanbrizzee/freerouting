@@ -94,6 +94,8 @@ public final class RoutingFallback {
               false),
           new Strategy(
               "no-fanout", true, settings -> settings.setFanoutEnabled(false), false, false),
+          new Strategy(
+              "history", false, settings -> settings.autorouter.ripHistoryCost = 1.0, false, false),
           new Strategy("continue", false, settings -> {}, false, false),
           new Strategy(
               "continue-no-neck", false, settings -> settings.setNeckWidthUm(0), false, false));

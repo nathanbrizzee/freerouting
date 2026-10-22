@@ -148,6 +148,12 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       Most of these route the board again from the start, so each one costs about as much as the
       default run. `seed-N` (N a positive integer) routes the input board again with the item order
       of every pass shuffled by `item_order_seed` N; a different order gives a different board.
+      `history` routes it again with `rip_history_cost=1`, so a race can keep its board where it
+      wins. When `history` helps: added to the `thorough` race
+      (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
+      (clean, 1 -> 0 open) and reworkctf (6 -> 3), but the 19-board set went from 1126 to 1196
+      open at 24% more CPU, because a fourth attempt slows the others (lpa96 lost its clean
+      finish); it is not in the default race list.
       When it helps: several seeds side by side (`fallback_threads=0`, `fallback_work_ratio=0`)
       give the best of several tries for about the wall time of one. On eight hard PCBench boards
       (8-minute cap, optimizer off), adding `seed-1,seed-2,seed-3` to the default list in parallel
