@@ -515,9 +515,22 @@ relax a rule.
 
 Each step is a commit, measured against the baseline. Benchmarks use the default settings, so fallbacks are on.
 
-**Benchmark policy.**
-- **Every commit:** the unit and fixture tests that cover the change, plus the quick routing test.
-- **Milestones only:** the board set (Issue070, a few fixture boards, the user's stage DSNs when available).
+**Benchmark policy (revised 2026-10-21).** One small change followed by a 20-30 minute board run took three days
+for a little of the BGA design, so work is now done in batches.
+- **Every commit:** the unit and fixture tests that cover the change, plus the quick routing test. No board run.
+- **Every feature behind its own gate**, a setting that is off by default, so a batch can be switched on as a whole
+  and a regression attributed later by switching gates on the one board that regressed.
+- **Once per batch:** the board set with all gates on, and once with all gates off, which must give the same SES
+  as before the batch (the gates are clean). Then bisect by gate on the regressed boards only.
+- **Two board groups by how long they need.** Read from the per-pass logs of the 6-minute runs: eight of the twelve
+  set boards reach their final open count inside 2 minutes; lpa96, ddr5, hard6f, reworkctf and sdi_mipi still
+  improve between minutes 3 and 6 (hard6f 13 -> 5 open), and logicbone has not left fanout at 6. So the fast
+  group (TX5823, Starling, mppt-1210, Librecalc, LimeSDR, Encoder, OpenHardwareExG, sensor, DoroidOscillo, M4) runs
+  at a 2-minute cap and the hard group (lpa96, Unifying, L6, ddr5, hard6f, reworkctf, sdi_mipi, logicbone) at 6,
+  in 5 parallel streams (the router is single-threaded; 3 GB heap each on a 31 GB machine), about 15 minutes for
+  both groups. `bench/overhaul/run-batch.sh` does this, `compare.py` prints the A/B table, and `capcurve.py`
+  reads the open count at each minute from a run's logs, so shorter caps are judged from the longer runs without
+  more runs. Caps are adjusted from the outcomes.
 - Changes intended to keep routes identical are checked by an SES diff.
 - The harness prints one summary line per run, to keep analysis cheap.
 

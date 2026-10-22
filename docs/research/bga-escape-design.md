@@ -167,9 +167,10 @@ In order:
 
 ## 6. Order of work and measurement
 
-Each step is one commit, measured alone on the twelve-board set (same SES expected where noted) and on the six
-BGA boards above at the same cap, reporting the open count, the open count at BGA pins, and balls with a via per
-ring from the SES.
+The steps form one batch (roadmap section 8, benchmark policy): each is one commit behind its own gate with a fast
+test, and the board runs come once at the end of the batch, all gates on and all gates off, with the fast and
+hard groups at their caps (`bench/overhaul/run-batch.sh`). The report per board is the open count, the open count
+at BGA pins, and balls with a via per ring from the SES. A regression is bisected by gate on that board only.
 
 1. Escape window by pitch (4.1). Routes change on boards with dense pins; expected to fix most of logicbone.
 2. No rip-up of another pin's escape during fanout (4.1). Also targets the eager oscillation on non-BGA boards.
