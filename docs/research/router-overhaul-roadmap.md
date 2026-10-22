@@ -18,10 +18,10 @@ and control items, BGA escape planning (batch A), run profiles (section 5.4: `st
 the original router, plus `quick` and `thorough`), a grid finisher (section 5.3) that may lift other
 connections in a window (`grid_finisher_ripup`, in `thorough`), and movable routes on a continued board
 (`session_routes_movable`, every profile but `classic`; 46 -> 33 open on 11 boards). Next, in the order the
-measurements and the literature check (section 7.6) support: pin access planning for every pad and rule checks
-during the search; history costs with
-rip-up of only the failing connections; a parallel portfolio of seeds; a leftover report with placement hints;
-`thorough` measured alone with a longer cap; then BGA direction matching per layer (BGA design 4.4).
+measurements and the literature check (section 7.6) support: history costs with rip-up of only the failing
+connections; a parallel portfolio of seeds; a leftover report with placement hints; `thorough` measured alone with
+a longer cap; BGA direction matching per layer (BGA design 4.4). Pin access planning moved down: a probe found
+most open pads still have a clean exit after routing (progress log, 2026-10-22).
 
 ## 1. Inputs
 
