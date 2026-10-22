@@ -27,6 +27,7 @@ import app.freerouting.gui.workspace.session.RunGeneration;
 import app.freerouting.io.FileFormat;
 import app.freerouting.io.specctra.SesWriter;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.management.jobs.JobRunSupport;
 import app.freerouting.management.jobs.RoutingJobSchedulerActionThread;
 import app.freerouting.management.jobs.ThreadActionListener;
 import app.freerouting.util.TextManager;
@@ -148,6 +149,7 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
   private boolean routerEnabledForRun;
   private float scoreBeforeOptimization;
   private double autoroutingSecondsToComplete;
+  private JobRunSupport.Watcher watcher;
 
   /**
    * Creates a new autorouter and optimizer thread for GUI-based routing.
@@ -531,6 +533,10 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
   @Override
   protected void threadAction() {
     routingJob.startedAt = Instant.now();
+    // The same time limit, step budget, status file and stop file as a headless run, so an agent
+    // that launches the GUI gets the same behaviour and files.
+    JobRunSupport.applyLimits(routingJob, this);
+    this.watcher = JobRunSupport.Watcher.start(routingJob);
     routingJob.state = RoutingJobState.RUNNING;
 
     // Start a background thread that periodically samples CPU time, total allocated
@@ -651,14 +657,14 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
       routingJob.logError(e.getLocalizedMessage(), e);
     }
 
-    if (this.isStopRequested()) {
-      routingJob.finishedAt = Instant.now();
-      routingJob.state = RoutingJobState.CANCELLED;
-    } else {
-      routingJob.finishedAt = Instant.now();
-      routingJob.state = RoutingJobState.COMPLETED;
+    routingJob.finishedAt = Instant.now();
+    routingJob.state = JobRunSupport.terminalState(routingJob, this, this.watcher);
+    if (routingJob.state == RoutingJobState.COMPLETED) {
       globalSettings.statistics.incrementJobsCompleted();
     }
+    JobRunSupport.logReport(routingJob, "");
+    routingJob.status().finished(String.valueOf(routingJob.state));
+    JobRunSupport.writeStatusFile(routingJob);
 
     int incompleteCount =
         routingJob.board == null

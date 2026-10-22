@@ -119,7 +119,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`enabled`**: Enables or disables the graphical user interface (GUI). If set to `false`, Freerouting will run in
   headless mode.
 - **`input_directory`**: Specifies the default directory for opening design files.
-- **`dialog_confirmation_timeout`**: Sets the timeout in seconds for dialog confirmations. Default is `5`. `0` skips the auto-start dialog, so a GUI launched by a script with `-de` and `-do` starts routing at once (CLI: `-dct 0`).
+- **`dialog_confirmation_timeout`**: Sets the timeout in seconds for dialog confirmations. Default is `5`. `0` skips the auto-start dialog, so a GUI launched by a script with `-de` and `-do` starts routing at once (CLI: `-dct 0`). Such a GUI run behaves like a headless one for an agent: it honours `job_timeout`, `max_search_steps`, `status_file`, `stop_file` and `result_json`, ends its log with the same report (the job's state, open connections, placement hints, crowded regions, verdict and pad necks used), saves the output and exits with the headless exit code (0 when the job completed or timed out and the output was written, 1 otherwise).
 
 #### **`router` Section**
 
@@ -292,7 +292,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       does not read it. Fanout is also single-threaded. The optimizer pool uses
       `--router.optimizer.max_threads`. The legacy flat `--router.max_threads` remains as a
       fallback / GUI knob and is still copied onto both pools.
-- **`stop_file`**: Optional path that a headless CLI run checks every 2 seconds. When a file appears
+- **`stop_file`**: Optional path that a run (headless, or a GUI run started with `-de`) checks every 2 seconds. When a file appears
   there, the job stops after the connection it is routing, skips the remaining fallback and
   optimizer stages, and writes its best board to the output file and the result manifest; the
   status file shows `stop_reason: STOP_FILE`. Use it to end a run that is good enough instead of
@@ -318,7 +318,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   hints (`Crowded region:` and `Verdict:` lines), so an agent reading only the log can tell a
   design limit from a crowded area worth spreading out.
 - **`status_file`**: Optional path for a live status file (JSON) for agents and scripts that poll a
-  headless run. Rewritten every 2 seconds and once at the end, through a temporary file and a
+  run, headless or in the GUI. Rewritten every 2 seconds and once at the end, through a temporary file and a
   rename, so a reader never sees a partial file. It holds the stage, the fallback attempt, the pass
   and its progress, unrouted counts (at the start, now, best), a per-pass history, the time since
   the best result improved and since the last routed connection, how long the connection being

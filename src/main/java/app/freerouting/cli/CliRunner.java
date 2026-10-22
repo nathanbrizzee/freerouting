@@ -4,20 +4,16 @@ import app.freerouting.analytics.FRAnalytics;
 import app.freerouting.analytics.model.JobLifecycleStatus;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
-import app.freerouting.core.results.RoutingResultManifest;
 import app.freerouting.io.FileFormat;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.management.jobs.JobRunSupport;
 import app.freerouting.management.sessions.SessionManager;
 import app.freerouting.settings.GlobalSettings;
 import app.freerouting.settings.sources.DsnFileSettings;
-import app.freerouting.util.gson.GsonProvider;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -26,7 +22,6 @@ public final class CliRunner {
 
   private static final long STATUS_FILE_INTERVAL_MILLIS = 2000;
   private static final long ROUTING_THREAD_WAIT_MILLIS = 300_000;
-  private static volatile boolean statusFileWarned;
 
   private CliRunner() {}
 
@@ -233,32 +228,7 @@ public final class CliRunner {
    * ignored: the status file must never stop a routing job.
    */
   static void writeStatusFile(RoutingJob routingJob) {
-    if (routingJob.routerSettings == null
-        || routingJob.routerSettings.statusFilePath == null
-        || routingJob.routerSettings.statusFilePath.isBlank()) {
-      return;
-    }
-    Path target = Path.of(routingJob.routerSettings.statusFilePath);
-    try {
-      Path parent = target.toAbsolutePath().getParent();
-      if (parent != null) {
-        Files.createDirectories(parent);
-      }
-      Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-      Files.writeString(
-          temp, GsonProvider.GSON.toJson(routingJob.status().snapshot()), StandardCharsets.UTF_8);
-      try {
-        Files.move(
-            temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-      } catch (AtomicMoveNotSupportedException e) {
-        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-      }
-    } catch (IOException | RuntimeException e) {
-      if (!statusFileWarned) {
-        statusFileWarned = true;
-        FRLogger.warn("Couldn't write the status file '" + target + "': " + e.getMessage());
-      }
-    }
+    JobRunSupport.writeStatusFile(routingJob);
   }
 
   /**
@@ -287,8 +257,7 @@ public final class CliRunner {
   }
 
   static boolean stopFileExists(RoutingJob routingJob) {
-    String path = routingJob.routerSettings != null ? routingJob.routerSettings.stopFilePath : null;
-    return path != null && !path.isBlank() && Files.exists(Path.of(path));
+    return JobRunSupport.stopFileExists(routingJob);
   }
 
   public static boolean isCliTerminalState(RoutingJobState state) {
@@ -374,37 +343,16 @@ public final class CliRunner {
   }
 
   public static int computeCliExitCode(RoutingJob routingJob, boolean outputWritten) {
-    if (routingJob.state == RoutingJobState.COMPLETED && outputWritten) {
-      return 0;
-    }
-    if (routingJob.state == RoutingJobState.TIMED_OUT && outputWritten) {
-      return 0;
-    }
-    return 1;
+    return JobRunSupport.exitCode(routingJob, outputWritten);
   }
 
   public static void writeCliResultManifestIfRequested(
       GlobalSettings globalSettings, RoutingJob routingJob, boolean outputWritten, int exitCode) {
-    if (routingJob.routerSettings == null
-        || routingJob.routerSettings.resultJsonPath == null
-        || routingJob.routerSettings.resultJsonPath.isBlank()) {
-      return;
-    }
-    try {
-      RoutingResultManifest manifest =
-          RoutingResultManifest.fromJob(
-              routingJob,
-              globalSettings.initialInputFile,
-              outputWritten,
-              exitCode,
-              globalSettings.runtimeEnvironment.getCpuScore());
-      RoutingResultManifest.write(Path.of(routingJob.routerSettings.resultJsonPath), manifest);
-    } catch (IOException e) {
-      FRLogger.error(
-          "Couldn't write routing result manifest to '"
-              + routingJob.routerSettings.resultJsonPath
-              + "'",
-          e);
-    }
+    JobRunSupport.writeResultManifest(
+        routingJob,
+        globalSettings.initialInputFile,
+        outputWritten,
+        exitCode,
+        globalSettings.runtimeEnvironment.getCpuScore());
   }
 }

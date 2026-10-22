@@ -2,7 +2,6 @@ package app.freerouting.management.jobs;
 
 import app.freerouting.analytics.FRAnalytics;
 import app.freerouting.analytics.model.JobLifecycleStatus;
-import app.freerouting.autoroute.PadNecks;
 import app.freerouting.autoroute.pipeline.BatchAutorouter;
 import app.freerouting.autoroute.pipeline.BatchOptimizer;
 import app.freerouting.autoroute.pipeline.RoutingPipeline;
@@ -10,29 +9,20 @@ import app.freerouting.core.BoardFileDetails;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.StoppableThread;
-import app.freerouting.drc.Congestion;
-import app.freerouting.drc.OpenConnections;
 import app.freerouting.io.FileFormat;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.management.HeadlessBoardManager;
 import app.freerouting.settings.GlobalSettings;
-import app.freerouting.util.TextManager;
 import com.sun.management.ThreadMXBean;
 import java.io.ByteArrayOutputStream;
 import java.lang.management.ManagementFactory;
 import java.time.Instant;
-import java.util.List;
 
 /** Runs a stoppable routing action on behalf of the job scheduler. */
 public class RoutingJobSchedulerActionThread extends StoppableThread {
 
-  private static final long MAX_TIMEOUT = 24 * 60 * 60; // 24 hours
   private static final int GRACE_PERIOD = 30; // 30 seconds
   private static final long LIVE_OUTPUT_INTERVAL_MILLIS = 10_000;
-  // The result JSON lists all open connections; the log names the first ones.
-  private static final int OPEN_CONNECTIONS_LOGGED = 50;
-  private static final int PLACEMENT_HINTS_LOGGED = 10;
-  private static final int REGIONS_LOGGED = 5;
   private final Object terminalStateLock = new Object();
   RoutingJob job;
 
@@ -52,23 +42,7 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
       // Use ISO standard time format
       job.logInfo("Job '" + job.shortName + "' started at " + job.startedAt.toString() + ".");
 
-      // check if we need to check for timeout
-      Long timeout = TextManager.parseTimespanString(job.routerSettings.jobTimeoutString);
-      if (timeout != null) {
-        // maximize the timeout to 24 hours
-        if (timeout > MAX_TIMEOUT) {
-          timeout = MAX_TIMEOUT;
-        }
-
-        job.timeoutAt = job.startedAt.plusSeconds(timeout);
-      }
-      if (job.routerSettings.maxSearchSteps != null && job.routerSettings.maxSearchSteps > 0) {
-        this.setSearchStepBudget(job.routerSettings.maxSearchSteps);
-        job.logInfo(
-            "Search step budget: the job stops after "
-                + job.routerSettings.maxSearchSteps
-                + " maze search steps (router.max_search_steps).");
-      }
+      JobRunSupport.applyLimits(job, this);
 
       // Start a new thread that will monitor the job thread
       Thread monitorThread =
@@ -237,34 +211,7 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
       if (optimizerTimedOut) {
         details.append(" (optimizer stage timed out)");
       }
-      job.logInfo(
-          "Job '"
-              + job.shortName
-              + "' finished with state: "
-              + job.state.toString()
-              + details.toString()
-              + " (elapsed: "
-              + FRLogger.formatDuration(durationSec)
-              + ", finished at UTC: "
-              + job.finishedAt.toString()
-              + ").");
-      if (job.board != null) {
-        List<OpenConnections.Entry> open = OpenConnections.of(job.board);
-        if (!open.isEmpty()) {
-          job.logInfo(OpenConnections.summary(open, OPEN_CONNECTIONS_LOGGED));
-          List<OpenConnections.Hint> hints = OpenConnections.hints(open);
-          for (int i = 0; i < Math.min(PLACEMENT_HINTS_LOGGED, hints.size()); i++) {
-            job.logInfo("Placement hint: " + hints.get(i));
-          }
-          for (Congestion.Region region : Congestion.regions(job.board, open, REGIONS_LOGGED)) {
-            job.logInfo("Crowded region: " + region);
-          }
-          job.logInfo("Verdict: " + OpenConnections.verdict(open));
-        }
-        for (String neck : PadNecks.used(job.board)) {
-          job.logInfo("Pad neck used: " + neck);
-        }
-      }
+      JobRunSupport.logReport(job, details.toString());
 
       JobLifecycleStatus lifecycleStatus =
           switch (job.state) {

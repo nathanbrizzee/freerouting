@@ -14,6 +14,7 @@ import app.freerouting.io.specctra.RulesReader;
 import app.freerouting.io.specctra.SesImportSummary;
 import app.freerouting.io.specctra.SesReader;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.management.jobs.JobRunSupport;
 import app.freerouting.management.jobs.ThreadActionListener;
 import app.freerouting.management.sessions.SessionManager;
 import app.freerouting.rules.NetClasses;
@@ -193,6 +194,7 @@ public class GuiManager {
 
         // we need to set up a listener to save the design file when the autorouter is
         // running
+        final RoutingJob launchedJob = routingJob;
         newFrame.boardPanel.boardHandling.autorouterListener =
             new ThreadActionListener() {
               @Override
@@ -203,7 +205,9 @@ public class GuiManager {
                 exportBoardToFile(
                     newFrame,
                     globalSettings.initialOutputFile,
-                    globalSettings.guiSettings.exitWhenFinished);
+                    globalSettings.guiSettings.exitWhenFinished,
+                    launchedJob,
+                    globalSettings);
               }
 
               @Override
@@ -211,7 +215,9 @@ public class GuiManager {
                 exportBoardToFile(
                     newFrame,
                     globalSettings.initialOutputFile,
-                    globalSettings.guiSettings.exitWhenFinished);
+                    globalSettings.guiSettings.exitWhenFinished,
+                    launchedJob,
+                    globalSettings);
               }
             };
 
@@ -529,9 +535,41 @@ public class GuiManager {
    */
   public static void exportBoardToFile(
       BoardFrame newFrame, String filename, boolean exitWhenFinished) {
+    exportBoardToFile(newFrame, filename, exitWhenFinished, null, null);
+  }
+
+  /**
+   * Exports the board as {@link #exportBoardToFile(BoardFrame, String, boolean)} does; for a job
+   * launched from the command line, it also writes the result manifest ({@code result_json}) and
+   * exits with the same code as a headless run: 0 when the job completed or timed out and its
+   * output was written, 1 otherwise.
+   */
+  public static void exportBoardToFile(
+      BoardFrame newFrame,
+      String filename,
+      boolean exitWhenFinished,
+      RoutingJob job,
+      GlobalSettings globalSettings) {
+    boolean written = writeBoardFile(newFrame, filename);
+    int exitCode = job != null ? JobRunSupport.exitCode(job, written) : 0;
+    if (job != null && globalSettings != null) {
+      JobRunSupport.writeResultManifest(
+          job,
+          globalSettings.initialInputFile,
+          written,
+          exitCode,
+          globalSettings.runtimeEnvironment.getCpuScore());
+    }
+    if (exitWhenFinished) {
+      System.exit(exitCode);
+    }
+  }
+
+  /** Writes the board to filename in the format its extension names; true when written. */
+  private static boolean writeBoardFile(BoardFrame newFrame, String filename) {
     if (filename == null) {
       FRLogger.warn("Couldn't export board, filename not specified");
-      return;
+      return false;
     }
 
     var filenameLowerCase = filename.toLowerCase();
@@ -541,7 +579,7 @@ public class GuiManager {
         || filenameLowerCase.endsWith(".scr")
         || filenameLowerCase.endsWith(".json"))) {
       FRLogger.warn("Couldn't export board to '" + filename + "', unsupported extension");
-      return;
+      return false;
     }
 
     FRLogger.info("Saving '" + filename + "'...");
@@ -598,16 +636,12 @@ public class GuiManager {
       if (saved && baos.size() > 0) {
         java.nio.file.Files.write(new File(filename).toPath(), baos.toByteArray());
         FRLogger.info("Saved " + baos.size() + " bytes to '" + filename + "'.");
-      } else {
-        FRLogger.warn(
-            "Board export produced 0 bytes or failed; not overwriting '" + filename + "'.");
+        return true;
       }
-
-      if (exitWhenFinished) {
-        System.exit(0);
-      }
+      FRLogger.warn("Board export produced 0 bytes or failed; not overwriting '" + filename + "'.");
     } catch (Exception e) {
       FRLogger.error("Couldn't export board to file", e);
     }
+    return false;
   }
 }
