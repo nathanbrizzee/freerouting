@@ -9,6 +9,7 @@ import app.freerouting.core.BoardFileDetails;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.StoppableThread;
+import app.freerouting.drc.Congestion;
 import app.freerouting.drc.OpenConnections;
 import app.freerouting.io.FileFormat;
 import app.freerouting.logger.FRLogger;
@@ -30,6 +31,7 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
   // The result JSON lists all open connections; the log names the first ones.
   private static final int OPEN_CONNECTIONS_LOGGED = 50;
   private static final int PLACEMENT_HINTS_LOGGED = 10;
+  private static final int REGIONS_LOGGED = 5;
   private final Object terminalStateLock = new Object();
   RoutingJob job;
 
@@ -253,6 +255,10 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
           for (int i = 0; i < Math.min(PLACEMENT_HINTS_LOGGED, hints.size()); i++) {
             job.logInfo("Placement hint: " + hints.get(i));
           }
+          for (Congestion.Region region : Congestion.regions(job.board, open, REGIONS_LOGGED)) {
+            job.logInfo("Crowded region: " + region);
+          }
+          job.logInfo("Verdict: " + OpenConnections.verdict(open));
         }
       }
 

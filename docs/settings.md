@@ -309,6 +309,14 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   component, most open ends first, and says whether the part's pins are closed in by the design
   (its own pads, fixed copper, keepouts) or by other parts and routes, where moving a part or
   fanning it out by hand may help. The log ends with the first ten of these hints.
+  `crowded_regions` lists up to five regions the open connections cross, ranked by copper fill (the
+  share of sample points on the signal layers in a trace, via, pin or keepout; pours are not
+  counted) times the number of open connections crossing, each with its corners in millimetres
+  and the parts whose pins lie in it. `verdict` is one sentence: how many open connections end at
+  a pin the design closes in, how many at a pin routes or nearby parts close in, and how many
+  have ends that can be left, held by the space between them. The log prints both after the
+  hints (`Crowded region:` and `Verdict:` lines), so an agent reading only the log can tell a
+  design limit from a crowded area worth spreading out.
 - **`status_file`**: Optional path for a live status file (JSON) for agents and scripts that poll a
   headless run. Rewritten every 2 seconds and once at the end, through a temporary file and a
   rename, so a reader never sees a partial file. It holds the stage, the fallback attempt, the pass

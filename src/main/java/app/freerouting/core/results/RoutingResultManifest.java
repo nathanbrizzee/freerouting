@@ -6,6 +6,7 @@ import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.core.scoring.BoardStatisticsBounds;
+import app.freerouting.drc.Congestion;
 import app.freerouting.drc.OpenConnections;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.util.gson.GsonProvider;
@@ -24,6 +25,9 @@ import java.util.List;
 public final class RoutingResultManifest {
 
   public static final int SCHEMA_VERSION = 1;
+
+  /** Crowded regions the manifest lists at most. */
+  private static final int CROWDED_REGIONS = 5;
 
   /** Creates an empty manifest for Gson deserialization. */
   public RoutingResultManifest() {}
@@ -83,6 +87,14 @@ public final class RoutingResultManifest {
   /** Per component with open ends: whether its pins can be left and what closes them in. */
   @SerializedName("placement_hints")
   public List<OpenConnections.Hint> placementHints;
+
+  /** The fullest regions the open connections cross, with the parts in them. */
+  @SerializedName("crowded_regions")
+  public List<Congestion.Region> crowdedRegions;
+
+  /** One sentence on what holds the open connections; absent when the board is complete. */
+  @SerializedName("verdict")
+  public String verdict;
 
   /** Input fixture identity for the run. */
   public static class FixtureInfo {
@@ -243,6 +255,9 @@ public final class RoutingResultManifest {
       manifest.bounds = manifest.boardStatistics.bounds;
       manifest.openConnections = OpenConnections.of(job.board);
       manifest.placementHints = OpenConnections.hints(manifest.openConnections);
+      manifest.crowdedRegions =
+          Congestion.regions(job.board, manifest.openConnections, CROWDED_REGIONS);
+      manifest.verdict = OpenConnections.verdict(manifest.openConnections);
       if (job.routerSettings != null && job.routerSettings.scoring != null) {
         manifest.normalizedScore = manifest.boardStatistics.getRouterScore(job.routerSettings);
         if (manifest.phases.optimizer.before != null || manifest.phases.optimizer.after != null) {

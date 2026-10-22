@@ -181,6 +181,47 @@ public final class OpenConnections {
   }
 
   /**
+   * One sentence on what holds the open connections: how many end at a pin the design closes in (no
+   * route reaches it as placed), how many at a pin routes or nearby parts close in, and how many
+   * have exits at both ends, so the space between their ends is what is full. Null when nothing is
+   * open.
+   */
+  public static String verdict(List<Entry> open) {
+    if (open.isEmpty()) {
+      return null;
+    }
+    int design = 0;
+    int closedIn = 0;
+    for (Entry entry : open) {
+      if (closedByDesign(entry.fromExit) || closedByDesign(entry.toExit)) {
+        design++;
+      } else if (closed(entry.fromExit) || closed(entry.toExit)) {
+        closedIn++;
+      }
+    }
+    int between = open.size() - design - closedIn;
+    return String.format(
+        Locale.ROOT,
+        "%d connection%s open: %d at a pin the design closes in, so no route reaches it as"
+            + " placed; %d at a pin that routes or nearby parts close in; %d whose ends can be"
+            + " left (free pin exits, vias or traces), held by the space between them (see the"
+            + " crowded regions).",
+        open.size(),
+        open.size() == 1 ? "" : "s",
+        design,
+        closedIn,
+        between);
+  }
+
+  private static boolean closed(Exit exit) {
+    return exit != null && "closed".equals(exit.exit);
+  }
+
+  private static boolean closedByDesign(Exit exit) {
+    return closed(exit) && Boolean.TRUE.equals(exit.byDesign);
+  }
+
+  /**
    * One hint per component with open ends on its pins, most open ends first: whether its pins can
    * still be left, and if not, whether its own pads and fixed copper close them in (a design limit)
    * or other parts and routes do (moving a part may help).
@@ -391,7 +432,7 @@ public final class OpenConnections {
     return component == null ? null : component.name;
   }
 
-  private static double toMm(BasicBoard board) {
+  static double toMm(BasicBoard board) {
     return Unit.scale(1.0, board.communication.unit, Unit.MM)
         / (board.communication.resolution > 0 ? board.communication.resolution : 1);
   }
