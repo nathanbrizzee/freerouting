@@ -243,19 +243,9 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
           }
         });
 
-    // Add another event listener for the job output object updates
-    this.batchAutorouter.addBoardUpdatedEventListener(
-        new BoardUpdatedEventListener() {
-          @Override
-          public void onBoardUpdatedEvent(BoardUpdatedEvent event) {
-            try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-              SesWriter.write(routingJob.board, outputStream, routingJob.name);
-              routingJob.output.setData(outputStream.toByteArray());
-            } catch (Exception e) {
-              routingJob.logError("Couldn't save the SES output into the job object.", e);
-            }
-          }
-        });
+    // The job output is written once after the pipeline. Writing the whole session file on every
+    // board update, up to 4 times a second on the routing thread, slowed large boards, and no one
+    // reads the output while a GUI run is going.
 
     this.batchAutorouter.addTaskStateChangedEventListener(
         new TaskStateChangedEventListener() {

@@ -64,8 +64,12 @@ public final class GuiBoardPresentationController {
     }
 
     if (manager.isBoardReadOnly()) {
+      // While a run draws on the board, wait a second after the last request, and after the last
+      // draw ended at least twice as long as it took, so a slow board leaves the window responsive.
       long now = System.currentTimeMillis();
-      if (lastRepaintedTime >= now - BACKGROUND_REPAINT_INTERVAL) {
+      long gap = Math.max(BACKGROUND_REPAINT_INTERVAL, 2 * panel.getLastPaintMillis());
+      if (lastRepaintedTime >= now - BACKGROUND_REPAINT_INTERVAL
+          || panel.getLastPaintEndedAtMillis() >= now - gap) {
         return;
       }
       lastRepaintedTime = now;

@@ -304,6 +304,11 @@ public class BoardPanel extends JPanel {
    */
   private long lastCursorRepaintTime;
 
+  // How long the last board draw took and when it ended, so repaints during a run can leave the
+  // event thread free for at least as long as a draw takes.
+  private volatile long lastPaintMillis;
+  private volatile long lastPaintEndedAtMillis;
+
   /**
    * Creates a new BoardPanel within a GUI application context.
    *
@@ -585,6 +590,16 @@ public class BoardPanel extends JPanel {
     }
   }
 
+  /** Milliseconds the last board draw took. */
+  public long getLastPaintMillis() {
+    return lastPaintMillis;
+  }
+
+  /** Wall-clock time at which the last board draw ended, in milliseconds. */
+  public long getLastPaintEndedAtMillis() {
+    return lastPaintEndedAtMillis;
+  }
+
   /**
    * Renders the board panel including all visual elements.
    *
@@ -610,9 +625,17 @@ public class BoardPanel extends JPanel {
    */
   @Override
   public void paintComponent(Graphics graphics) {
+    final long paintStart = System.currentTimeMillis();
     super.paintComponent(graphics);
     if (boardHandling != null) {
       boardHandling.draw(graphics);
+    }
+    lastPaintEndedAtMillis = System.currentTimeMillis();
+    // A small dirty rectangle, such as a zoom region's outline, draws fast and says nothing about
+    // how long the whole board takes.
+    Rectangle clip = graphics.getClipBounds();
+    if (clip == null || clip.contains(getVisibleRect())) {
+      lastPaintMillis = lastPaintEndedAtMillis - paintStart;
     }
 
     // Draw ghosting overlay for drag-and-drop file operations
