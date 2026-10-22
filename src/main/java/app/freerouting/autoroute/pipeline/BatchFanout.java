@@ -102,8 +102,10 @@ public final class BatchFanout {
     if (settings.usesDirectPinRouting()) {
       return DirectPinRouting.run(board, settings, thread);
     }
-    board.setEscapeGatePins(
-        settings.fanout != null && Boolean.TRUE.equals(settings.fanout.gridBallsOnly)
+    board.setGridBallPins(
+        settings.fanout != null
+                && (Boolean.TRUE.equals(settings.fanout.minEscapeByPitchGridOnly)
+                    || Boolean.TRUE.equals(settings.fanout.protectEscapesGridOnly))
             ? BgaEscapePlanner.ballPinIds(board)
             : null);
     long fanoutStart = System.currentTimeMillis();

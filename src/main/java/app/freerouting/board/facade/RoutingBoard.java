@@ -85,10 +85,10 @@ public class RoutingBoard extends BasicBoard implements Serializable {
   private transient RoutingBoardUndoFacade undoFacade;
 
   /**
-   * Item ids of the pins the escape gates of {@link #fanout} apply to, or null for every pin
-   * ({@code fanout.grid_balls_only}).
+   * Item ids of the balls of detected pin grids, for the escape gates of {@link #fanout} that are
+   * limited to them ({@code fanout.*_grid_only}); null when no gate is.
    */
-  private transient Set<Integer> escapeGatePins;
+  private transient Set<Integer> gridBallPins;
 
   /**
    * Creates a new instance of a routing Board with surrounding box boundingBox Rules contains the
@@ -999,11 +999,20 @@ public class RoutingBoard extends BasicBoard implements Serializable {
   }
 
   /**
-   * Limits the escape gates of {@link #fanout} ({@code min_escape_by_pitch}, {@code
-   * protect_escapes}) to the pins with these item ids; null applies them to every pin.
+   * The item ids of the balls of detected pin grids, which the escape gates of {@link #fanout}
+   * limited by {@code fanout.*_grid_only} apply to.
    */
-  public void setEscapeGatePins(Set<Integer> pinIds) {
-    this.escapeGatePins = pinIds;
+  public void setGridBallPins(Set<Integer> pinIds) {
+    this.gridBallPins = pinIds;
+  }
+
+  /** Whether an escape gate applies to the pin: on every pin, or on grid balls only. */
+  private boolean escapeGateApplies(Pin pin, Boolean gate, Boolean gridOnly) {
+    if (!Boolean.TRUE.equals(gate)) {
+      return false;
+    }
+    return !Boolean.TRUE.equals(gridOnly)
+        || (gridBallPins != null && gridBallPins.contains(pin.getId()));
   }
 
   /** Distance from the pin centre to the nearest other pin of its component, or -1 if none. */
@@ -1103,10 +1112,10 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     }
     ctrlSettings.fanoutStartPinCenter = pin.getCenter();
     ctrlSettings.fanoutStartPinLayer = pin.firstLayer();
-    boolean escapeGatesApply = escapeGatePins == null || escapeGatePins.contains(pin.getId());
-    if (escapeGatesApply
-        && routerSettings.fanout != null
-        && Boolean.TRUE.equals(routerSettings.fanout.minEscapeByPitch)) {
+    app.freerouting.settings.FanoutSettings fanoutSettings = routerSettings.fanout;
+    if (fanoutSettings != null
+        && escapeGateApplies(
+            pin, fanoutSettings.minEscapeByPitch, fanoutSettings.minEscapeByPitchGridOnly)) {
       // Half the pitch admits the diagonal gap of a pin grid (at 0.707 pitches) and keeps the
       // via off the neighbouring pads; an isolated pin keeps the configured minimum.
       double minLenUm =
@@ -1121,9 +1130,9 @@ public class RoutingBoard extends BasicBoard implements Serializable {
           nearest > 0 ? Math.min(setting, 0.5 * nearest) : setting;
     }
     ctrlSettings.protectEscapesDuringFanout =
-        escapeGatesApply
-            && routerSettings.fanout != null
-            && Boolean.TRUE.equals(routerSettings.fanout.protectEscapes);
+        fanoutSettings != null
+            && escapeGateApplies(
+                pin, fanoutSettings.protectEscapes, fanoutSettings.protectEscapesGridOnly);
     ctrlSettings.removeUnconnectedVias = false;
     if (ripupCosts >= 0) {
       ctrlSettings.ripupAllowed = true;
