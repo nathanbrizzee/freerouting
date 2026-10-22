@@ -81,6 +81,9 @@ public class AutorouteControl {
    */
   public double fanoutMinEscapeDistance = -1;
 
+  /** During fanout, never rip another pin's escape via or stub ({@code protect_escapes}). */
+  public boolean protectEscapesDuringFanout;
+
   /** Normally true, if the autorouter contains no fanout pass. */
   public boolean removeUnconnectedVias;
 

@@ -74,6 +74,13 @@ final class MazeRipupResolver {
     if (!obstacleItem.isRoutable()) {
       return -1;
     }
+    if (ctrl.isFanout
+        && ctrl.protectEscapesDuringFanout
+        && (obstacleItem.isFanoutVia(null) || obstacleItem.isFanoutStub())) {
+      // Another pin's escape. Without this a pin with no site of its own rips its neighbours'
+      // escapes at base cost, and the next pass puts them back: the fanout oscillation.
+      return -1;
+    }
     if (doorIsSmall && !enterThroughSmallDoor(listElement, obstacleItem)) {
       return -1;
     }

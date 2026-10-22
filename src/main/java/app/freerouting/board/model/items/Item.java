@@ -1422,6 +1422,25 @@ public abstract class Item
   }
 
   /**
+   * A short trace touching a single-layer pin: the stub of a fanout escape, as {@link #isFanoutVia}
+   * measures it.
+   */
+  public boolean isFanoutStub() {
+    if (!(this instanceof Trace trace)) {
+      return false;
+    }
+    if (trace.getLength() >= PROTECT_FANOUT_LENGTH * trace.getHalfWidth()) {
+      return false;
+    }
+    for (Item contact : trace.getNormalContacts()) {
+      if (contact instanceof Pin && contact.firstLayer() == contact.lastLayer()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Checks if the item has a net that must be ignored by the auto-router.
    *
    * @return true, if this item has at least one net that must be ignored

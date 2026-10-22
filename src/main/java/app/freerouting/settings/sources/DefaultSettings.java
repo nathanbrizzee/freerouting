@@ -225,6 +225,7 @@ public class DefaultSettings implements SettingsSource {
     settings.fanout.ripupAllowed = true;
     settings.fanout.minEscapeLengthMm = 2.5;
     settings.fanout.minEscapeByPitch = false;
+    settings.fanout.protectEscapes = false;
     settings.fanout.maxEscapeLengthMm = 4.5;
     settings.fanout.startViaDiameterMm = 0.250;
     settings.fanout.endViaDiameterMm = 0.250;

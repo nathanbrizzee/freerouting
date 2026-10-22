@@ -12,6 +12,8 @@ import app.freerouting.settings.RouterSettings;
 import app.freerouting.settings.sources.DefaultSettings;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -128,6 +130,38 @@ class FanoutEscapeWindowTest {
     // 21 of 36 when written: the rest drill, then lose the via to a neighbour's search, because
     // the rip-up check does not protect another pin's escape during fanout (the next change).
     assertTrue(withVia >= inner / 2, withVia + " of " + inner + " inner pins escaped");
+  }
+
+  /** Indices of the U1 pins whose connection leaves the top layer. */
+  private static Set<Integer> pinsWithVia(RoutingBoard board) {
+    Set<Integer> result = new TreeSet<>();
+    for (Pin pin : board.getSmdPins()) {
+      if (pin.connectedSetLeavesLayer(pin.getNetNumber(0), pin.firstLayer())) {
+        result.add(pin.pinIndex);
+      }
+    }
+    return result;
+  }
+
+  @Test
+  void protectedEscapesAreNeverUndoneByTheNextPass() {
+    RoutingBoard onePass = board();
+    RouterSettings settings = settings(onePass, true);
+    settings.fanout.protectEscapes = true;
+    settings.fanout.maxPasses = 1;
+    BatchFanout.fanoutBoard(onePass, settings, null);
+    Set<Integer> afterOne = pinsWithVia(onePass);
+
+    RoutingBoard twoPasses = board();
+    settings.fanout.maxPasses = 2;
+    BatchFanout.fanoutBoard(twoPasses, settings, null);
+    Set<Integer> afterTwo = pinsWithVia(twoPasses);
+
+    assertTrue(afterOne.size() > 30, afterOne.size() + " pins escaped in pass 1");
+    assertTrue(afterTwo.containsAll(afterOne), "pass 2 keeps every escape of pass 1");
+    // The pins still without a via have all four diagonal gaps taken by neighbours that chose
+    // first; assigning the gaps by a matching is the BGA planner's job, not this change's.
+    assertTrue(innerPinsWithVia(twoPasses) >= 21, "no worse than without the protection");
   }
 
   @Test

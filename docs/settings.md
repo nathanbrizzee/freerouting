@@ -339,6 +339,7 @@ Configures the SMD-pin fanout pre-pass stage.
 - **`ripup_allowed`**: Whether fanout can rip up existing traces. Default is `true`.
 - **`min_escape_length_mm`**: The minimum physical escape trace length in millimeters. Default is `2.5`. Landing vias and escape stubs are not placed closer than this distance from the pin center.
 - **`min_escape_by_pitch`**: When `true`, a pin's minimum escape length is at most half the distance to the nearest other pin of its component, so a ball in a pin grid may drill in the diagonal gap next to it. Default is `false`. Helps on BGAs and fine-pitch parts, where the default minimum puts the nearest legal via several pitches away.
+- **`protect_escapes`**: When `true`, a fanout search never rips another pin's escape via or its short stub. Default is `false`. Stops the fanout passes from undoing each other on dense parts; a pin that finds no site then fails instead of taking a neighbour's.
 - **`max_escape_length_mm`**: The maximum physical escape trace length in millimeters. Default is `4.5`. Enforced directly during maze expansion.
 - **`start_via_diameter_mm`**: The diameter of starting/escape vias used inside the pins during the fanout/escape stage (in millimeters). Default is `0.25`.
 - **`end_via_diameter_mm`**: The diameter of landing/end vias used at the end of escaping wires during the fanout/escape stage (in millimeters). Default is `0.25`.

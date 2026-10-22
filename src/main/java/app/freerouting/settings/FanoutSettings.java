@@ -83,6 +83,14 @@ public class FanoutSettings implements Serializable, Cloneable {
   public Boolean minEscapeByPitch;
 
   /**
+   * When true, a fanout search never rips another pin's escape (its via or the short stub from the
+   * pad). Otherwise a pin that finds no site rips its neighbours' escapes at base cost, the next
+   * pass re-fans them, and the passes oscillate until the pass limit.
+   */
+  @SerializedName("protect_escapes")
+  public Boolean protectEscapes;
+
+  /**
    * The maximum physical escape wire length (in millimeters). The search tree expansion and via
    * placement during fanout will be restricted to this distance.
    */

@@ -992,11 +992,6 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     return result;
   }
 
-  /**
-   * Autoroutes from the input pin until the first via, in case the pin and its connected set has
-   * only 1 layer. Ripup is allowed if ripupCosts is {@literal >}= 0. Returns an enum of type
-   * AutorouteEngine.AutorouteResult
-   */
   /** Distance from the pin centre to the nearest other pin of its component, or -1 if none. */
   public double nearestPinDistance(Pin pin) {
     app.freerouting.geometry.planar.FloatPoint center = pin.getCenter().toFloat();
@@ -1013,6 +1008,11 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     return best;
   }
 
+  /**
+   * Autoroutes from the input pin until the first via, in case the pin and its connected set has
+   * only 1 layer. Ripup is allowed if ripupCosts is {@literal >}= 0. Returns an enum of type
+   * AutorouteEngine.AutorouteResult
+   */
   public AutorouteAttemptResult fanout(
       Pin pin,
       RouterSettings routerSettings,
@@ -1104,6 +1104,8 @@ public class RoutingBoard extends BasicBoard implements Serializable {
       ctrlSettings.fanoutMinEscapeDistance =
           nearest > 0 ? Math.min(setting, 0.5 * nearest) : setting;
     }
+    ctrlSettings.protectEscapesDuringFanout =
+        routerSettings.fanout != null && Boolean.TRUE.equals(routerSettings.fanout.protectEscapes);
     ctrlSettings.removeUnconnectedVias = false;
     if (ripupCosts >= 0) {
       ctrlSettings.ripupAllowed = true;
