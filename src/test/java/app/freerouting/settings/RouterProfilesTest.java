@@ -23,6 +23,7 @@ class RouterProfilesTest {
     assertTrue(settings.fanout.protectEscapesGridOnly);
     assertFalse(settings.autorouter.forceViaInPad, "a profile can switch a setting off");
     assertTrue(settings.optimizer.enabled);
+    assertFalse(settings.autorouter.gridFinisher, "not before it is measured");
   }
 
   @Test
@@ -51,6 +52,7 @@ class RouterProfilesTest {
     assertTrue(settings.autorouter.fallbackRace);
     assertEquals(0, settings.autorouter.fallbackThreads);
     assertEquals(0.0, settings.autorouter.fallbackWorkRatio);
+    assertTrue(settings.autorouter.gridFinisher);
   }
 
   @Test

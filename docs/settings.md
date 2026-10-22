@@ -126,7 +126,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`profile`**: The run profile (CLI `--router.profile=<name>`). A profile is a set of defaults; any setting given in a file, environment variable, the CLI, the GUI or the API still overrides it, and the log names the profile at the start of each job. Profiles set passes, budgets and strategies, never time limits, so runs stay repeatable.
     - `"standard"` (default): the most complete board in the least time. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`. On the 19-board benchmark set this left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU.
     - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage (`fallback_strategies=none`) and without the optimizer. Use it to see how far a board gets and where it is stuck.
-    - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
+    - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`) and the grid finisher (`grid_finisher=true`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
     - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default.
 - **`default_preferred_direction_trace_cost`**: Cost factor for routing traces in the preferred direction.
 - **`default_undesired_direction_trace_cost`**: Cost factor for routing traces in undesired directions.
@@ -200,6 +200,17 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       slow it down through shared cores and memory (LimeSDR 84 -> 122 s, TX5823 41 -> 84 s). At the
       job timeout the attempts are stopped and their boards merged as they are. The race runs the
       list in `fallback_race_strategies`, not `fallback_strategies`.
+    - **`grid_finisher`**: When `true`, each connection still open after the passes and the
+      fallbacks gets one A* search on a fine grid (about half a trace pitch per cell) in a window
+      around its gap, crossing layers by the vias of the net's rule. The path is kept only if it
+      joins the two pieces and adds no clearance violation; otherwise the board is restored.
+      Default `false`; on in the `thorough` profile. Log line: `Grid finisher: N open
+      connection(s), T tried, C closed, S grid states expanded of B, in X s.`
+    - **`grid_finisher_max_steps`**: Grid states the finisher may expand in total, default
+      `50000000`; one connection gets at most 2,000,000. The finisher tries each connection once
+      and stops at this budget, at a stop request or at `job_timeout`, so a board that cannot be
+      finished keeps its open connections instead of searching on. Counting states, not time,
+      keeps the result the same on every machine.
     - **`fallback_race_strategies`**: The strategies a race starts, used in place of
       `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
       Default `direct-first,no-fanout,seed-1`. `none` in `fallback_strategies` turns the race off

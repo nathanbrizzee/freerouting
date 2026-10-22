@@ -152,6 +152,14 @@ public final class RoutingPipeline {
       }
     }
 
+    if (routerEnabled
+        && this.job.board != null
+        && Boolean.TRUE.equals(this.job.routerSettings.autorouter.gridFinisher)
+        && !this.job.thread.isStopRequested()
+        && this.job.board.routingLedger().incompleteCount() > 0) {
+      GridFinisher.run(this.job.board, this.job.routerSettings, this.job.thread);
+    }
+
     this.job.board.finishAutoroute();
     OracleCorridors.writeIfRequested(this.job.board, this.job::logInfo);
     for (StageListener listener : this.stageListeners) {

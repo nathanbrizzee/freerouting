@@ -197,6 +197,8 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.viaSpanCostFactor = 0.0;
     settings.autorouter.forceViaInPad = true;
     settings.autorouter.residualRepairMaxOpen = 4;
+    settings.autorouter.gridFinisher = false;
+    settings.autorouter.gridFinisherMaxSteps = 50_000_000L;
     settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.fallbackThreads = DEFAULT_FALLBACK_THREADS;
     settings.autorouter.fallbackRace = false;

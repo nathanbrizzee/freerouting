@@ -109,6 +109,22 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Integer residualRepairMaxOpen;
 
   /**
+   * When true, the connections still open after routing and fallbacks are tried once each by an A*
+   * search on a fine grid around the gap; a path is kept only if it adds no clearance violation.
+   */
+  @SerializedName("grid_finisher")
+  @Schema(description = "Close open connections left after routing with a fine-grid A* search")
+  public Boolean gridFinisher;
+
+  /**
+   * Grid states the grid finisher may expand in total (one connection at most 2,000,000). Counting
+   * states, not time, stops it at the same point on every run.
+   */
+  @SerializedName("grid_finisher_max_steps")
+  @Schema(description = "Grid states the grid finisher may expand in total")
+  public Long gridFinisherMaxSteps;
+
+  /**
    * Deterministic budget per connection in pass 1, in maze search steps, doubling each pass like
    * the time budget it replaces when set (100 s in pass 1). Unlike the time budget, the same board
    * stops at the same point on every run, whatever the machine load.

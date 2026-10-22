@@ -65,6 +65,8 @@ public final class RouterProfiles {
         defaults.autorouter.fallbackRace = true;
         defaults.autorouter.fallbackThreads = 0;
         defaults.autorouter.fallbackWorkRatio = 0.0;
+        // The connections still open then get one fine-grid search each, within a step budget.
+        defaults.autorouter.gridFinisher = true;
       }
       case CLASSIC -> {}
       default -> throw new IllegalArgumentException("Unknown profile: " + name);
