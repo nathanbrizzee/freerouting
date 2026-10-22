@@ -134,6 +134,16 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Boolean gridFinisherRipup;
 
   /**
+   * When true, a pin the design closes in at its pad width (no trace that wide leaves it clear of
+   * pads, fixed copper and keepouts) gets the widest narrower neck that does, never below the
+   * board's minimum trace width or, when none is set, half its net class width. The neck applies
+   * only near the pin; the log lists every planned neck and every one the routed board uses.
+   */
+  @SerializedName("pad_neck")
+  @Schema(description = "Neck below the pad width at pins the design closes in at it")
+  public Boolean padNeck;
+
+  /**
    * History cost of rip-ups: each item ripped in a pass counts in the cells it covered, and from
    * the next pass a maze move through those cells, or a rip of an item in them, costs {@code 1 +
    * factor * history} times as much, so connections that rip each other back and forth look for

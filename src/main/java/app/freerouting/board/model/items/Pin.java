@@ -52,6 +52,12 @@ public class Pin extends DrillItem implements Serializable {
   private transient Shape[] precalculatedShapes;
 
   /**
+   * A neck half width below the pad width that the design leaves for this pin, or 0: set by the
+   * router's pad neck planning when the pin cannot be left at its pad width.
+   */
+  private int accessNeckHalfWidth;
+
+  /**
    * Creates a new instance of Pin with the input parameters. (toLayer - fromLayer + 1) shapes must
    * be provided. pinIndex is the index of the pin in its component (starting with 0).
    */
@@ -581,14 +587,28 @@ public class Pin extends DrillItem implements Serializable {
   /**
    * Returns the neckdown half width for traces on layer. The neckdown width is used, when the pin
    * width is smaller than the trace width to enter or leave the pin with a trace. It is never below
-   * the narrowest trace width the board rules allow.
+   * the narrowest trace width the board rules allow. A planned pad neck (see {@link
+   * #setAccessNeckHalfWidth}) makes it narrower than the pad.
    */
   public int getTraceNeckdownHalfwidth(int layer) {
     double result = Math.max(0.5 * this.getMinWidth(layer) - 1, 1);
+    if (this.accessNeckHalfWidth > 0) {
+      result = Math.min(result, this.accessNeckHalfWidth);
+    }
     if (board != null && board.rules != null) {
       result = Math.max(result, board.rules.getMinAllowedTraceHalfWidth());
     }
     return (int) result;
+  }
+
+  /** The planned pad neck half width, or 0 when none is planned. */
+  public int getAccessNeckHalfWidth() {
+    return this.accessNeckHalfWidth;
+  }
+
+  /** Sets the planned pad neck half width; 0 removes it. */
+  public void setAccessNeckHalfWidth(int halfWidth) {
+    this.accessNeckHalfWidth = Math.max(0, halfWidth);
   }
 
   /** Returns the largest width of the pin shape on layer layer. */

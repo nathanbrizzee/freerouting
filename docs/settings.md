@@ -352,6 +352,20 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   to the board's minimum track width (in KiCad: Board Setup, Constraints); Specctra DSN files do
   not carry that value. Absent or 0: no floor, so a pin taper goes down to the pad width and a
   fanout neck to half the trace width. Equivalent CLI flag: `--router.min_trace_width_um=<um>`.
+- **`autorouter.pad_neck`**: A trace narrows to a pin's neck-down width near the pin, and that
+  width is the pad's narrow side, so a pin whose neighbouring pads sit closer than the clearance
+  to a pad-wide trace can never be left. When `true`, the routing stage gives each such pin the
+  widest narrower neck (in 10% steps) that leaves the pad clear of pads, fixed copper, keepouts
+  and the board edge, never below `min_trace_width_um` or, when that is not set, half the net
+  class width. Only the stretch near the pin is necked. The log lists every planned neck (`Pad
+  necks:`) and, at the end, every one the routed board uses (`Pad neck used:`), for review
+  against the current the net carries; KiCad does not flag them, since a net class width is not a
+  design rule. Default `false`, in no profile. When it helps: pins in a row whose pad gap is
+  just under the clearance, such as supply pins of a fine-pitch QFP with a wider supply class. On
+  S6 it necked 14 such pins from 0.30 to 0.27 mm and 6-8 of them connected, but the board's open
+  count rose (18 -> 25 with `standard`, 17 -> 22 with `thorough`) as other connections lost
+  space, a single run on a board whose leftovers shift with any change; not measured on the set
+  yet. CLI: `--router.autorouter.pad_neck=true`.
 - **`layers`**: An array of layer-specific settings (transient, typically set via CLI or loaded from board files). Each element contains:
     - **`routable`**: Boolean indicating if the layer is active/routable by the autorouter.
     - **`preferred_direction_horizontal`**: Boolean indicating if the preferred direction on this layer is horizontal.

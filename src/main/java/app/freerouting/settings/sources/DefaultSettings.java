@@ -203,6 +203,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.gridFinisherRipup = false;
     settings.autorouter.ripHistoryCost = 0.0;
     settings.autorouter.pinAccessCost = 0.0;
+    settings.autorouter.padNeck = false;
     settings.autorouter.fallbackWorkRatio = DEFAULT_FALLBACK_WORK_RATIO;
     settings.autorouter.fallbackThreads = DEFAULT_FALLBACK_THREADS;
     settings.autorouter.fallbackRace = false;

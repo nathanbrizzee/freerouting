@@ -2,6 +2,7 @@ package app.freerouting.management.jobs;
 
 import app.freerouting.analytics.FRAnalytics;
 import app.freerouting.analytics.model.JobLifecycleStatus;
+import app.freerouting.autoroute.PadNecks;
 import app.freerouting.autoroute.pipeline.BatchAutorouter;
 import app.freerouting.autoroute.pipeline.BatchOptimizer;
 import app.freerouting.autoroute.pipeline.RoutingPipeline;
@@ -259,6 +260,9 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
             job.logInfo("Crowded region: " + region);
           }
           job.logInfo("Verdict: " + OpenConnections.verdict(open));
+        }
+        for (String neck : PadNecks.used(job.board)) {
+          job.logInfo("Pad neck used: " + neck);
         }
       }
 
