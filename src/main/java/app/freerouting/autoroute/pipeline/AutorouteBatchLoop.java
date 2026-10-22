@@ -70,7 +70,10 @@ final class AutorouteBatchLoop {
             ? Math.max(1, settings.optimizer.maxThreads)
             : 1;
     job.logInfo(
-        "Pipeline thread limits: autorouter pass is single-threaded, optimizer.max_threads="
+        "Router profile: "
+            + (settings.profile != null ? settings.profile : "none (hardcoded defaults)")
+            + ". Pipeline thread limits: autorouter pass is single-threaded,"
+            + " optimizer.max_threads="
             + optimizerThreads
             + ".");
 

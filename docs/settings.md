@@ -123,6 +123,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 
 #### **`router` Section**
 
+- **`profile`**: The run profile (CLI `--router.profile=<name>`). A profile is a set of defaults; any setting given in a file, environment variable, the CLI, the GUI or the API still overrides it, and the log names the profile at the start of each job. Profiles set passes, budgets and strategies, never time limits, so runs stay repeatable.
+    - `"standard"` (default): the most complete board in the least time. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`. On the 19-board benchmark set this left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU.
+    - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage (`fallback_strategies=none`) and without the optimizer. Use it to see how far a board gets and where it is stuck.
+    - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
+    - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default.
 - **`default_preferred_direction_trace_cost`**: Cost factor for routing traces in the preferred direction.
 - **`default_undesired_direction_trace_cost`**: Cost factor for routing traces in undesired directions.
 - **`autorouter`**: Batch autorouter stage knobs. Canonical CLI is

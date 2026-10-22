@@ -166,7 +166,33 @@ runs, 1-50 s per link, including 60-97 mm runs on nearly empty inner layers.
   leftovers will disappear. Then add the finisher. Its link-order problem (links taking lanes from neighbouring pins)
   goes away when it sees the same rules and locks as the main router, and when escapes are planned first (section 7.3).
 
-## 6. Agent control and output
+### 5.4 Run profiles (user direction, 2026-10-22)
+
+The goal, in the user's order: first the time to a finished board, then completion. Some boards cannot finish
+because of the placement, and a nearly finished board shows where moving a part would help. So the default is the
+best balance of complete and fast, the original router becomes an option, and a few named profiles cover the other
+uses. Every individual setting still overrides its profile.
+
+`--router.profile=<name>`:
+
+| Profile | For | What it sets |
+|---|---|---|
+| `quick` | A first look in the least wall-clock time: how far the board gets and where it is stuck. | The `standard` routing, then stop: no fallbacks, no optimizer, the main passes stop when the open count stops improving. |
+| `standard` (default) | The normal run: the most complete board in the least time. | The best measured set: BGA escapes with both escape gates on grid balls only, via span cost, via-in-pad by the DSN; the fallbacks and race that measured best; the grid finisher for the leftovers once it measures well; the optimizer with a bound, so a clean board is not held for minutes of polishing. |
+| `thorough` | Finishing a hard board without moving parts; slower. | `standard`, then more of everything that can close a connection: the full fallback race, protection on every pin as one race strategy, the grid finisher with wider windows and rip-up, a larger work budget. Meant to start from a `quick` or `standard` result: `-de board.dsn earlier.ses`. |
+| `classic` | The original router, for comparison and for boards that route better with it. | Today's defaults: every overhaul gate off. |
+
+How it works: a profile is a different set of defaults (priority 0), not another settings layer. The merge copies
+only values that differ from the Java default, so a layer above the defaults could never switch a setting off;
+choosing the base instead lets a profile set any value, and every source above it still wins. Profiles must stay
+deterministic like the rest: they set passes, step budgets and strategies, never time limits.
+
+Each profile is measured on the board set by time to a clean route (not CPU to the cap: once a board is clean, the
+optimizer's threads dominate the CPU) and by open connections at the cap. A profile's contents change only with a
+measurement, recorded in the progress table.
+
+Later, for the "move a part" decision: a leftover report that lists each open connection with its position and
+what blocks it (the failure log has most of this).
 
 ### 6.1 Graceful stop
 

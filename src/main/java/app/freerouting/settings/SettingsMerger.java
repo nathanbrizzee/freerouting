@@ -1,6 +1,7 @@
 package app.freerouting.settings;
 
 import app.freerouting.logger.FRLogger;
+import app.freerouting.settings.sources.DefaultSettings;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -142,10 +143,18 @@ public class SettingsMerger implements Cloneable {
 
     FRLogger.debug("Merging settings from " + sortedSources.size() + " sources:");
 
+    List<RouterSettings> sourceSettingsList = new ArrayList<>();
+    for (SettingsSource source : sortedSources) {
+      sourceSettingsList.add(source.getSettings());
+    }
+    String profile = requestedProfile(sourceSettingsList);
+
     // The first non-null source (usually DefaultSettings) provides the base.
     RouterSettings mergedSettings = null;
-    for (SettingsSource source : sortedSources) {
-      RouterSettings sourceSettings = source.getSettings();
+    boolean profileApplied = false;
+    for (int i = 0; i < sortedSources.size(); i++) {
+      SettingsSource source = sortedSources.get(i);
+      RouterSettings sourceSettings = sourceSettingsList.get(i);
 
       if (sourceSettings == null) {
         FRLogger.debug(
@@ -160,6 +169,11 @@ public class SettingsMerger implements Cloneable {
       if (mergedSettings == null) {
         // First source provides the base settings
         mergedSettings = sourceSettings.clone();
+        if (source instanceof DefaultSettings) {
+          // The profile replaces the hardcoded defaults, so it can also switch settings off.
+          RouterProfiles.apply(profile, mergedSettings);
+          profileApplied = true;
+        }
         FRLogger.debug(
             "  - "
                 + source.getSourceName()
@@ -185,11 +199,45 @@ public class SettingsMerger implements Cloneable {
       mergedSettings = new RouterSettings();
     }
 
+    if (profileApplied) {
+      // The canonical name, not the spelling a higher source copied over the profile's own.
+      mergedSettings.profile = profile;
+    }
+
     // Validate the merged settings
     mergedSettings.validate();
 
     FRLogger.debug("Settings merged successfully from " + sortedSources.size() + " source(s)");
     return mergedSettings;
+  }
+
+  /**
+   * The profile the highest-priority source names, or {@link RouterProfiles#DEFAULT} when none
+   * does. An unknown name is reported and replaced by the default.
+   */
+  private static String requestedProfile(List<RouterSettings> sourceSettingsList) {
+    String requested = null;
+    for (RouterSettings settings : sourceSettingsList) {
+      if (settings != null && settings.profile != null && !settings.profile.isBlank()) {
+        requested = settings.profile;
+      }
+    }
+    if (requested == null) {
+      return RouterProfiles.DEFAULT;
+    }
+    String profile = RouterProfiles.normalize(requested);
+    if (profile == null) {
+      FRLogger.warn(
+          "Unknown router profile '"
+              + requested
+              + "' (known: "
+              + String.join(", ", RouterProfiles.NAMES)
+              + "); using '"
+              + RouterProfiles.DEFAULT
+              + "'.");
+      return RouterProfiles.DEFAULT;
+    }
+    return profile;
   }
 
   @Override

@@ -94,6 +94,14 @@ public class RouterSettings implements Serializable, Cloneable {
   public String jobTimeoutString;
 
   /**
+   * The run profile: {@code quick}, {@code standard} (the default), {@code thorough} or {@code
+   * classic}. A profile is a set of defaults, so every other setting still overrides it ({@link
+   * RouterProfiles}).
+   */
+  @SerializedName("profile")
+  public String profile;
+
+  /**
    * Maze search steps the whole job may use (fanout, autorouter and fallback searches; not the
    * optimizer). The job stops after the search that reaches it and ends as timed out. Unlike {@code
    * job_timeout}, it stops at the same point on every run, so capped benchmark runs do not depend
@@ -664,6 +672,7 @@ public class RouterSettings implements Serializable, Cloneable {
     result.holeClearanceUm = this.holeClearanceUm;
     result.minTraceWidthUm = this.minTraceWidthUm;
     result.fixKicadFootprints = this.fixKicadFootprints;
+    result.profile = this.profile;
     // Job outputs: a fallback attempt runs on a clone, and a timeout during it leaves the clone in
     // place, so without these the result manifest and the status file were lost.
     result.resultJsonPath = this.resultJsonPath;
