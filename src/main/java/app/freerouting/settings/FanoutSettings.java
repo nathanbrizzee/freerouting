@@ -91,6 +91,15 @@ public class FanoutSettings implements Serializable, Cloneable {
   public Boolean protectEscapes;
 
   /**
+   * When true, {@code min_escape_by_pitch} and {@code protect_escapes} act only on the balls of pin
+   * grids the BGA planner detects. On every pin they let fine-pitch parts outside a grid crowd
+   * their vias close in and keep a pin from ripping a neighbour's escape it needs, which cost
+   * boards without a BGA open connections and time.
+   */
+  @SerializedName("grid_balls_only")
+  public Boolean gridBallsOnly;
+
+  /**
    * The maximum physical escape wire length (in millimeters). The search tree expansion and via
    * placement during fanout will be restricted to this distance.
    */

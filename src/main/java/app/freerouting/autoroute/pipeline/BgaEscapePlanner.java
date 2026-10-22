@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Escape planning for pin grids (BGAs). A component whose SMD pads sit on a square lattice gets a
@@ -132,6 +133,17 @@ final class BgaEscapePlanner {
             + (System.currentTimeMillis() - started) / 1000.0
             + " s; the rest go to the fanout passes.");
     return new Summary(grids.size(), balls, needVia, placed, noRoom, noVia, byRing);
+  }
+
+  /** Item ids of the balls of every detected grid. */
+  static Set<Integer> ballPinIds(RoutingBoard board) {
+    Set<Integer> ids = new TreeSet<>();
+    for (Grid grid : detectGrids(board)) {
+      for (Ball ball : grid.balls()) {
+        ids.add(ball.pin().getId());
+      }
+    }
+    return ids;
   }
 
   /** Finds every component whose single-layer pads form a square lattice. */
