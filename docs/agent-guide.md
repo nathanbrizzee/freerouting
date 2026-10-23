@@ -92,7 +92,7 @@ Options worth knowing (all `--router.` on the command line):
 | `min_trace_width_um=<um>` | Narrowest trace the router may create. The DSN does not carry it. | Set it to the board's minimum track width (KiCad: Board Setup, Constraints) whenever necking is possible. |
 | `autorouter.force_via_in_pad=true` | Allows vias inside SMD pads even when the DSN forbids them (`attach off`). | Only if the board house builds filled and capped vias. Some boards finish only with it. |
 | `autorouter.rip_history_cost=1` | Makes connections that keep ripping each other look for other paths. | The pass lines show the open count swinging between the same values late in the run. It hurts boards that are still converging. |
-| `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `thorough`. | With `grid_finisher_ripup=true` it may lift up to four other connections. |
+| `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `thorough`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
 
@@ -194,5 +194,5 @@ Do not report the design's pre-existing clearance violations as routing errors.
   continue from the earlier `.ses`.
 - Judging a run by the optimizer stage: completion (open connections) comes first; the optimizer
   only polishes a finished board.
-- Treating `force_via_in_pad=true` as free: via-in-pad changes what the board house must build;
+- Treating `autorouter.force_via_in_pad=true` as free: via-in-pad changes what the board house must build;
   ask the person first.
