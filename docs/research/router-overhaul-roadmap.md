@@ -454,6 +454,11 @@ on large boards. If it is built, it must be optional, with the CPU path as the r
 
 ### 7.4a Differential pairs, matched lengths and impedance
 
+**Design (2026-10-23):** `differential-pair-design.md` turns this section into a phased plan: what the DSN and KiCad
+carry, what upstream added since our branch point (pair model and meander rules, pull requests #977 and #980), the
+routing practice as router rules, centreline routing with a split, gather points, tuning, the transactional
+unlock-reroute-relock, and the test boards. Read it before building anything below.
+
 **Why.** The user (2026-10-19): "Impedance and differential pairs would be huge. That's a major miss for this app."
 Every modern router handles them, and without them Freerouting cannot route USB, Ethernet, LVDS, HDMI, PCIe, DDR or
 fast DSP buses, or differential analog sensing, without the user hand-routing and locking those nets first.
