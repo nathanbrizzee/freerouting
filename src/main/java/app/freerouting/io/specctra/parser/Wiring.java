@@ -5,9 +5,11 @@ import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.FixedState;
+import app.freerouting.board.model.structure.Unit;
 import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.datastructures.IdentifierType;
@@ -515,6 +517,9 @@ public class Wiring extends ScopeKeyword {
         corners[i] = currentCorner.round();
       }
 
+      snapEndToPinCentre(board, corners, 0, 1, layerIndex, netNumbers);
+      snapEndToPinCentre(
+          board, corners, corners.length - 1, corners.length - 2, layerIndex, netNumbers);
       Polygon polygon = new Polygon(corners);
 
       // if it doesn't have two different points, it's not a valid polygon, so we must skip it
@@ -578,6 +583,67 @@ public class Wiring extends ScopeKeyword {
       tryCorrectNet(result);
     }
     return result;
+  }
+
+  /**
+   * Moves the end of a wire onto the centre of a pin of its own net when the exporter rounded it to
+   * within 1 micrometre of that centre. A trace connects to a pin only at the pin's centre, so the
+   * half-micrometre gap would otherwise be bridged by a tiny stub that is written to the session
+   * file and appears in the EDA tool as a dangling track. The end moves only when the segment keeps
+   * its direction class (axis-parallel or 45 degrees) and the wire has a second corner.
+   */
+  private static void snapEndToPinCentre(
+      RoutingBoard board,
+      IntPoint[] corners,
+      int endIndex,
+      int neighbourIndex,
+      int layer,
+      int[] netNumbers) {
+    if (corners.length < 2 || netNumbers.length == 0) {
+      return;
+    }
+    int tolerance =
+        Math.max(
+            1,
+            (int)
+                Math.round(
+                    Unit.scale(
+                        Math.max(1, board.communication.resolution),
+                        Unit.UM,
+                        board.communication.unit)));
+    IntPoint end = corners[endIndex];
+    Set<Item> pins =
+        board.pickItems(
+            end, layer, new ItemSelectionFilter(ItemSelectionFilter.SelectableChoices.PINS));
+    for (Item item : pins) {
+      Pin pin = (Pin) item;
+      boolean sameNet = false;
+      for (int netNumber : netNumbers) {
+        sameNet |= pin.containsNet(netNumber);
+      }
+      if (!sameNet || !(pin.getCenter() instanceof IntPoint centre) || centre.equals(end)) {
+        continue;
+      }
+      double dx = centre.x - end.x;
+      double dy = centre.y - end.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) > tolerance) {
+        continue;
+      }
+      IntPoint neighbour = corners[neighbourIndex];
+      if (centre.equals(neighbour)) {
+        continue;
+      }
+      if (isStraightClass(neighbour.x - end.x, neighbour.y - end.y)
+          && !isStraightClass(neighbour.x - centre.x, neighbour.y - centre.y)) {
+        continue;
+      }
+      corners[endIndex] = centre;
+      return;
+    }
+  }
+
+  private static boolean isStraightClass(long dx, long dy) {
+    return dx == 0 || dy == 0 || Math.abs(dx) == Math.abs(dy);
   }
 
   /**
