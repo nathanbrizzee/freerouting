@@ -4,7 +4,7 @@ For the maintainers of Freerouting. This is the write-up behind a fork branch th
 of upstream `master` (`5aa1b24`). It lists every change, what each one was measured to do, what was tried and
 dropped, and what is still open, so that a pull request can be cut from it in pieces.
 
-- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.1.jar`.
+- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.2.jar`.
 - Baseline for every comparison: the released v2.5.0 jar (built from `b647a2f`), and upstream `master` for the
   code.
 - The branch is large (184 files, +17.5k / -0.5k lines, 51 new test files, about half of it docs), so section 7
@@ -191,6 +191,11 @@ solid fills while the router runs (half of the event-thread samples had been reb
 All and Display Region stay enabled while routing; a click during a run stops it except in zoom-region state. A
 measured GUI run spent 3 of 162 sampled seconds drawing. New GUI text exists in the English bundle only.
 
+### Changes since 2.5.0-nb.1
+
+- **Upstream master merged** (102 commits): the preserved-trace junction model, width-safe target regions and aligned search/locator clearance envelopes, the `neck_width_um` micro-neckdown fix, SES geometry preservation, DRC false-positive fixes and the `DifferentialPair` detector. On bm01 the merged tree needs 168 s (619 CPU s) against 485 s (4435 CPU s) before; completion is the same on the other small boards. Our fixed-track split at T-junctions was dropped because upstream's centerline contact model makes it unnecessary.
+- **Wire ends snap onto pin centres.** A DSN exporter that rounds to a micrometre leaves a wire end half a micrometre off its pin centre; the router bridged the gap with a sub-micron stub that EDA tools import as a dangling track. Reading the board now moves an end onto the centre of a same-net pin within 1 um (only when the segment keeps its axis or 45 degree direction). Stubs elsewhere, for example at vias, are not covered.
+
 ## 4. Tried and dropped (so nobody repeats them)
 
 Each has a row in the progress log with numbers. In short:
@@ -284,10 +289,10 @@ Reviewers who want a single number to check: `--router.profile=classic` against 
 ## 8. Reproducing
 
 ```
-java -jar freerouting-2.5.0-nb.1.jar -de board.dsn -do board.ses --gui.enabled=false \
+java -jar freerouting-2.5.0-nb.2.jar -de board.dsn -do board.ses --gui.enabled=false \
   --router.job_timeout=00:10:00 --router.result_json=board.json
 # the original router's behaviour, same jar:
-java -jar freerouting-2.5.0-nb.1.jar ... --router.profile=classic
+java -jar freerouting-2.5.0-nb.2.jar ... --router.profile=classic
 ```
 
 The comparison against v2.5.0 uses the released v2.5.0 jar and the same command. The harness scripts are in `scripts/benchmark/overhaul/`.

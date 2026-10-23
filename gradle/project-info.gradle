@@ -4,7 +4,7 @@
 ext.publishInfo.artifactId = project.name.toLowerCase()
 ext.publishInfo.groupId = 'app.freerouting'
 // Fork build label; override with -PfrVersion=... (the jar file name stays freerouting-current-executable.jar)
-ext.publishInfo.versionId = providers.gradleProperty('frVersion').getOrElse('2.5.0-nb.1')
+ext.publishInfo.versionId = providers.gradleProperty('frVersion').getOrElse('2.5.0-nb.2')
 ext.publishInfo.isReleaseVersion = !ext.publishInfo.versionId.endsWith("SNAPSHOT")
 
 ext.publishInfo.developerName = 'Andras Fuchs, Michael Hoffer, Andrey Belomutskiy, Alfons Wirtz'
