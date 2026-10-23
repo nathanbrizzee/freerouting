@@ -1,0 +1,24 @@
+PCBs/Retro1DecodingModules_AddressDecoderModule	4	68
+PCBs/boatcontrol_NonLatchingNO30A	4	140
+PCBs/kitspace_Minisumo_V2.1	4	190
+PCBs/TinyTracker_ub-minimal	4	230
+PCBs/PDB_OSD_HARDWARE_Quadcopter Power Board	4	273
+PCBs/mppt-2420-rc_mppt-2420-rc	4	340
+PCBs/FMCW_RADAR_Radar MCU	4	369
+PCBs/TX5823_TX5823	4	402
+PCBs/DoroidOscillo-Board_Android_Oscilloscope	4	452
+PCBs/kitspace_lpa96	4	502
+PCBs/OpenHardwareExG_Shield_OpenHardwareExG_Shield	4	546
+PCBs/reworkctf_reworkctf	4	588
+PCBs/Librecalc-Hardware__autosave-calculator	4	679
+PCBs/kitspace_Unifying	4	857
+PCBs/front-end-modules_LimeSDR_Sony	6	1090
+PCBs/oskirby_logicbone	8	1656
+PCBs/Biscay_Blueeye_mcu	2	100
+PCBs/Starling_Starling_V1	2	124
+PCBs/EncoderBoard_Enc_Pan_Led	2	150
+PCBs/Baofeng-Interface_BaofengInterfaceIsolated	2	184
+PCBs/NRC2016_banked_ram	2	217
+PCBs/kitspace_sensor	2	288
+PCBs/kitspace_mppt-1210-hus	2	463
+PCBs/KiCad-Library_Teensy_test_layout	2	2563
