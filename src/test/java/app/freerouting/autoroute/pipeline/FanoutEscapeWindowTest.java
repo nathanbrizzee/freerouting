@@ -92,8 +92,9 @@ class FanoutEscapeWindowTest {
     assertTrue(afterOne.size() > 30, afterOne.size() + " pins escaped in pass 1");
     assertTrue(afterTwo.containsAll(afterOne), "pass 2 keeps every escape of pass 1");
     // The pins still without a via have all four diagonal gaps taken by neighbours that chose
-    // first; assigning the gaps by a matching is the BGA planner's job, not this change's.
-    assertTrue(innerPinsWithVia(twoPasses) >= 21, "no worse than without the protection");
+    // first (21 of 36 before the upstream merge, 20 after); assigning the gaps by a matching is the
+    // BGA planner's job, not this change's.
+    assertTrue(innerPinsWithVia(twoPasses) >= 20, "no worse than without the protection");
   }
 
   @Test

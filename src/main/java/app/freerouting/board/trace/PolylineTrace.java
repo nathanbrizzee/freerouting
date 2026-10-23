@@ -119,6 +119,25 @@ public class PolylineTrace extends Trace implements Serializable {
     return PolylineTraceGeometry.boundingBox(lines, getHalfWidth());
   }
 
+  @Override
+  public boolean contains(Point point) {
+    if (point == null) {
+      return false;
+    }
+    Point first = firstCorner();
+    Point last = lastCorner();
+    if ((first != null && point.equals(first)) || (last != null && point.equals(last))) {
+      return true;
+    }
+    if (!(point instanceof IntPoint)) {
+      return false;
+    }
+    if (!point.isContainedIn(boundingBox())) {
+      return false;
+    }
+    return lines != null && lines.contains(point);
+  }
+
   /** Returns the polyline of this trace. */
   public Polyline polyline() {
     return lines;
@@ -550,12 +569,7 @@ public class PolylineTrace extends Trace implements Serializable {
             for (int j = 0; j < intersectingLines.length; j++) {
               int lineIndex = foundEntry.shapeIndexInObject + 1;
               PolylineTrace[] currentSplitPieces =
-                  foundTrace.split(
-                      lineIndex,
-                      intersectingLines[j],
-                      foundTrace.isDeletionForbidden()
-                          && !this.isDeletionForbidden()
-                          && endsOn(this, foundLineSegment));
+                  foundTrace.split(lineIndex, intersectingLines[j]);
               if (currentSplitPieces != null) {
 
                 for (int k = 0; k < 2; k++) {
@@ -603,13 +617,7 @@ public class PolylineTrace extends Trace implements Serializable {
 
           intersectingLines = currentLineSegment.intersection(foundLineSegment);
           for (int j = 0; j < intersectingLines.length; j++) {
-            PolylineTrace[] currentSplitPieces =
-                split(
-                    i + 1,
-                    intersectingLines[j],
-                    this.isDeletionForbidden()
-                        && !foundTrace.isDeletionForbidden()
-                        && endsOn(foundTrace, currentLineSegment));
+            PolylineTrace[] currentSplitPieces = split(i + 1, intersectingLines[j]);
             if (currentSplitPieces != null) {
               ownTraceSplit = true;
               // this trace was split itself into 2.
@@ -667,7 +675,7 @@ public class PolylineTrace extends Trace implements Serializable {
           if (currentLineSegment.contains(splitPoint)) {
             Direction splitLineDirection = currentLineSegment.getLine().direction().turn45Degree(2);
             Line splitLine = new Line(splitPoint, splitLineDirection);
-            split(i + 1, splitLine, false);
+            split(i + 1, splitLine);
           }
         } else if (!this.isUserFixed() && (foundItem instanceof ConductionArea)) {
           boolean ignoreAreas = false;
@@ -713,7 +721,7 @@ public class PolylineTrace extends Trace implements Serializable {
       if (currentLineSegment.contains(point)) {
         Direction splitLineDirection = currentLineSegment.getLine().direction().turn45Degree(2);
         Line splitLine = new Line(point, splitLineDirection);
-        Trace[] result = split(i + 1, splitLine, false);
+        Trace[] result = split(i + 1, splitLine);
         if (result != null) {
           return result;
         }
@@ -725,21 +733,17 @@ public class PolylineTrace extends Trace implements Serializable {
   /**
    * Splits this trace at the line with number lineIndex into two by inserting endline as concluding
    * line of the first split piece and as the start line of the second split piece. Returns the 2
-   * pieces of the split trace, or null, if nothing was split. A fixed trace is split only when
-   * splitFixed is set, which callers do for a T-junction: an unfixed trace ending on it.
+   * pieces of the split trace, or null, if nothing was split.
    */
-  private PolylineTrace[] split(int lineIndex, Line newEndLine, boolean splitFixed) {
+  private PolylineTrace[] split(int lineIndex, Line newEndLine) {
     if (!this.isOnTheBoard()) {
       return null;
     }
-    // A fixed trace (user fixed, protect) is split only at a T-junction, where an unfixed trace
-    // ends on it: traces connect only at their ends, so refusing that split left a route that joins
-    // a fixed track in the middle open forever. A plain crossing is not split, so it stays
-    // unconnected, as in KiCad. The pieces keep the geometry and the fixed state, and
-    // removeTraceForSplit takes the original off the board, so no duplicate is left. Traces that
-    // belong to a component stay whole.
-    boolean fixedSplit = isDeletionForbidden();
-    if (fixedSplit && (!splitFixed || getComponentId() > 0)) {
+    // Guard: if this trace cannot be deleted (e.g. USER_FIXED / protect), splitting would leave
+    // the original on the board AND insert duplicate pieces. The outer normalizeTraces loop
+    // would then keep finding the same "changed" state and never converge. Return null so the
+    // caller knows the split is not possible.
+    if (isDeletionForbidden()) {
       return null;
     }
     Polyline[] splitPolylines = lines.split(lineIndex, newEndLine);
@@ -753,11 +757,7 @@ public class PolylineTrace extends Trace implements Serializable {
     if (splitInsideDrillPadProhibited(lineIndex, newEndLine)) {
       return null;
     }
-    if (fixedSplit) {
-      board.removeTraceForSplit(this);
-    } else {
-      board.removeItem(this);
-    }
+    board.removeItem(this);
     PolylineTrace[] result = new PolylineTrace[2];
     result[0] =
         board.insertTraceWithoutCleaning(
@@ -776,18 +776,6 @@ public class PolylineTrace extends Trace implements Serializable {
             clearanceClassIndex(),
             getFixedState());
     return result;
-  }
-
-  /**
-   * Whether trace has its first or last corner on segment (a T-junction onto that segment). Only
-   * integer corners are tested; {@link LineSegment#contains} does not handle rational ones.
-   */
-  private static boolean endsOn(PolylineTrace trace, LineSegment segment) {
-    return endsOn(trace.firstCorner(), segment) || endsOn(trace.lastCorner(), segment);
-  }
-
-  private static boolean endsOn(Point corner, LineSegment segment) {
-    return corner instanceof IntPoint && segment.contains(corner);
   }
 
   /**
@@ -1299,6 +1287,9 @@ public class PolylineTrace extends Trace implements Serializable {
       return false;
     }
     Polyline contactPolyline = contactTrace.polyline();
+    if (!contactPolyline.lastCorner().equals(tracePolyline.firstCorner())) {
+      return false;
+    }
     Line contactLastLine = contactPolyline.lines[contactPolyline.lines.length - 2];
     // look, if this trace has a sharp angle with the contact trace.
     Line firstLine = tracePolyline.lines[1];

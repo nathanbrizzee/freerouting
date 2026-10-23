@@ -145,11 +145,9 @@ public class TraceShover {
         IntBox viaBox = currentShoveVia.getTreeShapeOnLayer(searchTree, layer).boundingBox();
         double viaRadius = 0.5 * viaBox.maxWidth();
         double currentOkLength = projection - viaRadius - traceHalfWidth;
-        if (!searchTree.isClearanceCompensationUsed()) {
-          currentOkLength -=
-              clMatrix.getValue(
-                  clearanceClassIndex, currentShoveVia.clearanceClassIndex(), layer, true);
-        }
+        currentOkLength -=
+            searchTree.additionalClearance(
+                clearanceClassIndex, currentShoveVia.clearanceClassIndex(), layer);
         if (currentOkLength <= 0) {
           return 0;
         }
@@ -206,7 +204,9 @@ public class TraceShover {
             if (searchTree.isClearanceCompensationUsed()) {
               currentOkLength -=
                   searchTree.clearanceCompensationValue(
-                      currentSubstituteTrace.clearanceClassIndex(), layer);
+                          currentSubstituteTrace.clearanceClassIndex(), layer)
+                      + searchTree.additionalClearance(
+                          clearanceClassIndex, currentSubstituteTrace.clearanceClassIndex(), layer);
             } else {
               currentOkLength -=
                   clMatrix.getValue(
@@ -919,7 +919,11 @@ public class TraceShover {
     }
     TileShape offsetShape;
     if (searchTree.isClearanceCompensationUsed()) {
-      int offset = halfWidth + 1;
+      int offset =
+          halfWidth
+              + 1
+              + searchTree.additionalClearance(
+                  clearanceClassIndex, foundObstacle.clearanceClassIndex(), layer);
       offsetShape = (TileShape) obstacleShape.enlarge(offset);
     } else {
       int offset = halfWidth + 1;

@@ -260,13 +260,16 @@ public final class CliRunner {
     return JobRunSupport.stopFileExists(routingJob);
   }
 
+  /** Returns whether the CLI should stop waiting for routing updates. */
   public static boolean isCliTerminalState(RoutingJobState state) {
     return state != null && state.isTerminal();
   }
 
+  /** Writes nonempty output for completed or timed-out jobs without overwriting with empty data. */
   public static boolean writeCliOutputIfAvailable(
       GlobalSettings globalSettings, RoutingJob routingJob) {
-    if (routingJob.output == null || routingJob.output.getData() == null) {
+    var outputData = routingJob.output != null ? routingJob.output.getData() : null;
+    if (outputData == null || outputData.available() == 0) {
       return false;
     }
     if (routingJob.state != RoutingJobState.COMPLETED
@@ -283,7 +286,7 @@ public final class CliRunner {
               + "' ("
               + routingJob.output.format
               + ")...");
-      Files.write(outputFilePath, routingJob.output.getData().readAllBytes());
+      Files.write(outputFilePath, outputData.readAllBytes());
       if (Files.exists(outputFilePath) && Files.size(outputFilePath) > 0) {
         FRLogger.info(
             "Successfully saved output file '"
