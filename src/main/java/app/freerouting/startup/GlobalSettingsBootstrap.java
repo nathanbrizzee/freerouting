@@ -128,6 +128,9 @@ public final class GlobalSettingsBootstrap {
       }
     }
 
+    // What the file holds, before this launch's environment variables and command line, so that
+    // saving the settings later does not make them permanent
+    final var fileSettings = GlobalSettings.snapshot(globalSettings);
     globalSettings.applyNonRouterEnvironmentVariables();
 
     globalSettings.runtimeEnvironment.freeroutingVersion =
@@ -168,6 +171,7 @@ public final class GlobalSettingsBootstrap {
     FRLogger.debug("UTC Time: " + globalSettings.runtimeEnvironment.appStartedAt);
 
     globalSettings.applyCommandLineArguments(args);
+    GlobalSettings.rememberLaunchOverrides(fileSettings, globalSettings);
     GlobalSettings.setCurrent(globalSettings);
 
     return globalSettings;

@@ -646,6 +646,13 @@ Settings are resolved by the `SettingsMerger` class, which collects all active `
 
 If a setting is not defined in any source, the hardcoded default from `DefaultSettings` is used.
 
+Command-line arguments and environment variables apply to the launch that receives them only.
+When Freerouting saves `freerouting.json` (the GUI does when it closes and when settings change in
+its windows), a setting that still has the value the launch gave it is written with the value the
+file had before, so `-mt 0` or `--router.job_timeout=00:00:30` on one launch does not become the
+default of the next. A setting changed during the session, for example in the GUI's settings
+window, is saved as changed.
+
 ### Specctra `.rules` File Settings (Priority 40)
 
 When a `.rules` file is provided (via CLI `-dr`, `-de board.dsn+board.rules`, API `POST /v1/jobs/{jobId}/rules`, or an adjacent `<designName>.rules` file), `RulesFileSettings` parses both general routing rules and the `(autoroute_settings ...)` block. Supported parameters include:

@@ -10,6 +10,7 @@ import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.sources.DefaultSettings;
 import app.freerouting.util.ReflectionUtil;
 import app.freerouting.util.gson.GsonProvider;
+import com.google.gson.JsonElement;
 import com.google.gson.annotations.SerializedName;
 import java.io.IOException;
 import java.io.Reader;
@@ -490,9 +491,11 @@ public class GlobalSettings implements Serializable {
     // caller had set on the object (safety net for all call sites).
     globalSettings.version = getReleaseSafeVersion();
 
-    // Write the settings to the file
+    // Write the settings to the file, without the values only this launch's command line or
+    // environment set
     try (Writer writer = Files.newBufferedWriter(configurationFilePath)) {
-      GsonProvider.GSON.toJson(globalSettings, writer);
+      GsonProvider.GSON.toJson(
+          LaunchOverrides.restore(GsonProvider.GSON.toJsonTree(globalSettings)), writer);
     } catch (AccessDeniedException e) {
       throw new AccessDeniedException(
           configurationFilePath.toString(),
@@ -521,6 +524,23 @@ public class GlobalSettings implements Serializable {
     } catch (Exception _) {
       // Ignored on non-POSIX or restricted environments
     }
+  }
+
+  /**
+   * Remembers which settings the command line and environment variables of this launch changed,
+   * from the settings before and after they were applied, so that {@link #saveAsJson} keeps them
+   * out of the settings file.
+   *
+   * @param before the settings as loaded from the file, before the launch options
+   * @param afterLaunch the same settings after the launch options were applied
+   */
+  public static void rememberLaunchOverrides(JsonElement before, GlobalSettings afterLaunch) {
+    LaunchOverrides.remember(before, GsonProvider.GSON.toJsonTree(afterLaunch));
+  }
+
+  /** The settings before launch options, as {@link #rememberLaunchOverrides} takes them. */
+  public static JsonElement snapshot(GlobalSettings settings) {
+    return GsonProvider.GSON.toJsonTree(settings);
   }
 
   /**
