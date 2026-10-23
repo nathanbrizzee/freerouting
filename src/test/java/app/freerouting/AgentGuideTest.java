@@ -39,6 +39,13 @@ class AgentGuideTest {
   }
 
   @Test
+  void theLogPointerGivesTheCommandThatPrintsTheGuide() {
+    String pointer = AgentGuide.logPointer();
+    assertTrue(pointer.contains("java -jar "), pointer);
+    assertTrue(pointer.contains(".jar " + AgentGuide.FLAG), pointer);
+  }
+
+  @Test
   void onlyTheFlagRequestsTheGuide() {
     assertTrue(AgentGuide.requested(new String[] {"--agent-guide"}));
     assertTrue(AgentGuide.requested(new String[] {"-de", "board.dsn", "--AGENT-GUIDE"}));

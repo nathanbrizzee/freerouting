@@ -3,6 +3,8 @@ package app.freerouting;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * The guide for AI agents that run Freerouting: how to start a run, what the options do and how to
@@ -14,15 +16,37 @@ public final class AgentGuide {
   /** Command-line flag that prints the guide and exits. */
   public static final String FLAG = "--agent-guide";
 
-  /** Log line that tells an agent reading only a log where the guide is. */
-  public static final String LOG_POINTER =
-      "AI agents: run 'java -jar freerouting.jar "
-          + FLAG
-          + "' for how to run Freerouting and read this log.";
-
   static final String RESOURCE = "/app/freerouting/agent-guide.md";
 
   private AgentGuide() {}
+
+  /**
+   * Log line that tells an agent reading only a log where the guide is, naming the jar that runs so
+   * the command can be copied as it is.
+   */
+  public static String logPointer() {
+    return "AI agents: run 'java -jar "
+        + jarName()
+        + " "
+        + FLAG
+        + "' for the options, how to run Freerouting and how to read this log.";
+  }
+
+  /** File name of the running jar, or {@code freerouting.jar} when not run from a jar. */
+  static String jarName() {
+    try {
+      var source = AgentGuide.class.getProtectionDomain().getCodeSource();
+      if (source != null && source.getLocation() != null) {
+        String name = Path.of(source.getLocation().toURI()).getFileName().toString();
+        if (name.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+          return name;
+        }
+      }
+    } catch (Exception e) {
+      // fall through to the generic name
+    }
+    return "freerouting.jar";
+  }
 
   /** Whether the arguments ask for the guide. */
   public static boolean requested(String[] args) {

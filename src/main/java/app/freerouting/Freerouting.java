@@ -552,7 +552,7 @@ public class Freerouting {
 
     // Log system information
     FRLogger.info("Freerouting " + VERSION_NUMBER_STRING);
-    FRLogger.info(AgentGuide.LOG_POINTER);
+    FRLogger.info(AgentGuide.logPointer());
     FRLogger.debug(
         "[startup] user-data path : "
             + GlobalSettings.getUserDataPath()

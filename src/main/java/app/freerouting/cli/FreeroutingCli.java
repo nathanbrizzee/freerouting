@@ -50,7 +50,7 @@ public final class FreeroutingCli {
             + " (build-date: "
             + Constants.FREEROUTING_BUILD_DATE
             + ")");
-    FRLogger.info(AgentGuide.LOG_POINTER);
+    FRLogger.info(AgentGuide.logPointer());
 
     GlobalSettings globalSettings =
         GlobalSettingsBootstrap.initialize(args, loggingConfig.fileLoggingLocation(), true);
