@@ -11,8 +11,6 @@ import app.freerouting.autoroute.expansion.FreeSpaceExpansionRoom;
 import app.freerouting.autoroute.expansion.IncompleteFreeSpaceExpansionRoom;
 import app.freerouting.autoroute.expansion.ObstacleExpansionRoom;
 import app.freerouting.autoroute.expansion.TargetItemExpansionDoor;
-import app.freerouting.autoroute.plan.CorridorMap;
-import app.freerouting.autoroute.plan.OracleCorridors;
 import app.freerouting.board.actions.ItemSelectionFilter;
 import app.freerouting.board.model.items.Connectable;
 import app.freerouting.board.model.items.Item;
@@ -68,9 +66,6 @@ public class MazeSearchEngine {
   private final MazeExpansionEngine expansionEngine;
   private final MazeRipupResolver ripupResolver;
 
-  /** Corridors of the oracle experiment for this search's net, or null (normally). */
-  private final CorridorMap corridors;
-
   /** The destination door found by the expanding algorithm. */
   private ExpandableObject destinationDoor;
 
@@ -86,8 +81,6 @@ public class MazeSearchEngine {
     this.searchTree = autorouteEngine.autorouteSearchTree;
     this.expansionEngine = new MazeExpansionEngine(this);
     this.ripupResolver = new MazeRipupResolver(this);
-    CorridorMap oracle = ctrl.isFanout ? null : OracleCorridors.active();
-    this.corridors = oracle != null && oracle.hasNet(ctrl.netNumber) ? oracle : null;
     mazeExpansionList =
         new TreeSet<>() {
           @Override
@@ -898,13 +891,6 @@ public class MazeSearchEngine {
     double moveCost =
         shapeEntryMiddle.weightedDistance(
             fromMiddle, ctrl.traceCosts[layer].horizontal(), ctrl.traceCosts[layer].vertical());
-    if (this.corridors != null) {
-      moveCost *=
-          1
-              + OracleCorridors.extraCostFactor()
-                  * this.corridors.outsideFraction(
-                      ctrl.netNumber, layer, fromMiddle, shapeEntryMiddle);
-    }
     if (ctrl.ripHistory != null) {
       moveCost *=
           1 + ctrl.ripHistoryFactor * ctrl.ripHistory.along(layer, fromMiddle, shapeEntryMiddle);

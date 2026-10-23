@@ -20,8 +20,8 @@ connections are blocked locally (the open count reaches 9 by pass 7 and then swi
 the synthetic board pass 1 alone is 69 of 268 s and passes 1 to 5 are half the run; with corridors pass 1
 leaves 98 open instead of 68, because each net is pushed onto its final path before the routes it bent
 around exist. The time goes into the cost of each maze search, not into conflicts a plan would avoid, so the
-planner below is not the next step. The corridor experiment stays in the code (`OracleCorridors`, off unless
-its system properties are set) for later tests.
+planner below is not the next step. The corridor experiment code (`OracleCorridors`, `CorridorMap`) was removed
+on 2026-10-23, since nothing used it; it is in the git history (before the commit that removed it).
 
 ## Why
 
