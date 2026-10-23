@@ -57,6 +57,13 @@ Rules that save trouble:
   on (the default) for the final run of a board that finishes.
 - To continue from an earlier result instead of starting over, give both files:
   `-de board.dsn earlier.ses`. The earlier routes stay movable, so the router can rip them up.
+- Memory: a plain `java -jar` run is fine for one board at a time; Java then allows a heap of about
+  a quarter of the machine's RAM. When you run several boards at once, give each its own limit
+  (`java -Xmx6g -jar freerouting.jar ...`) so the total stays below the machine's RAM: the
+  `thorough` profile and boards of tens of thousands of connections need 4 to 6 GB each, and
+  eight such runs on a 31 GB machine were killed by the system. Four at a time is a safe
+  ceiling there. `-Xmx` is a Java flag and goes before `-jar`. If a run ends with
+  `OutOfMemoryError` in the log, raise it, or run fewer boards at once.
 - The log file goes to the platform's log folder (Windows `%LOCALAPPDATA%\freerouting\logs`,
   macOS `~/Library/Logs/freerouting`, Linux `~/.local/state/freerouting/logs`). Capture standard
   output too (`> board.log 2>&1`); it carries the same lines.
@@ -194,5 +201,7 @@ Do not report the design's pre-existing clearance violations as routing errors.
   continue from the earlier `.ses`.
 - Judging a run by the optimizer stage: completion (open connections) comes first; the optimizer
   only polishes a finished board.
+- Starting many runs at once without `-Xmx`: each may grow to a quarter of the RAM, and the system
+  kills the processes. Cap each run and start fewer.
 - Treating `autorouter.force_via_in_pad=true` as free: via-in-pad changes what the board house must build;
   ask the person first.
