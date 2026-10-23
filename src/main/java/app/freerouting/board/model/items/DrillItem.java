@@ -112,9 +112,13 @@ public abstract class DrillItem extends Item implements Connectable, Serializabl
 
     // Insert a Trace from the old center to the new center, on all layers, where
     // this DrillItem was connected to a Trace.
+    Point newCenter = this.getCenter();
+    if (oldCenter != null && oldCenter.equals(newCenter)) {
+      // A move to the same place has no trace to connect; a one-point polyline is not a trace.
+      return;
+    }
     Collection<Point> connectPointList = new LinkedList<>();
     connectPointList.add(oldCenter);
-    Point newCenter = this.getCenter();
     IntPoint addCorner = null;
     if (oldCenter instanceof IntPoint point && newCenter instanceof IntPoint point1) {
       // Make sure, that the traces will remain 90- or 45-degree.
