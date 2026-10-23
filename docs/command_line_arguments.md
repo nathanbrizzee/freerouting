@@ -83,22 +83,15 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 
 ### Optimization Strategies
 
-- **`-us [greedy | global | hybrid]`**
-  Sets the board updating strategy for route optimization:
-  - `greedy` (default): Accepts any immediate improvement.
-  - `global`: Only accepts changes that result in a global optimum.
-  - `hybrid`: Combines both strategies; requires `-hr` to specify the ratio.
+- **`-us <value>`**
+  Kept for older scripts. The optimizer has one board updating strategy left, `global` (work out
+  the candidate updates and apply the single best one), and `-us` with any value selects it. The
+  `greedy` and `hybrid` strategies and the `-hr` ratio were removed.
 
-- **`-hr [m:n]`**
-  Specifies the hybrid ratio when using the `hybrid` update strategy:
-  - Format: `#_global_optimal_passes:#_prioritized_passes` (e.g., `1:1`).
-  - Only effective with `-us hybrid`.
-
-- **`-is [sequential | random | prioritized]`**
+- **`-is [sequential | prioritized]`**
   Sets the item selection strategy for route optimization:
-  - `sequential`: Processes items in order.
-  - `random`: Processes items in a random order.
-  - `prioritized` (default): Selects items based on calculated scores from previous rounds.
+  - `sequential` (default): Processes items in order.
+  - `prioritized`: Selects items based on calculated scores from previous rounds.
 
 ### Language and Localization
 

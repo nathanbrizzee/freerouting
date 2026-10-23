@@ -162,6 +162,19 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       the default order made 16. It costs CPU time for every seed, and on a board the default run
       already finishes it can take longer, because every attempt runs to its end.
     - **`force_via_in_pad`**: Whether the router may drill a via into an SMD pad of its own net even when the DSN marks the via padstacks `(attach off)`. Default is `true`, the long-standing behaviour. `false` honours the DSN, as the `planned` and `bga` fanouts always do; via-in-pad needs filled and capped vias, so a board that does not allow it should route with `false`.
+    - **`start_necked`**: When a net needed a necked trace on an earlier connection, its later
+      connections route at the neck width directly instead of trying the class width first. Default
+      `true`. Turning it off makes every connection try the class width again, at more search work.
+    - **`smd_net_via_cost_factor`**: Factor on the via cost for nets whose pins are all SMD pads,
+      so such a net changes layer before it uses up the channel next to its pads. Default `0.1`.
+    - **`residual_repair_max_open`**: A board left with at most this many open connections is
+      continued from its best routing before the other fallback attempts start. Default `4`; `0`
+      turns the continuation off.
+    - **`explore_patience`**: Exploration attempts after the opening fallback. Later attempts of a
+      kind raise the via costs and widen the ripped neighbourhood. Default `0` (off); attempts are
+      not cut short by elapsed time, so set a `job_timeout` when using it.
+    - **`explore_fallback_strategies`**: Comma-separated fallback strategies an exploration round
+      runs. Default `short-escape,open-escape`. Only used when `explore_patience` is above `0`.
     - **`via_span_cost_factor`**: Extra cost for each layer a via drills beyond its first two, as a fraction of the via cost, so a microvia or a short buried via is cheaper than a through via and the search keeps the rest of the stack free. Default is `0`, which prices every via the same. Only matters on boards whose via rules include blind or buried vias.
     - **`fallback_work_ratio`**: The fallback stage may make at most this many times as many
       connection attempts as the default run made, summed over its attempts. The attempt that
@@ -352,6 +365,27 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   to the board's minimum track width (in KiCad: Board Setup, Constraints); Specctra DSN files do
   not carry that value. Absent or 0: no floor, so a pin taper goes down to the pad width and a
   fanout neck to half the trace width. Equivalent CLI flag: `--router.min_trace_width_um=<um>`.
+- **`copper_to_edge_clearance_um`**: Clearance between copper and the board outline, in
+  micrometers. Default `250`. The default is a guess: it leaves an outline clearance class the DSN
+  sets untouched, and it never demands more than the closest pin already has, because a pin nearer
+  the edge than that would block every connection. A value you set applies as given. Negative
+  values are ignored with a warning.
+- **`hole_clearance_um`**: Clearance between drill holes and copper of other nets, in micrometers.
+  Above `0`, holes get a keepout clearance class with that value. Default `0` (no extra hole
+  clearance). Negative values are ignored with a warning.
+- **`clearance_tolerance_um`**: Clearance shortfalls (required minus actual) up to this many
+  micrometers count as rounding noise, not as violations. Default `1`.
+- **`strict_drc`**: When `true`, a routed connection whose new traces or vias carry clearance
+  violations is ripped up again and counted as not routed in that pass, instead of being kept with
+  the violations. Default `false`. Violations between two existing items of other nets that a
+  shove moved are not counted against the new connection.
+- **`fix_kicad_footprints`**: A board from KiCad keeps its netless pads netless. When `true`, a
+  group of overlapping netless pads of one footprint that touch pads of one net takes that net, as
+  KiCad footprints with stacked pads need. Default `false`. Boards from other tools get this
+  repair always.
+- **`validation_warnings`**: Output only. Warnings the settings check found before the run (for
+  example a value out of range); they appear in the result file's `settings_snapshot`. Setting it
+  has no effect.
 - **`autorouter.pad_neck`**: A trace narrows to a pin's neck-down width near the pin, and that
   width is the pad's narrow side, so a pin whose neighbouring pads sit closer than the clearance
   to a pad-wide trace can never be left. When `true`, the routing stage ends (after the fallback
@@ -366,13 +400,27 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   against the current the net carries; KiCad does not flag them, since a net class width is not a
   design rule. Default `false`, in no profile. When it helps: pins in a row whose pad gap is
   just under the clearance, such as supply pins of a fine-pitch QFP with a wider supply class. On
-  S6 it necked 14 such pins from 0.30 to 0.27 mm and 6-8 of them connected, but the board's open
-  count rose (18 -> 25 with `standard`, 17 -> 22 with `thorough`) as other connections lost
-  space, a single run on a board whose leftovers shift with any change; not measured on the set
-  yet. CLI: `--router.autorouter.pad_neck=true`.
+  S6 from an unrouted board it planned 0.27 mm necks for the supply pins of a QFP with 0.30 mm
+  pads; with `thorough` the board went from 17 to 16 open (two pins connected, at 0.225 mm, the
+  insert's own neck near the pin), with `standard` the step did not improve the board and the
+  earlier board was kept (18 open). Applying the necks from the start instead made S6 worse (18 ->
+  25), which is why it runs last. Not measured on the whole set yet. CLI:
+  `--router.autorouter.pad_neck=true`.
 - **`layers`**: An array of layer-specific settings (transient, typically set via CLI or loaded from board files). Each element contains:
     - **`routable`**: Boolean indicating if the layer is active/routable by the autorouter.
     - **`preferred_direction_horizontal`**: Boolean indicating if the preferred direction on this layer is horizontal.
+    - **`bend_cost`**: Cost added each time a route changes direction on this layer, from `0.0` (no penalty) to `9.9` (strongly avoids bends). Absent uses the board default.
+    - **`preferred_direction_trace_cost`**: Cost per mm of trace in the layer's preferred direction. Absent uses the computed board default.
+    - **`undesired_direction_trace_cost`**: Cost per mm of trace against the layer's preferred direction. Absent uses the computed board default.
+- **`scoring`**: Costs the router's search and rip-up use (not the board score; see
+  `router_scoring`). Besides `via_costs`, `plane_via_costs`, `start_ripup_costs` and the two
+  default direction costs described above, it holds:
+    - **`preferred_direction_trace_cost`**, **`undesired_direction_trace_cost`**: The per-layer
+      cost per mm the router computes from the layers' settings. Derived, not read from settings.
+    - **`default_bend_cost`**: Bend cost of layers that set none. Default `0.0`.
+    - **`unrouted_net_penalty`**, **`clearance_violation_penalty`**, **`bend_penalty`**: Weights
+      of the legacy `V1_LEGACY` board score, kept for JSON compatibility. The default `V2`
+      scores do not read them.
 - **`router_scoring`**: Autorouter board score (`V2_CONTINUOUS` by default; `V1_LEGACY`
   remains available). Used by the autorouter, board history, and API `normalized_score`.
   Incomplete connections are split at `unrouted_free_fraction` (0.5): the first half
@@ -427,6 +475,17 @@ Configures the optional route-optimization stage that runs after autorouting.
   current pass. Default is `50`.
 - **`max_consecutive_failures_pass1`**: Maximum consecutive candidate failures allowed in pass 1 before
   early-terminating the pass (canary probe). Default is `12`.
+- **`additional_ripup_cost_factor_at_start`**: Multiplier on the rip-up cost when an optimizer
+  pass starts; higher values make it less willing to move other routes. Default `10`.
+- **`trace_ripup_cost_factor`**: Factor on the rip-up cost of traces (vias keep the full cost), so
+  the optimizer reroutes traces more readily than it moves vias. Default `0.6`.
+- **`max_autoroute_passes`**: Routing passes the optimizer may use to route one ripped item and
+  its connected items again. Default `6`.
+- **`board_update_strategy`**: How the optimizer applies its changes. `GLOBAL_OPTIMAL` works out
+  the candidate updates and applies the single best one, and is the only strategy left; `-us`
+  with any value selects it.
+- **`item_selection_strategy`**: Order in which the optimizer takes items: `SEQUENTIAL` (default)
+  or `PRIORITIZED`. Command line: `-is sequential` or `-is prioritized`.
 
 ##### **`fanout` Sub-section**
 
@@ -443,6 +502,11 @@ Configures the SMD-pin fanout pre-pass stage.
 - **`protect_escapes`**: When `true`, a fanout search never rips another pin's escape via or its short stub. Default is `false`. Stops the fanout passes from undoing each other on dense parts; a pin that finds no site then fails instead of taking a neighbour's.
 - **`min_escape_by_pitch_grid_only`**: When `true`, `min_escape_by_pitch` acts only on the balls of pin grids the BGA planner detects (see `strategy`, `"bga"`); other pins keep `min_escape_length_mm`. Default is `false`. On every pin the window lets fine-pitch parts outside a BGA crowd their vias close in, which cost some boards without a BGA open connections.
 - **`protect_escapes_grid_only`**: When `true`, `protect_escapes` acts only on the balls of detected pin grids; other pins may rip a neighbour's escape as without the gate. Default is `false`. Leave it off on a board whose fanout passes oscillate, where the pass log shows the same tens of pins re-fanned in every pass: protection on every pin stops that. Otherwise, on the boards measured, limiting both gates to grid balls gave fewer open connections than either gate on every pin.
+- **`fallback_to_board_vias`**: When a net has no via rule, or an empty one, the fanout uses the
+  board's via rules instead of leaving the net's pins without an escape. Default `true`.
+- **`retry_without_escape_window`**: When `true`, a pin whose escape fails inside the escape
+  length window (`min_escape_length_mm` to `max_escape_length_mm`) is retried once without it.
+  Default `false`.
 - **`max_escape_length_mm`**: The maximum physical escape trace length in millimeters. Default is `4.5`. Enforced directly during maze expansion.
 - **`start_via_diameter_mm`**: The diameter of starting/escape vias used inside the pins during the fanout/escape stage (in millimeters). Default is `0.25`.
 - **`end_via_diameter_mm`**: The diameter of landing/end vias used at the end of escaping wires during the fanout/escape stage (in millimeters). Default is `0.25`.
