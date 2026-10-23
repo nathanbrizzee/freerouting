@@ -269,6 +269,14 @@ jar {
     }
 }
 
+// The agent guide ships inside the jar so that '--agent-guide' prints the guide of the version
+// that runs; docs/agent-guide.md stays its only source.
+processResources {
+    from('docs/agent-guide.md') {
+        into 'app/freerouting'
+    }
+}
+
 tasks.register('executableJar', Jar) {
     archiveBaseName = 'freerouting-current'
     archiveClassifier = 'executable'

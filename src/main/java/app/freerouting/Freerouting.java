@@ -506,6 +506,9 @@ public class Freerouting {
    * @param args command-line arguments
    */
   void main(String[] args) {
+    if (AgentGuide.requested(args)) {
+      System.exit(AgentGuide.print());
+    }
     originalSystemOut = System.out;
     boolean isStdioMode = false;
     if (args.length > 0) {
@@ -532,7 +535,7 @@ public class Freerouting {
     UserDataPathResolver.ResolvedUserDataPath userdataPath =
         UserDataPathResolver.resolveAndLock(args);
 
-    LoggingBootstrap.LoggingConfig loggingConfig =
+    final LoggingBootstrap.LoggingConfig loggingConfig =
         LoggingBootstrap.initialize(args, userdataPath.path(), userdataPath.source());
 
     // NOW we can start logging - log4j2 will initialize with our configuration
@@ -549,6 +552,7 @@ public class Freerouting {
 
     // Log system information
     FRLogger.info("Freerouting " + VERSION_NUMBER_STRING);
+    FRLogger.info(AgentGuide.LOG_POINTER);
     FRLogger.debug(
         "[startup] user-data path : "
             + GlobalSettings.getUserDataPath()

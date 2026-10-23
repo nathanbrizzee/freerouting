@@ -1,0 +1,16 @@
+# Freerouting
+
+> Freerouting is a printed circuit board autorouter. It reads a Specctra design file (.dsn)
+> exported from an EDA tool such as KiCad, routes the board, and writes a Specctra session file
+> (.ses) to import back.
+
+AI agents that run Freerouting should read the agent guide first. It ships inside the jar of every
+version: `java -jar freerouting.jar --agent-guide` prints the guide that matches that jar.
+
+- [Agent guide](docs/agent-guide.md): how to start, watch and stop a run, which options to use,
+  and how to read the log and the result file.
+- [Settings reference](docs/settings.md): every option, its default, and when it helps.
+- [Command line arguments](docs/command_line_arguments.md): the short flags (`-de`, `-do`, `-mt`,
+  `-dct`).
+- [MCP server](docs/API/MCP.md): Freerouting as a service for agents that talk MCP.
+- [Scoring](docs/scoring.md): how the board score is computed.
