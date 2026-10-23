@@ -69,11 +69,11 @@ class KiCadDrcViolationRoutingTest extends RoutingFixtureTest {
 
   @Test
   void issue5754HoleClearanceViolations() throws Exception {
-    assertDrcOnLoadedBoard("Issue575-drc_dev-board_4_hole_clearance_violations.dsn", 3, 0);
+    assertDrcOnLoadedBoard("Issue575-drc_dev-board_4_hole_clearance_violations.dsn", 0, 0);
   }
 
   @Test
   void issue5757UnconnectedItems() throws Exception {
-    assertDrcOnLoadedBoard("Issue575-drc_Natural_Tone_Preamp_7_unconnected_items.dsn", 122, 0);
+    assertDrcOnLoadedBoard("Issue575-drc_Natural_Tone_Preamp_7_unconnected_items.dsn", 51, 0);
   }
 }

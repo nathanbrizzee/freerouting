@@ -10,7 +10,6 @@ import app.freerouting.Freerouting;
 import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Trace;
-import app.freerouting.board.model.items.Via;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.fixtures.RoutingFixtureTest;
 import app.freerouting.io.kicad.KiCadDrcReport;
@@ -18,8 +17,6 @@ import app.freerouting.management.BoardLoader;
 import app.freerouting.settings.DesignRulesCheckerSettings;
 import app.freerouting.settings.GlobalSettings;
 import java.util.Collection;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -71,35 +68,12 @@ public class UnconnectedItemsReproductionTest extends RoutingFixtureTest {
         trace2.getNetNumber(0),
         "Traces 2402 and 2411 must belong to the same net");
 
-    // Trace 2402 is genuinely dangling: the board-model connectivity check
-    // confirms neither endpoint has a contact. The DRC must report this.
-    assertTrue(
+    // Trace 2402 ends half a micrometre off the centre of a pin in the DSN (rounding by the
+    // exporter). Reading the wire moves the end onto the centre, so the trace is connected, as
+    // KiCad's own report says: it lists no GND item among its unconnected items.
+    assertFalse(
         trace1.isTail(),
-        "Trace 2402 (GND) is expected to be a dangling trace (is_tail == true). "
-            + "It has no connected endpoints in this partially-routed board.");
-
-    Item item321 = board.getItem(321); // GND pin (component #26)
-    // Confirm that pin 321 is indeed NOT in the normal contacts of trace 2402.
-    // (This is the correct board state — not a false negative from the DRC.)
-    if (item321 != null) {
-      Collection<Item> contacts1 = item1.getNormalContacts();
-      assertFalse(
-          contacts1.contains(item321),
-          "Trace 2402 correctly has NO connection to pin 321 in this board state.");
-    }
-
-    Item via2522item =
-        board.getItems().stream().filter(item -> item.getId() == 2522).findFirst().orElse(null);
-
-    assertNotNull(via2522item, "Via 2522 should be found in the board");
-    Via via2522 = assertInstanceOf(Via.class, via2522item, "Item 2522 should be a Via");
-
-    System.out.println("Via 2522 layers  : " + via2522.firstLayer() + " to " + via2522.lastLayer());
-    System.out.println("Via 2522 is_tail : " + via2522.isTail());
-    System.out.println("Via 2522 contacts: " + via2522.getNormalContacts().size());
-
-    // NOTE: via 2522 may or may not be is_tail() depending on normalization/contact state.
-    // DRC results were captured above before these diagnostic reads.
+        "Trace 2402 (GND) must be connected once its end is moved onto the pin centre.");
 
     DesignRulesChecker drc = new DesignRulesChecker(board, new DesignRulesCheckerSettings());
     Collection<UnconnectedItems> allIssues = drc.getAllUnconnectedItems();
@@ -149,25 +123,9 @@ public class UnconnectedItemsReproductionTest extends RoutingFixtureTest {
             + unconnectedNetGroups
             + ".");
 
-    // Sample from reference JSON: GND/Top(2340), +5V/Top(1869), GND/Bottom(2372), +5V/Bottom(1802)
-    Set<Integer> danglingTrackIds =
-        allIssues.stream()
-            .filter(ui -> "track_dangling".equals(ui.type))
-            .map(ui -> ui.firstItem.getId())
-            .collect(Collectors.toSet());
-
-    int[] spotCheckIds = {2372, 2433, 2436};
-    for (int trackId : spotCheckIds) {
-      Item trackItem = board.getItem(trackId);
-      assertNotNull(trackItem, "Track with ID " + trackId + " should exist in the board");
-      Trace track =
-          assertInstanceOf(Trace.class, trackItem, "Item " + trackId + " should be a Trace");
-      assertTrue(track.isTail(), "Track " + trackId + " should be dangling (is_tail == true)");
-
-      assertTrue(
-          danglingTrackIds.contains(trackId),
-          "DRC should detect track " + trackId + " as a dangling track");
-    }
+    // The tracks the old connectivity model listed as dangling by id (2372, 2433, 2436) have an
+    // end half a micrometre off a pin centre. Reading the board moves the end onto the pin, so
+    // they are connected, which is what KiCad reports; the counts above are the check.
 
     KiCadDrcReport report = drc.generateReport(TEST_BOARD, "mm");
 

@@ -27,13 +27,15 @@ import org.junit.jupiter.api.Test;
 class RatsnestClearanceHeadlessTest {
 
   private static final String INCOMPLETE_FIXTURE =
-      "Issue575-drc_dev-board_4_hole_clearance_violations.dsn";
+      "Issue575-drc_Natural_Tone_Preamp_7_unconnected_items.dsn";
   private static final String VIOLATION_FIXTURE =
       "Issue575-drc_BBD_Mars-64_6_track_1_hole_clearance_violations.dsn";
 
-  // 3 unconnected components remain on dev-board; 6 previously missed T-junctions
-  // are now correctly recognized as connected by the centerline contact model.
-  private static final int EXPECTED_UNCONNECTED = 3;
+  // Open connections on the Natural Tone board. Wire ends that the DSN rounding left half a
+  // micrometre off a pin centre are moved onto it when the board is read (the dev-board fixture
+  // then has none left, as in the KiCad report), and the centerline contact model counts
+  // T-junctions as connected.
+  private static final int EXPECTED_UNCONNECTED = 51;
   private static final int EXPECTED_UNIQUE_VIOLATIONS = 3;
 
   private static BasicBoard loadBoard(String filename) throws Exception {
