@@ -18,6 +18,7 @@ import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
+import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.DifferentialPair;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetClass;
@@ -391,6 +392,12 @@ public final class PairRouting {
     return "left to the router: " + (reasons.isEmpty() ? lastFailure : summary(reasons));
   }
 
+  private static void debug(String message) {
+    if (System.getProperty("pairs.debug") != null) {
+      FRLogger.info("PAIRDBG " + message);
+    }
+  }
+
   private static String summary(List<String> reasons) {
     int shown = Math.min(3, reasons.size());
     String text = String.join("; ", reasons.subList(0, shown));
@@ -689,8 +696,12 @@ public final class PairRouting {
       RoutingBoard board, Geometry g, Escape e, int layer, int dx, int dy) {
     IntPoint start = tipAt(e.gather(), dx, dy, g.padding());
     IntPoint tip = tipAt(e.gather(), dx, dy, g.padding() + g.virtualHalf());
-    if (!clearPath(board, e.positive(), layer, g.halfWidth(), g.netP(), g.classP(), g)
-        || !clearPath(board, e.negative(), layer, g.halfWidth(), g.netN(), g.classN(), g)) {
+    if (!clearPath(board, e.positive(), layer, g.halfWidth(), g.netP(), g.classP(), g)) {
+      debug("P breakout blocked on layer " + layer + " " + java.util.Arrays.toString(e.positive()));
+      return false;
+    }
+    if (!clearPath(board, e.negative(), layer, g.halfWidth(), g.netN(), g.classN(), g)) {
+      debug("N breakout blocked on layer " + layer + " " + java.util.Arrays.toString(e.negative()));
       return false;
     }
     double stub =
@@ -703,6 +714,9 @@ public final class PairRouting {
             g.classP(),
             g.allowance(),
             ownPads(board, g));
+    if (stub < 0) {
+      debug("stub blocked on layer " + layer + " " + start + " -> " + tip + " slack " + stub);
+    }
     return stub >= 0;
   }
 
@@ -832,8 +846,29 @@ public final class PairRouting {
       End a,
       End b,
       List<Integer> itemIds) {
-    int layer = g.layer();
     List<Item> placed = new ArrayList<>();
+    try {
+      return tryRoute(board, settings, thread, plan, g, a, b, itemIds, placed);
+    } catch (RuntimeException e) {
+      // Whatever went wrong, the pair goes back to the ordinary router and the board is as before.
+      removeAll(board, placed);
+      board.clearTransientAutorouteState();
+      FRLogger.warn("Pair " + pair.baseName() + ": " + e);
+      return "an error stopped the attempt (" + e.getClass().getSimpleName() + ")";
+    }
+  }
+
+  private static String tryRoute(
+      RoutingBoard board,
+      RouterSettings settings,
+      StoppableThread thread,
+      ConnectionPlan plan,
+      Geometry g,
+      End a,
+      End b,
+      List<Integer> itemIds,
+      List<Item> placed) {
+    int layer = g.layer();
     // The breakouts and via pairs of both ends go in first. They are copper the pair will have, and
     // they keep the wide virtual trace out of the space between its gather points and the pads, so
     // it cannot reach a gather point from the wrong side.
