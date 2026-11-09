@@ -70,7 +70,7 @@ public final class RouterProfiles {
         // and may lift other connections in the way, kept only when fewer stay open.
         defaults.autorouter.gridFinisherRipup = true;
       }
-      case CLASSIC -> {}
+      case CLASSIC -> defaults.autorouter.differentialPairs = "off";
       default -> throw new IllegalArgumentException("Unknown profile: " + name);
     }
   }

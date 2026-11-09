@@ -1245,6 +1245,58 @@ public final class ExitStubs {
       int traceClass,
       int allowance,
       int[] largestHolder) {
+    return slack(board, from, to, layer, half, net, traceClass, allowance, largestHolder, Set.of());
+  }
+
+  /**
+   * The obstacles a trace of {@code half} at {@code at} would already violate: the pads close to
+   * the pad a trace starts from, which the board came with.
+   */
+  public static Set<Item> obstaclesTooClose(
+      BasicBoard board, IntPoint at, int layer, int half, int net, int traceClass, int allowance) {
+    Set<Item> result = new java.util.HashSet<>();
+    ClearanceMatrix matrix = board.rules.clearanceMatrix;
+    int search =
+        half + matrix.maxValue(traceClass, layer) + 4 * ClearanceMatrix.clearance_safety_margin;
+    IntBox area = new IntBox(at.x - search, at.y - search, at.x + search, at.y + search);
+    FloatPoint point = at.toFloat();
+    for (SearchTreeObject entry : board.overlappingObjects(area, layer)) {
+      if (!(entry instanceof Item item) || !item.isTraceObstacle(net)) {
+        continue;
+      }
+      int required = ruleClearance(board, traceClass, item, layer, allowance);
+      for (int i = 0; i < item.tileShapeCount(); i++) {
+        if (item.shapeLayer(i) != layer
+            || item.getTileShape(i) == null
+            || item.getTileShape(i).isEmpty()) {
+          continue;
+        }
+        TileShape shape = item.getTileShape(i);
+        double room =
+            segmentDistance(point, point, shape)
+                + modelExcess(board, item, shape)
+                - half
+                - required;
+        if (room < 0) {
+          result.add(item);
+        }
+      }
+    }
+    return result;
+  }
+
+  /** As {@link #slack} but without the items in {@code ignored}. */
+  public static double slack(
+      BasicBoard board,
+      IntPoint from,
+      IntPoint to,
+      int layer,
+      int half,
+      int net,
+      int traceClass,
+      int allowance,
+      int[] largestHolder,
+      Set<Item> ignored) {
     largestHolder[0] = 0;
     ClearanceMatrix matrix = board.rules.clearanceMatrix;
     int search =
@@ -1263,7 +1315,7 @@ public final class ExitStubs {
     FloatPoint a = from.toFloat();
     FloatPoint b = to.toFloat();
     for (SearchTreeObject entry : board.overlappingObjects(area, layer)) {
-      if (!(entry instanceof Item item) || !item.isTraceObstacle(net)) {
+      if (!(entry instanceof Item item) || !item.isTraceObstacle(net) || ignored.contains(item)) {
         continue;
       }
       int required = ruleClearance(board, traceClass, item, layer, allowance);
@@ -1293,6 +1345,21 @@ public final class ExitStubs {
       int net,
       int traceClass,
       int allowance) {
+    return pathSlack(board, corners, layer, half, net, traceClass, allowance, Set.of());
+  }
+
+  /**
+   * As {@link #pathSlack(BasicBoard, Point[], int, int, int, int, int)} without {@code ignored}.
+   */
+  public static double pathSlack(
+      BasicBoard board,
+      Point[] corners,
+      int layer,
+      int half,
+      int net,
+      int traceClass,
+      int allowance,
+      Set<Item> ignored) {
     double least = Double.POSITIVE_INFINITY;
     int[] holder = new int[1];
     for (int i = 0; i + 1 < corners.length; i++) {
@@ -1308,7 +1375,8 @@ public final class ExitStubs {
                   net,
                   traceClass,
                   allowance,
-                  holder));
+                  holder,
+                  ignored));
     }
     return least;
   }

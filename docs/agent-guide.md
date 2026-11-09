@@ -102,7 +102,7 @@ Options worth knowing (all `--router.` on the command line):
 | `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `thorough`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
-| `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g)))`) or found by name (`_P/_N`, `D+/D-`) are routed first as two coupled traces on one layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
+| `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g)))`) or found by name (`_P/_N`, `D+/D-`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
 | `autorouter.pair_gap_um=<um>` | Gap between the members of a pair that declares none. Default: the clearance between the two nets. | Set it to the board's differential pair gap (KiCad: net class, Differential pair gap), which a KiCad DSN does not carry. |
 
 ## 4. Watching and stopping a run

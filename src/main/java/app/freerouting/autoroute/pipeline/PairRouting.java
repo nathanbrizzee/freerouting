@@ -6,9 +6,12 @@ import app.freerouting.autoroute.path.FoundConnectionLocator;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Pin;
+import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.FixedState;
+import app.freerouting.board.model.structure.Unit;
 import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.core.StoppableThread;
+import app.freerouting.core.library.Padstack;
 import app.freerouting.datastructures.TimeLimit;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
@@ -17,12 +20,14 @@ import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
 import app.freerouting.rules.DifferentialPair;
 import app.freerouting.rules.Net;
+import app.freerouting.rules.NetClass;
 import app.freerouting.rules.Nets;
+import app.freerouting.rules.ViaInfo;
+import app.freerouting.rules.ViaRule;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -55,7 +60,15 @@ public final class PairRouting {
   /** Candidate gather points tried per end, best first. */
   private static final int END_CANDIDATES = 3;
 
-  private static final int[][] DIRECTIONS = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+  /** Most searches one pair connection may use over all its layers and gather points. */
+  private static final int MAX_SEARCHES = 12;
+
+  /** Cost of a via pair in coupled spacings of breakout length. */
+  private static final double VIA_PAIR_COST = 40;
+
+  private static final int[][] DIRECTIONS = {
+    {1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}
+  };
 
   private PairRouting() {}
 
@@ -74,7 +87,7 @@ public final class PairRouting {
         || !settings.getRunRouter()
         || (settings.autorouter != null
             && settings.autorouter.maxPasses != null
-            && settings.autorouter.maxPasses < 1)
+            && settings.autorouter.maxPasses < 0)
         || board.rules.differentialPairs.isEmpty()) {
       return null;
     }
@@ -232,15 +245,53 @@ public final class PairRouting {
 
   // ---------------------------------------------------------------------------------------------
 
-  /** Where one end of a pair connection leaves its two pads. */
+  /** One trace of a member: its layer and its corners from the pad outward. */
+  private record Piece(int layer, IntPoint[] corners) {}
+
+  /** A via of one member: where it sits and which via it is. */
+  private record ViaSpot(IntPoint at, ViaInfo info, int net) {}
+
+  /**
+   * Where one end of a pair connection leaves its two pads: for each member the traces from the pad
+   * to the gather point on the route layer (with a via and a trace on the pad's layer first when
+   * the pads are on another layer), and the direction the pair continues in.
+   */
   private record End(
-      IntPoint[] positive,
-      IntPoint[] negative,
+      List<Piece> positive,
+      List<Piece> negative,
+      List<ViaSpot> vias,
       IntPoint gather,
       int dx,
       int dy,
       int positiveSide,
-      double cost) {}
+      double cost) {
+
+    Piece routePositive() {
+      return positive.get(positive.size() - 1);
+    }
+
+    Piece routeNegative() {
+      return negative.get(negative.size() - 1);
+    }
+  }
+
+  /** The members' corners from two start points to the coupled spacing, and their gather point. */
+  private record Escape(IntPoint[] positive, IntPoint[] negative, IntPoint gather, int side) {}
+
+  /** What one pair connection routes with on one layer. */
+  private record Geometry(
+      int layer,
+      int halfWidth,
+      int width,
+      int spacing,
+      int virtualHalf,
+      int padding,
+      int allowance,
+      int netP,
+      int netN,
+      int classP,
+      int classN,
+      NetClass netClassP) {}
 
   private static String routeConnection(
       RoutingBoard board,
@@ -251,11 +302,17 @@ public final class PairRouting {
       List<Integer> itemIds) {
     int netP = pair.positiveNet().netNumber;
     int netN = pair.negativeNet().netNumber;
-    var classP = board.rules.nets.get(netP).getNetClass();
-    var classN = board.rules.nets.get(netN).getNetClass();
-    String lastFailure = "no layer carries all four pads (" + padLayers(plan) + ")";
-    for (int layer : candidateLayers(board, plan)) {
+    NetClass classP = board.rules.nets.get(netP).getNetClass();
+    NetClass classN = board.rules.nets.get(netN).getNetClass();
+    String lastFailure = "no signal layer";
+    List<String> reasons = new ArrayList<>();
+    int searches = 0;
+    for (int layer : routeLayers(board, plan)) {
       int halfWidth = classP.getTraceHalfWidth(layer);
+      if (classN.getTraceHalfWidth(layer) != halfWidth) {
+        reasons.add("layer " + layer + ": the two members have different trace widths");
+        continue;
+      }
       int width = 2 * halfWidth;
       int clearance =
           board.rules.clearanceMatrix.getValue(
@@ -265,244 +322,490 @@ public final class PairRouting {
         gap = umToBoard(board, settings.autorouter.pairGapUm);
       }
       gap = Math.max(gap, clearance);
-      int spacing = width + gap; // centre to centre of the two members
-      int virtualHalf = (2 * width + gap + 1) / 2;
-      int allowance = ExitStubs.copperAllowance(board, settings);
-
+      Geometry g =
+          new Geometry(
+              layer,
+              halfWidth,
+              width,
+              width + gap, // centre to centre of the two members
+              (2 * width + gap + 1) / 2,
+              (2 * width + gap + 1) / 2
+                  + halfWidth
+                  + board.rules.clearanceMatrix.getValue(
+                      classP.getTraceClearanceClass(),
+                      classP.getTraceClearanceClass(),
+                      layer,
+                      false),
+              ExitStubs.copperAllowance(board, settings),
+              netP,
+              netN,
+              classP.getTraceClearanceClass(),
+              classN.getTraceClearanceClass(),
+              classP);
       List<End> endsA =
-          endCandidates(
-              board,
-              plan.firstP(),
-              plan.firstN(),
-              plan.secondP(),
-              plan.secondN(),
-              layer,
-              spacing,
-              width,
-              netP,
-              classP.getTraceClearanceClass(),
-              virtualHalf,
-              allowance);
+          endCandidates(board, plan.firstP(), plan.firstN(), plan.secondP(), plan.secondN(), g);
       List<End> endsB =
-          endCandidates(
-              board,
-              plan.secondP(),
-              plan.secondN(),
-              plan.firstP(),
-              plan.firstN(),
-              layer,
-              spacing,
-              width,
-              netP,
-              classP.getTraceClearanceClass(),
-              virtualHalf,
-              allowance);
+          endCandidates(board, plan.secondP(), plan.secondN(), plan.firstP(), plan.firstN(), g);
       if (endsA.isEmpty() || endsB.isEmpty()) {
-        lastFailure = "no clear gather point at an end on layer " + layer;
+        reasons.add(
+            "layer "
+                + layer
+                + ": no clear way out of the pads at "
+                + (endsA.isEmpty()
+                    ? plan.firstP().componentName()
+                    : plan.secondP().componentName()));
         continue;
       }
+      List<End[]> combinations = new ArrayList<>();
+      boolean polaritySwap = false;
       for (End a : endsA) {
         for (End b : endsB) {
           if (a.positiveSide() != -b.positiveSide()) {
-            lastFailure = "the members would have to cross (polarity swap)";
+            polaritySwap = true;
             continue;
           }
-          String outcome =
-              tryRoute(
-                  board,
-                  settings,
-                  thread,
-                  pair,
-                  plan,
-                  layer,
-                  halfWidth,
-                  spacing,
-                  virtualHalf,
-                  allowance,
-                  a,
-                  b,
-                  itemIds);
-          if (outcome.startsWith("routed")) {
-            return outcome;
-          }
-          lastFailure = outcome;
-          if (thread != null && thread.isStopRequested()) {
-            return lastFailure;
-          }
+          combinations.add(new End[] {a, b});
+        }
+      }
+      if (combinations.isEmpty() && polaritySwap) {
+        reasons.add("layer " + layer + ": the members would have to cross (polarity swap)");
+      }
+      combinations.sort(Comparator.comparingDouble(c -> c[0].cost() + c[1].cost()));
+      for (End[] c : combinations) {
+        if (searches++ >= MAX_SEARCHES) {
+          reasons.add("search limit of " + MAX_SEARCHES + " tries reached");
+          return "left to the router: " + summary(reasons);
+        }
+        String outcome = tryRoute(board, settings, thread, pair, plan, g, c[0], c[1], itemIds);
+        if (outcome.startsWith("routed")) {
+          return outcome;
+        }
+        if (!reasons.contains("layer " + layer + ": " + outcome)) {
+          reasons.add("layer " + layer + ": " + outcome);
+        }
+        if (thread != null && thread.isStopRequested()) {
+          return "left to the router: " + summary(reasons);
         }
       }
     }
-    return "left to the router: " + lastFailure;
+    return "left to the router: " + (reasons.isEmpty() ? lastFailure : summary(reasons));
   }
 
-  private static String padLayers(ConnectionPlan plan) {
-    StringBuilder sb = new StringBuilder();
-    for (Pin pin : new Pin[] {plan.firstP(), plan.firstN(), plan.secondP(), plan.secondN()}) {
-      if (sb.length() > 0) {
-        sb.append(", ");
-      }
-      sb.append(pin.componentName())
-          .append('-')
-          .append(pin.name())
-          .append(" layers ")
-          .append(pin.firstLayer())
-          .append('-')
-          .append(pin.lastLayer());
-    }
-    return sb.toString();
+  private static String summary(List<String> reasons) {
+    int shown = Math.min(3, reasons.size());
+    String text = String.join("; ", reasons.subList(0, shown));
+    return reasons.size() > shown ? text + "; and " + (reasons.size() - shown) + " more" : text;
   }
 
-  private static List<Integer> candidateLayers(RoutingBoard board, ConnectionPlan plan) {
+  /**
+   * The layers to try for the coupled run, fewest vias first: a layer all four pads are on needs
+   * none, a layer one end's pads are not on needs a via pair at that end.
+   */
+  private static List<Integer> routeLayers(RoutingBoard board, ConnectionPlan plan) {
     int count = board.getLayerCount();
     List<Integer> layers = new ArrayList<>();
     for (int layer = 0; layer < count; layer++) {
-      if (board.layerStructure.layers[layer].isSignal
-          && plan.firstP().isOnLayer(layer)
-          && plan.firstN().isOnLayer(layer)
-          && plan.secondP().isOnLayer(layer)
-          && plan.secondN().isOnLayer(layer)) {
+      if (board.layerStructure.layers[layer].isSignal) {
         layers.add(layer);
       }
     }
-    // Outer layers first: a surface pair needs no vias.
     layers.sort(
-        Comparator.comparingInt(layer -> layer == 0 ? 0 : layer == count - 1 ? 1 : 2 + layer));
+        Comparator.<Integer>comparingInt(
+                layer ->
+                    (onLayer(plan.firstP(), plan.firstN(), layer) ? 0 : 1)
+                        + (onLayer(plan.secondP(), plan.secondN(), layer) ? 0 : 1))
+            .thenComparingInt(layer -> layer == 0 ? 0 : layer == count - 1 ? 1 : 2 + layer));
     return layers;
+  }
+
+  private static boolean onLayer(Pin p, Pin n, int layer) {
+    return p.isOnLayer(layer) && n.isOnLayer(layer);
   }
 
   private static int umToBoard(RoutingBoard board, double um) {
     int resolution = Math.max(1, board.communication.resolution);
-    return (int)
-        Math.round(
-            app.freerouting.board.model.structure.Unit.scale(
-                um * resolution,
-                app.freerouting.board.model.structure.Unit.UM,
-                board.communication.unit));
+    return (int) Math.round(Unit.scale(um * resolution, Unit.UM, board.communication.unit));
   }
 
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * The ways the two pads of one end can leave along an axis, best first. The members keep their
-   * order across the axis; both end on the coupled spacing at the same distance from the pads.
+   * The ways the two pads of one end can leave for the route layer, best first: straight out of the
+   * pads along an axis when the pads are on that layer, otherwise through a via pair beside the
+   * pads. The members keep their order across the axis; both end on the coupled spacing at the same
+   * distance from the pads.
    */
   private static List<End> endCandidates(
+      RoutingBoard board, Pin pinP, Pin pinN, Pin otherP, Pin otherN, Geometry g) {
+    FloatPoint towardOther = middle(otherP, otherN);
+    FloatPoint here = middle(pinP, pinN);
+    boolean direct = onLayer(pinP, pinN, g.layer());
+    ViaInfo via = null;
+    int padLayer = pinP.firstLayer();
+    if (!direct) {
+      if (pinP.firstLayer() != pinP.lastLayer()
+          || pinN.firstLayer() != pinN.lastLayer()
+          || pinN.firstLayer() != padLayer) {
+        return List.of();
+      }
+      via = viaFor(g.netClassP(), padLayer, g.layer());
+      if (via == null) {
+        return List.of();
+      }
+    }
+    List<End> found = new ArrayList<>();
+    for (int[] d : DIRECTIONS) {
+      // The shortest straight run out of the pads that leaves room for the 45 degree legs.
+      for (int extra : new int[] {0, 2 * g.width(), 6 * g.width()}) {
+        End end =
+            direct
+                ? directEnd(board, pinP, pinN, g, d, extra)
+                : viaEnd(board, pinP, pinN, g, d, via, padLayer, extra);
+        if (end != null) {
+          found.add(end);
+          break;
+        }
+      }
+    }
+    // Prefer the shortest breakout, matched members, an axis that points at the other end.
+    List<End> ranked = new ArrayList<>();
+    for (End end : found) {
+      double toward = (towardOther.x - here.x) * end.dx() + (towardOther.y - here.y) * end.dy();
+      ranked.add(
+          new End(
+              end.positive(),
+              end.negative(),
+              end.vias(),
+              end.gather(),
+              end.dx(),
+              end.dy(),
+              end.positiveSide(),
+              end.cost() + (toward < 0 ? 2.0 * Math.abs(toward) : 0)));
+    }
+    ranked.sort(Comparator.comparingDouble(End::cost));
+    return ranked.size() > END_CANDIDATES ? ranked.subList(0, END_CANDIDATES) : ranked;
+  }
+
+  private static End directEnd(
+      RoutingBoard board, Pin pinP, Pin pinN, Geometry g, int[] d, int extra) {
+    int dx = d[0];
+    int dy = d[1];
+    IntPoint cP = centre(pinP);
+    IntPoint cN = centre(pinN);
+    Escape e =
+        escape(
+            cP,
+            cN,
+            forwardExtent(pinP, dx, dy),
+            forwardExtent(pinN, dx, dy),
+            dx,
+            dy,
+            g.spacing(),
+            g.width(),
+            extra);
+    if (e == null || !clear(board, g, e, g.layer(), dx, dy)) {
+      return null;
+    }
+    double lengthP = pathLength(e.positive());
+    double lengthN = pathLength(e.negative());
+    return new End(
+        List.of(new Piece(g.layer(), e.positive())),
+        List.of(new Piece(g.layer(), e.negative())),
+        List.of(),
+        e.gather(),
+        dx,
+        dy,
+        e.side(),
+        lengthP + lengthN + 4 * Math.abs(lengthP - lengthN));
+  }
+
+  /**
+   * Pads on another layer than the route layer: a trace on the pad layer from each pad to a via at
+   * the via spacing, then on the route layer from each via out to the coupled spacing. The route
+   * leaves the vias along the axis of the pad breakout or back along it.
+   */
+  private static End viaEnd(
       RoutingBoard board,
       Pin pinP,
       Pin pinN,
-      Pin otherP,
-      Pin otherN,
-      int layer,
-      int spacing,
-      int width,
-      int netP,
-      int traceClass,
-      int virtualHalf,
-      int allowance) {
-    IntPoint cP = centre(pinP);
-    IntPoint cN = centre(pinN);
-    FloatPoint towardOther = middle(otherP, otherN);
-    FloatPoint here = middle(pinP, pinN);
-    int halfWidth = width / 2;
-    List<End> found = new ArrayList<>();
-    for (int[] d : DIRECTIONS) {
-      int dx = d[0];
-      int dy = d[1];
-      int nx = -dy;
-      int ny = dx;
-      int fP = dx * cP.x + dy * cP.y;
-      int qP = nx * cP.x + ny * cP.y;
-      int fN = dx * cN.x + dy * cN.y;
-      int qN = nx * cN.x + ny * cN.y;
-      if (qP == qN) {
-        continue; // the pads lie on the axis, one behind the other
-      }
-      int qMid2 = qP + qN;
-      int qMid = Math.floorDiv(qMid2, 2);
-      int half = spacing / 2;
-      int qPTarget;
-      int qNTarget;
-      if (qP < qN) {
-        qPTarget = qMid - half;
-        qNTarget = qPTarget + spacing;
-      } else {
-        qNTarget = qMid - half;
-        qPTarget = qNTarget + spacing;
-      }
-      int legP = Math.abs(qPTarget - qP);
-      int legN = Math.abs(qNTarget - qN);
-      int sMinP = forwardExtent(pinP, dx, dy, fP) + width;
-      int sMinN = forwardExtent(pinN, dx, dy, fN) + width;
-      int forward = Math.max(fP + sMinP + legP, fN + sMinN + legN);
-      IntPoint[] pathP = member(cP, dx, dy, nx, ny, fP, qP, forward, qPTarget, legP);
-      IntPoint[] pathN = member(cN, dx, dy, nx, ny, fN, qN, forward, qNTarget, legN);
-      IntPoint gather = at(dx, dy, nx, ny, forward, (qPTarget + qNTarget) / 2);
-      IntPoint stubEnd = new IntPoint(gather.x + dx * virtualHalf, gather.y + dy * virtualHalf);
-      double slackP =
-          ExitStubs.pathSlack(board, pathP, layer, halfWidth, netP, traceClass, allowance);
-      double slackN = Double.POSITIVE_INFINITY;
-      // N is another net: check it as one, against the board without P's members.
-      slackN =
-          ExitStubs.pathSlack(
-              board, pathN, layer, halfWidth, pinN.getNetNumber(0), traceClass, allowance);
-      double slackStub =
-          ExitStubs.pathSlack(
-              board,
-              new Point[] {gather, stubEnd},
-              layer,
-              virtualHalf,
-              netP,
-              traceClass,
-              allowance);
-      if (slackP < 0 || slackN < 0 || slackStub < 0) {
+      Geometry g,
+      int[] d,
+      ViaInfo via,
+      int padLayer,
+      int extra) {
+    int dx = d[0];
+    int dy = d[1];
+    int radius = viaRadius(via, padLayer, g.layer());
+    int viaClass = via.getClearanceClassIndex();
+    int viaSpacing =
+        Math.max(
+            g.spacing(),
+            2 * radius + board.rules.clearanceMatrix.getValue(viaClass, viaClass, padLayer, false));
+    Escape toVias =
+        escape(
+            centre(pinP),
+            centre(pinN),
+            forwardExtent(pinP, dx, dy),
+            forwardExtent(pinN, dx, dy),
+            dx,
+            dy,
+            viaSpacing,
+            g.width(),
+            extra);
+    if (toVias == null) {
+      return null;
+    }
+    IntPoint viaP = toVias.positive()[toVias.positive().length - 1];
+    IntPoint viaN = toVias.negative()[toVias.negative().length - 1];
+    if (!clearPath(board, toVias.positive(), padLayer, g.halfWidth(), g.netP(), g.classP(), g)
+        || !clearPath(board, toVias.negative(), padLayer, g.halfWidth(), g.netN(), g.classN(), g)
+        || !clearVia(board, via, viaP, g.netP(), g)
+        || !clearVia(board, via, viaN, g.netN(), g)) {
+      return null;
+    }
+    End best = null;
+    for (int sign : new int[] {1, -1}) {
+      int rx = sign * dx;
+      int ry = sign * dy;
+      Escape onRoute = escape(viaP, viaN, radius, radius, rx, ry, g.spacing(), g.width(), extra);
+      if (onRoute == null || !clear(board, g, onRoute, g.layer(), rx, ry)) {
         continue;
       }
-      double length = pathLength(pathP) + pathLength(pathN);
-      double skew = Math.abs(pathLength(pathP) - pathLength(pathN));
-      // Prefer the shortest breakout, matched members, and an axis that points at the other end.
-      double toward = (towardOther.x - here.x) * dx + (towardOther.y - here.y) * dy;
-      double cost = length + 4 * skew + (toward < 0 ? 2.0 * Math.abs(toward) : 0);
-      int side = qPTarget > qNTarget ? 1 : -1;
-      found.add(new End(pathP, pathN, gather, dx, dy, side, cost));
+      double lengthP = pathLength(toVias.positive()) + pathLength(onRoute.positive());
+      double lengthN = pathLength(toVias.negative()) + pathLength(onRoute.negative());
+      double cost =
+          lengthP + lengthN + 4 * Math.abs(lengthP - lengthN) + VIA_PAIR_COST * g.spacing();
+      End end =
+          new End(
+              List.of(
+                  new Piece(padLayer, toVias.positive()), new Piece(g.layer(), onRoute.positive())),
+              List.of(
+                  new Piece(padLayer, toVias.negative()), new Piece(g.layer(), onRoute.negative())),
+              List.of(new ViaSpot(viaP, via, g.netP()), new ViaSpot(viaN, via, g.netN())),
+              onRoute.gather(),
+              rx,
+              ry,
+              onRoute.side(),
+              cost);
+      if (best == null || end.cost() < best.cost()) {
+        best = end;
+      }
     }
-    found.sort(Comparator.comparingDouble(End::cost));
-    return found.size() > END_CANDIDATES ? found.subList(0, END_CANDIDATES) : found;
+    return best;
+  }
+
+  /** The via of {@code netClass} that spans both layers, the least wide copper first. */
+  private static ViaInfo viaFor(NetClass netClass, int layerA, int layerB) {
+    ViaRule rule = netClass.getViaRule();
+    if (rule == null) {
+      return null;
+    }
+    int from = Math.min(layerA, layerB);
+    int to = Math.max(layerA, layerB);
+    ViaInfo best = null;
+    for (int i = 0; i < rule.viaCount(); i++) {
+      ViaInfo info = rule.getVia(i);
+      Padstack padstack = info.getPadstack();
+      if (padstack.fromLayer() <= from && padstack.toLayer() >= to) {
+        if (best == null || viaRadius(info, from, to) < viaRadius(best, from, to)) {
+          best = info;
+        }
+      }
+    }
+    return best;
+  }
+
+  private static int viaRadius(ViaInfo via, int layerA, int layerB) {
+    double widest = 0;
+    for (int layer = Math.min(layerA, layerB); layer <= Math.max(layerA, layerB); layer++) {
+      var shape = via.getPadstack().getShape(layer);
+      if (shape != null) {
+        widest = Math.max(widest, shape.maxWidth());
+      }
+    }
+    return (int) Math.ceil(widest / 2);
+  }
+
+  /**
+   * Both members' corners from the two start points (a pad or via each), leaving along the axis
+   * (dx, dy). The members keep their order across the axis, end on the coupled spacing at the same
+   * distance forward, and reach it with 45 degree legs after a straight run clear of the pads.
+   */
+  private static Escape escape(
+      IntPoint cP,
+      IntPoint cN,
+      int extentP,
+      int extentN,
+      int dx,
+      int dy,
+      int spacing,
+      int width,
+      int extra) {
+    double k = unit(dx, dy);
+    int nx = -dy;
+    int ny = dx;
+    double fP = (dx * cP.x + dy * cP.y) * k;
+    double qP = (nx * cP.x + ny * cP.y) * k;
+    double fN = (dx * cN.x + dy * cN.y) * k;
+    double qN = (nx * cN.x + ny * cN.y) * k;
+    if (Math.abs(qP - qN) < 1) {
+      return null; // the pads lie on the axis, one behind the other
+    }
+    double qMid = (qP + qN) / 2;
+    double half = spacing / 2.0;
+    double qPTarget;
+    double qNTarget;
+    if (qP < qN) {
+      qPTarget = qMid - half;
+      qNTarget = qPTarget + spacing;
+    } else {
+      qNTarget = qMid - half;
+      qPTarget = qNTarget + spacing;
+    }
+    double legP = Math.abs(qPTarget - qP);
+    double legN = Math.abs(qNTarget - qN);
+    double forward = Math.max(fP + extentP + width + legP, fN + extentN + width + legN) + extra;
+    IntPoint[] pathP = member(cP, dx, dy, k, fP, qP, forward, qPTarget, legP);
+    IntPoint[] pathN = member(cN, dx, dy, k, fN, qN, forward, qNTarget, legN);
+    IntPoint gather = at(dx, dy, k, forward, (qPTarget + qNTarget) / 2);
+    return new Escape(pathP, pathN, gather, qPTarget > qNTarget ? 1 : -1);
+  }
+
+  /** The length of one step along (dx, dy) in units of the axis: 1/sqrt(2) for a diagonal. */
+  private static double unit(int dx, int dy) {
+    return dx != 0 && dy != 0 ? Math.sqrt(0.5) : 1.0;
+  }
+
+  private static IntPoint tipAt(IntPoint gather, int dx, int dy, int length) {
+    double k = unit(dx, dy);
+    return new IntPoint(
+        (int) Math.round(gather.x + dx * k * length), (int) Math.round(gather.y + dy * k * length));
+  }
+
+  /**
+   * Whether both members' corners and the stub at the gather point are clear on the route layer.
+   */
+  private static boolean clear(
+      RoutingBoard board, Geometry g, Escape e, int layer, int dx, int dy) {
+    IntPoint start = tipAt(e.gather(), dx, dy, g.padding());
+    IntPoint tip = tipAt(e.gather(), dx, dy, g.padding() + g.virtualHalf());
+    if (!clearPath(board, e.positive(), layer, g.halfWidth(), g.netP(), g.classP(), g)
+        || !clearPath(board, e.negative(), layer, g.halfWidth(), g.netN(), g.classN(), g)) {
+      return false;
+    }
+    double stub =
+        ExitStubs.pathSlack(
+            board,
+            new Point[] {start, tip},
+            layer,
+            g.virtualHalf(),
+            g.netP(),
+            g.classP(),
+            g.allowance(),
+            ownPads(board, g));
+    return stub >= 0;
+  }
+
+  /** The pads of the pair itself, which the wide virtual stub need not keep clear of. */
+  private static Set<Item> ownPads(RoutingBoard board, Geometry g) {
+    Set<Item> pads = new java.util.HashSet<>();
+    for (int net : new int[] {g.netP(), g.netN()}) {
+      for (Item item : board.getConnectableItems(net)) {
+        if (item instanceof Pin) {
+          pads.add(item);
+        }
+      }
+    }
+    return pads;
+  }
+
+  private static boolean clearPath(
+      RoutingBoard board,
+      Point[] corners,
+      int layer,
+      int halfWidth,
+      int net,
+      int traceClass,
+      Geometry g) {
+    // The pads next to the pad a member starts from may already be closer than the rules allow; the
+    // board came with that, so they do not count against the trace leaving the pad.
+    Set<Item> ignored =
+        ExitStubs.obstaclesTooClose(
+            board, corners[0].toFloat().round(), layer, halfWidth, net, traceClass, g.allowance());
+    double slack =
+        ExitStubs.pathSlack(
+            board, corners, layer, halfWidth, net, traceClass, g.allowance(), ignored);
+    return slack >= 0;
+  }
+
+  private static boolean clearVia(
+      RoutingBoard board, ViaInfo via, IntPoint at, int net, Geometry g) {
+    Padstack padstack = via.getPadstack();
+    int[] holder = new int[1];
+    for (int layer = padstack.fromLayer(); layer <= padstack.toLayer(); layer++) {
+      var shape = padstack.getShape(layer);
+      if (shape == null) {
+        continue;
+      }
+      double slack =
+          ExitStubs.slack(
+              board,
+              at,
+              at,
+              layer,
+              (int) Math.ceil(shape.maxWidth() / 2),
+              net,
+              via.getClearanceClassIndex(),
+              g.allowance(),
+              holder);
+      if (slack < 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static IntPoint[] member(
       IntPoint centre,
       int dx,
       int dy,
-      int nx,
-      int ny,
-      int f,
-      int q,
-      int forward,
-      int qTarget,
-      int leg) {
+      double k,
+      double f,
+      double q,
+      double forward,
+      double qTarget,
+      double leg) {
     List<IntPoint> points = new ArrayList<>();
     points.add(centre);
-    int straight = forward - f - leg;
-    if (leg > 0 && straight > 0) {
-      points.add(at(dx, dy, nx, ny, f + straight, q));
+    double straight = forward - f - leg;
+    if (leg > 0.5 && straight > 0.5) {
+      points.add(at(dx, dy, k, f + straight, q));
     }
-    points.add(at(dx, dy, nx, ny, forward, qTarget));
+    points.add(at(dx, dy, k, forward, qTarget));
     return points.toArray(new IntPoint[0]);
   }
 
-  private static IntPoint at(int dx, int dy, int nx, int ny, int f, int q) {
-    return new IntPoint(dx * f + nx * q, dy * f + ny * q);
+  /** The point {@code f} forward and {@code q} to the left of the origin, along (dx, dy). */
+  private static IntPoint at(int dx, int dy, double k, double f, double q) {
+    int nx = -dy;
+    int ny = dx;
+    return new IntPoint(
+        (int) Math.round((dx * f + nx * q) * k), (int) Math.round((dy * f + ny * q) * k));
   }
 
-  private static int forwardExtent(Pin pin, int dx, int dy, int centreF) {
+  /** How far the pad reaches forward beyond its centre along (dx, dy). */
+  private static int forwardExtent(Pin pin, int dx, int dy) {
     IntBox box = pin.boundingBox();
-    int best = 0;
+    IntPoint c = centre(pin);
+    double k = unit(dx, dy);
+    double centreF = (dx * c.x + dy * c.y) * k;
+    double best = 0;
     for (int x : new int[] {box.ll.x, box.ur.x}) {
       for (int y : new int[] {box.ll.y, box.ur.y}) {
-        best = Math.max(best, dx * x + dy * y - centreF);
+        best = Math.max(best, (dx * x + dy * y) * k - centreF);
       }
     }
-    return best;
+    return (int) Math.ceil(best);
   }
 
   private static IntPoint centre(Pin pin) {
@@ -525,24 +828,24 @@ public final class PairRouting {
       StoppableThread thread,
       DifferentialPair pair,
       ConnectionPlan plan,
-      int layer,
-      int halfWidth,
-      int spacing,
-      int virtualHalf,
-      int allowance,
+      Geometry g,
       End a,
       End b,
       List<Integer> itemIds) {
-    int netP = pair.positiveNet().netNumber;
-    int netN = pair.negativeNet().netNumber;
-    var classP = board.rules.nets.get(netP).getNetClass();
-    var classN = board.rules.nets.get(netN).getNetClass();
-    int traceClass = classP.getTraceClearanceClass();
-    List<Item> stubs = new ArrayList<>();
+    int layer = g.layer();
+    List<Item> placed = new ArrayList<>();
+    // The breakouts and via pairs of both ends go in first. They are copper the pair will have, and
+    // they keep the wide virtual trace out of the space between its gather points and the pads, so
+    // it cannot reach a gather point from the wrong side.
+    if (!placeEnd(board, a, g, placed) || !placeEnd(board, b, g, placed)) {
+      removeAll(board, placed);
+      return "the breakouts cannot be placed";
+    }
     List<IntPoint> centreLine;
+    List<Item> stubs = new ArrayList<>();
     try {
-      PolylineTrace stubA = stub(board, a, layer, virtualHalf, traceClass);
-      PolylineTrace stubB = stub(board, b, layer, virtualHalf, traceClass);
+      PolylineTrace stubA = stub(board, a, g);
+      PolylineTrace stubB = stub(board, b, g);
       if (stubA != null) {
         stubs.add(stubA);
       }
@@ -550,12 +853,13 @@ public final class PairRouting {
         stubs.add(stubB);
       }
       if (stubA == null || stubB == null) {
+        removeAll(board, placed);
         return "the gather point cannot be placed";
       }
       // The stubs carry the hidden net, so that no pad of either member counts as a destination.
-      AutorouteControl control = new AutorouteControl(board, netP, settings);
+      AutorouteControl control = new AutorouteControl(board, g.netP(), settings);
       control.netNumber = Nets.hidden_net_number;
-      control.traceClearanceClassIndex = traceClass;
+      control.traceClearanceClassIndex = g.classP();
       control.viasAllowed = false;
       control.ripupAllowed = false;
       control.removeUnconnectedVias = false;
@@ -563,18 +867,20 @@ public final class PairRouting {
         control.layerActive[i] = control.layerActive[i] && i == layer;
       }
       int compensation = control.compensatedTraceHalfWidth[layer] - control.traceHalfWidth[layer];
-      control.traceHalfWidth[layer] = virtualHalf;
-      control.compensatedTraceHalfWidth[layer] = virtualHalf + compensation;
+      control.traceHalfWidth[layer] = g.virtualHalf();
+      control.compensatedTraceHalfWidth[layer] = g.virtualHalf() + compensation;
       AutorouteEngine engine =
           board.initAutoroute(
-              Nets.hidden_net_number, traceClass, thread, TimeLimit.ofSteps(SEARCH_STEPS), false);
+              Nets.hidden_net_number, g.classP(), thread, TimeLimit.ofSteps(SEARCH_STEPS), false);
       List<FoundConnectionLocator.Segment> segments =
           engine.locateConnection(Set.of(stubA), Set.of(stubB), control);
       if (segments == null || segments.isEmpty()) {
+        removeAll(board, placed);
         return "no free corridor for the pair on layer " + layer;
       }
-      centreLine = centreLine(a, b, virtualHalf, segments, layer);
+      centreLine = centreLine(a, b, g, segments, layer);
       if (centreLine == null) {
+        removeAll(board, placed);
         return "the corridor needed a layer change";
       }
     } finally {
@@ -586,145 +892,247 @@ public final class PairRouting {
       board.clearTransientAutorouteState();
     }
 
-    double half = spacing / 2.0;
-    List<IntPoint> positive = coupled(centreLine, a, b, half * a.positiveSide(), true);
-    List<IntPoint> negative = coupled(centreLine, a, b, -half * a.positiveSide(), false);
-    positive = joinEnds(a.positive(), positive, b.positive());
-    negative = joinEnds(a.negative(), negative, b.negative());
-    Point[] positiveCorners = positive.toArray(new Point[0]);
-    Point[] negativeCorners = negative.toArray(new Point[0]);
-    if (ExitStubs.pathSlack(board, positiveCorners, layer, halfWidth, netP, traceClass, allowance)
-        < 0) {
-      return "the coupled P trace would violate a clearance";
+    double half = g.spacing() / 2.0;
+    List<IntPoint> positiveLine = coupled(centreLine, half * a.positiveSide());
+    List<IntPoint> negativeLine = coupled(centreLine, -half * a.positiveSide());
+    if (positiveLine == null || negativeLine == null) {
+      removeAll(board, placed);
+      return "a bend of the corridor is too tight to couple the members";
     }
-    if (ExitStubs.pathSlack(
-            board,
-            negativeCorners,
-            layer,
-            halfWidth,
-            netN,
-            classN.getTraceClearanceClass(),
-            allowance)
-        < 0) {
-      return "the coupled N trace would violate a clearance";
-    }
-    List<Item> placed = new ArrayList<>();
-    PolylineTrace p =
-        board.insertTraceWithoutCleaning(
-            new Polyline(positiveCorners),
-            layer,
-            halfWidth,
-            new int[] {netP},
-            traceClass,
-            PLACED_STATE);
-    if (p != null) {
-      placed.add(p);
-    }
-    PolylineTrace n =
-        board.insertTraceWithoutCleaning(
-            new Polyline(negativeCorners),
-            layer,
-            halfWidth,
-            new int[] {netN},
-            classN.getTraceClearanceClass(),
-            PLACED_STATE);
-    if (n != null) {
-      placed.add(n);
+    Piece positiveMiddle = middle(a.routePositive(), b.routePositive(), positiveLine);
+    Piece negativeMiddle = middle(a.routeNegative(), b.routeNegative(), negativeLine);
+    boolean inserted =
+        insertPieces(board, List.of(positiveMiddle), g.halfWidth(), g.netP(), g.classP(), placed)
+            && insertPieces(
+                board, List.of(negativeMiddle), g.halfWidth(), g.netN(), g.classN(), placed);
+    if (inserted) {
+      String violation = firstViolation(placed);
+      if (violation != null) {
+        removeAll(board, placed);
+        return "the coupled traces would violate a clearance (" + violation + ")";
+      }
     }
     boolean ok =
-        p != null
-            && n != null
-            && plan.firstP().getConnectedSet(netP).contains(plan.secondP())
-            && plan.firstN().getConnectedSet(netN).contains(plan.secondN());
+        inserted
+            && plan.firstP().getConnectedSet(g.netP()).contains(plan.secondP())
+            && plan.firstN().getConnectedSet(g.netN()).contains(plan.secondN());
     if (!ok) {
-      for (Item item : placed) {
-        board.removeItem(item);
-      }
+      removeAll(board, placed);
       return "the coupled traces did not connect the pads";
     }
     for (Item item : placed) {
+      // Fixed only now: a fixed item cannot be removed again, which a failed attempt needs.
+      item.setFixedState(PLACED_STATE);
       itemIds.add(item.getId());
     }
-    double lengthP = pathLength(positiveCorners);
-    double lengthN = pathLength(negativeCorners);
+    double lengthP = memberLength(a.positive(), b.positive(), positiveMiddle);
+    double lengthN = memberLength(a.negative(), b.negative(), negativeMiddle);
+    int viaPairs = (a.vias().size() + b.vias().size()) / 2;
     return String.format(
         Locale.ROOT,
-        "routed on layer %d, lengths %.3f and %.3f mm, skew %.3f mm",
+        "routed on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm",
         layer,
+        viaPairs == 0 ? "" : " with " + viaPairs + " via pair(s)",
         toMm(board, lengthP),
         toMm(board, lengthN),
         toMm(board, Math.abs(lengthP - lengthN)));
   }
 
-  private static double toMm(RoutingBoard board, double boardUnits) {
-    return app.freerouting.board.model.structure.Unit.scale(
-        boardUnits / Math.max(1, board.communication.resolution),
-        board.communication.unit,
-        app.freerouting.board.model.structure.Unit.MM);
+  /** Inserts the breakout traces and via pair of one end. */
+  private static boolean placeEnd(RoutingBoard board, End end, Geometry g, List<Item> placed) {
+    boolean ok = true;
+    for (ViaSpot spot : end.vias()) {
+      Via via =
+          board.insertVia(
+              spot.info().getPadstack(),
+              spot.at(),
+              new int[] {spot.net()},
+              spot.info().getClearanceClassIndex(),
+              FixedState.UNFIXED,
+              true);
+      if (via == null) {
+        ok = false;
+      } else {
+        placed.add(via);
+      }
+    }
+    ok &= insertPieces(board, end.positive(), g.halfWidth(), g.netP(), g.classP(), placed);
+    ok &= insertPieces(board, end.negative(), g.halfWidth(), g.netN(), g.classN(), placed);
+    return ok;
   }
 
-  private static PolylineTrace stub(
-      RoutingBoard board, End end, int layer, int virtualHalf, int traceClass) {
-    IntPoint tip =
-        new IntPoint(
-            end.gather().x + end.dx() * virtualHalf, end.gather().y + end.dy() * virtualHalf);
+  private static void removeAll(RoutingBoard board, List<Item> items) {
+    for (Item item : items) {
+      if (item.isOnTheBoard()) {
+        board.removeItem(item);
+      }
+    }
+    items.clear();
+  }
+
+  /**
+   * Describes the first clearance violation of the new copper, or null: the exact check after the
+   * quick one, which catches the members of the pair against each other and vias against traces.
+   */
+  private static String firstViolation(List<Item> placed) {
+    for (Item item : placed) {
+      for (var v : item.clearanceViolations()) {
+        return item.getClass().getSimpleName()
+            + " against "
+            + v.secondItem.getClass().getSimpleName()
+            + " on layer "
+            + v.layer;
+      }
+    }
+    return null;
+  }
+
+  /** A member's length over all its traces. */
+  private static double memberLength(List<Piece> first, List<Piece> second, Piece middle) {
+    return totalLength(first) + totalLength(second) + pathLength(middle.corners());
+  }
+
+  /**
+   * The route-layer trace between the two gather side points of a member: the coupled path with its
+   * first and last corner replaced by those points.
+   */
+  private static Piece middle(Piece fromA, Piece fromB, List<IntPoint> coupled) {
+    List<IntPoint> all = new ArrayList<>();
+    all.add(fromA.corners()[fromA.corners().length - 1]);
+    for (int i = 1; i + 1 < coupled.size(); i++) {
+      all.add(coupled.get(i));
+    }
+    all.add(fromB.corners()[fromB.corners().length - 1]);
+    return new Piece(fromA.layer(), simplify(all).toArray(new IntPoint[0]));
+  }
+
+  private static <T> List<T> concat(List<T> first, List<T> second) {
+    List<T> all = new ArrayList<>(first);
+    all.addAll(second);
+    return all;
+  }
+
+  private static double totalLength(List<Piece> pieces) {
+    double length = 0;
+    for (Piece piece : pieces) {
+      length += pathLength(piece.corners());
+    }
+    return length;
+  }
+
+  private static boolean insertPieces(
+      RoutingBoard board,
+      List<Piece> pieces,
+      int halfWidth,
+      int net,
+      int traceClass,
+      List<Item> placed) {
+    boolean ok = true;
+    for (Piece piece : pieces) {
+      PolylineTrace trace =
+          board.insertTraceWithoutCleaning(
+              new Polyline(piece.corners()),
+              piece.layer(),
+              halfWidth,
+              new int[] {net},
+              traceClass,
+              FixedState.UNFIXED);
+      if (trace == null) {
+        ok = false;
+      } else {
+        placed.add(trace);
+      }
+    }
+    return ok;
+  }
+
+  private static double toMm(RoutingBoard board, double boardUnits) {
+    return Unit.scale(
+        boardUnits / Math.max(1, board.communication.resolution),
+        board.communication.unit,
+        Unit.MM);
+  }
+
+  private static PolylineTrace stub(RoutingBoard board, End end, Geometry g) {
     return board.insertTraceWithoutCleaning(
-        new Polyline(new Point[] {end.gather(), tip}),
-        layer,
-        virtualHalf,
+        new Polyline(new Point[] {start(end, g), tip(end, g)}),
+        g.layer(),
+        g.virtualHalf(),
         new int[] {Nets.hidden_net_number},
-        traceClass,
+        g.classP(),
         FixedState.UNFIXED);
   }
 
   /** The virtual path from gather point to gather point, simplified. */
   private static List<IntPoint> centreLine(
-      End a, End b, int virtualHalf, List<FoundConnectionLocator.Segment> segments, int layer) {
+      End a, End b, Geometry g, List<FoundConnectionLocator.Segment> segments, int layer) {
     List<IntPoint> route = new ArrayList<>();
     for (FoundConnectionLocator.Segment segment : segments) {
       if (segment.layer() != layer) {
         return null;
       }
       List<IntPoint> corners = new ArrayList<>(List.of(segment.corners()));
-      if (!route.isEmpty()) {
-        IntPoint last = route.get(route.size() - 1);
-        if (corners.get(0).distance(last) > corners.get(corners.size() - 1).distance(last)) {
-          java.util.Collections.reverse(corners);
-        }
-      } else if (corners.get(0).distance(a.gather())
-          > corners.get(corners.size() - 1).distance(a.gather())) {
+      IntPoint reference = route.isEmpty() ? a.gather() : route.get(route.size() - 1);
+      if (corners.get(0).toFloat().distance(reference.toFloat())
+          > corners.get(corners.size() - 1).toFloat().distance(reference.toFloat())) {
         java.util.Collections.reverse(corners);
       }
       route.addAll(corners);
     }
+    // The route may run along a stub after entering it; the pair leaves by the first corner there.
+    trimOnStub(route, a, g, true);
+    trimOnStub(route, b, g, false);
     List<IntPoint> line = new ArrayList<>();
     line.add(a.gather());
-    if (!route.isEmpty() && !onSegment(route.get(0), a.gather(), tip(a, virtualHalf))) {
-      line.add(tip(a, virtualHalf));
-    }
+    line.add(start(a, g));
     line.addAll(route);
-    if (!route.isEmpty()
-        && !onSegment(route.get(route.size() - 1), b.gather(), tip(b, virtualHalf))) {
-      line.add(tip(b, virtualHalf));
-    }
+    line.add(start(b, g));
     line.add(b.gather());
     return simplify(line);
   }
 
-  private static IntPoint tip(End end, int virtualHalf) {
-    return new IntPoint(
-        end.gather().x + end.dx() * virtualHalf, end.gather().y + end.dy() * virtualHalf);
+  /** Drops the corners of the route after the first one on the stub of the end. */
+  private static void trimOnStub(List<IntPoint> route, End end, Geometry g, boolean atFront) {
+    IntPoint start = start(end, g);
+    IntPoint tip = tip(end, g);
+    while (route.size() >= 2) {
+      IntPoint last = atFront ? route.get(0) : route.get(route.size() - 1);
+      IntPoint next = atFront ? route.get(1) : route.get(route.size() - 2);
+      if (onSegment(last, start, tip) && onSegment(next, start, tip)) {
+        route.remove(atFront ? 0 : route.size() - 1);
+      } else {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Where the virtual stub of an end starts: past the gather point by a half width, the width of a
+   * member and a clearance, so that the stub's rear end keeps its distance from the breakouts that
+   * end at the gather point.
+   */
+  private static IntPoint start(End end, Geometry g) {
+    return tipAt(end.gather(), end.dx(), end.dy(), g.padding());
+  }
+
+  private static IntPoint tip(End end, Geometry g) {
+    return tipAt(end.gather(), end.dx(), end.dy(), g.padding() + g.virtualHalf());
   }
 
   private static boolean onSegment(IntPoint p, IntPoint a, IntPoint b) {
-    long cross = (long) (b.x - a.x) * (p.y - a.y) - (long) (b.y - a.y) * (p.x - a.x);
-    if (cross != 0) {
+    double dx = b.x - a.x;
+    double dy = b.y - a.y;
+    double lengthSquare = dx * dx + dy * dy;
+    if (lengthSquare == 0) {
+      return p.equals(a);
+    }
+    double t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquare;
+    if (t < 0 || t > 1) {
       return false;
     }
-    return p.x >= Math.min(a.x, b.x)
-        && p.x <= Math.max(a.x, b.x)
-        && p.y >= Math.min(a.y, b.y)
-        && p.y <= Math.max(a.y, b.y);
+    double nearestX = a.x + t * dx;
+    double nearestY = a.y + t * dy;
+    return Math.hypot(p.x - nearestX, p.y - nearestY) <= 2;
   }
 
   /** Drops repeated points and points in the middle of a straight run. */
@@ -756,36 +1164,83 @@ public final class PairRouting {
 
   /**
    * The centre line offset by {@code offset} to the left of its direction of travel (negative:
-   * right), with mitred corners.
+   * right), with mitred corners. A segment shorter than the offset needs at a bend turns around on
+   * the inner side; such a segment is dropped and its neighbours meet at their crossing, as the
+   * offset of a polyline does. Returns null when the line cannot be offset that way.
    */
-  private static List<IntPoint> coupled(
-      List<IntPoint> line, End a, End b, double offset, boolean positiveMember) {
-    int n = line.size();
-    List<IntPoint> result = new ArrayList<>();
-    for (int i = 0; i < n; i++) {
-      double[] in = i > 0 ? unit(line.get(i - 1), line.get(i)) : null;
-      double[] out = i + 1 < n ? unit(line.get(i), line.get(i + 1)) : null;
-      double x = line.get(i).x;
-      double y = line.get(i).y;
-      if (in == null) {
-        x += -out[1] * offset;
-        y += out[0] * offset;
-      } else if (out == null) {
-        x += -in[1] * offset;
-        y += in[0] * offset;
-      } else {
-        double mx = -in[1] - out[1];
-        double my = in[0] + out[0];
-        double denominator = 1 + in[0] * out[0] + in[1] * out[1];
-        if (denominator < 1e-6) {
-          denominator = 1e-6;
+  private static List<IntPoint> coupled(List<IntPoint> line, double offset) {
+    int segments = line.size() - 1;
+    if (segments < 1) {
+      return null;
+    }
+    double[][] direction = new double[segments][];
+    double[][] origin = new double[segments][];
+    for (int i = 0; i < segments; i++) {
+      direction[i] = unit(line.get(i), line.get(i + 1));
+      origin[i] =
+          new double[] {
+            line.get(i).x - direction[i][1] * offset, line.get(i).y + direction[i][0] * offset
+          };
+    }
+    List<Integer> active = new ArrayList<>();
+    for (int i = 0; i < segments; i++) {
+      active.add(i);
+    }
+    List<double[]> corners;
+    for (; ; ) {
+      corners = new ArrayList<>();
+      int first = active.get(0);
+      int last = active.get(active.size() - 1);
+      corners.add(origin[first]);
+      for (int k = 0; k + 1 < active.size(); k++) {
+        double[] crossing =
+            crossing(
+                origin[active.get(k)],
+                direction[active.get(k)],
+                origin[active.get(k + 1)],
+                direction[active.get(k + 1)]);
+        if (crossing == null) {
+          return null;
         }
-        x += offset * mx / denominator;
-        y += offset * my / denominator;
+        corners.add(crossing);
       }
-      result.add(new IntPoint((int) Math.round(x), (int) Math.round(y)));
+      IntPoint end = line.get(line.size() - 1);
+      corners.add(
+          new double[] {end.x - direction[last][1] * offset, end.y + direction[last][0] * offset});
+      int inverted = -1;
+      for (int k = 0; k < active.size(); k++) {
+        double[] d = direction[active.get(k)];
+        double along =
+            (corners.get(k + 1)[0] - corners.get(k)[0]) * d[0]
+                + (corners.get(k + 1)[1] - corners.get(k)[1]) * d[1];
+        if (along < 1) {
+          inverted = k;
+          break;
+        }
+      }
+      if (inverted < 0) {
+        break;
+      }
+      if (inverted == 0 || inverted == active.size() - 1) {
+        return null;
+      }
+      active.remove(inverted);
+    }
+    List<IntPoint> result = new ArrayList<>();
+    for (double[] corner : corners) {
+      result.add(new IntPoint((int) Math.round(corner[0]), (int) Math.round(corner[1])));
     }
     return result;
+  }
+
+  /** Where the line through p1 along d1 meets the line through p2 along d2, or null if parallel. */
+  private static double[] crossing(double[] p1, double[] d1, double[] p2, double[] d2) {
+    double denominator = d1[0] * d2[1] - d1[1] * d2[0];
+    if (Math.abs(denominator) < 1e-9) {
+      return null;
+    }
+    double t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / denominator;
+    return new double[] {p1[0] + t * d1[0], p1[1] + t * d1[1]};
   }
 
   private static double[] unit(IntPoint from, IntPoint to) {
@@ -793,30 +1248,5 @@ public final class PairRouting {
     double dy = to.y - from.y;
     double length = Math.hypot(dx, dy);
     return new double[] {dx / length, dy / length};
-  }
-
-  /**
-   * One member's polyline: its breakout at the first end, the coupled path (whose first and last
-   * corner are replaced by the breakouts' ends), its breakout at the other end reversed.
-   */
-  private static List<IntPoint> joinEnds(
-      IntPoint[] breakoutA, List<IntPoint> coupled, IntPoint[] breakoutB) {
-    List<IntPoint> all = new ArrayList<>(List.of(breakoutA));
-    for (int i = 1; i + 1 < coupled.size(); i++) {
-      all.add(coupled.get(i));
-    }
-    for (int i = breakoutB.length - 1; i >= 0; i--) {
-      all.add(breakoutB[i]);
-    }
-    return simplify(all);
-  }
-
-  /** Items placed by an earlier call are looked up by id, so the set is also usable in tests. */
-  static Set<Integer> idsOf(Collection<Item> items) {
-    Set<Integer> ids = new HashSet<>();
-    for (Item item : items) {
-      ids.add(item.getId());
-    }
-    return ids;
   }
 }

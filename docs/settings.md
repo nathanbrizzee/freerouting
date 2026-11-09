@@ -133,7 +133,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
     - `"standard"` (default): the most complete board in the least time. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`. On the 19-board benchmark set this left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU.
     - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage (`fallback_strategies=none`) and without the optimizer. Use it to see how far a board gets and where it is stuck.
     - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`) and the grid finisher with lifting (`grid_finisher=true`, `grid_finisher_ripup=true`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
-    - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default.
+    - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default, and `autorouter.differential_pairs=off`.
 - **`session_routes_movable`**: When `true`, the traces and vias of a session file loaded to continue routing (`-de board.dsn earlier.ses`) come in unfixed, so the router may rip them up and route them again, like its own routes. Those the file marks `(type protect)` or `(type fix)` stay fixed; Freerouting writes those types for routes that were fixed before. When `false`, every loaded route is user-fixed and the router can only add to them, which was the original behaviour. Default `false`; `true` in every profile but `classic`. It does not change how the GUI or `DrcRunner` loads a session.
 - **`default_preferred_direction_trace_cost`**: Cost factor for routing traces in the preferred direction.
 - **`default_undesired_direction_trace_cost`**: Cost factor for routing traces in undesired directions.
@@ -328,12 +328,16 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       like). For each connection of a pair the two pads at each end are escaped together to the
       coupled gap, and the maze search routes one virtual trace as wide as both members and the gap
       along the pair's centre line, so every clearance check covers the finished pair; the two
-      members are that line offset to either side. A pair keeps one layer, needs its members in the
-      same order at both ends, and is placed fixed until the last stage so the rip-up and the
-      optimizer leave it alone. A pair that cannot be routed this way is left to the ordinary router
+      members are that line offset to either side. The coupled run keeps one layer. Where the pads
+      of an end are on another layer, a via pair beside the pads (the net class's narrowest via
+      that spans both layers) takes the members to the run's layer; the layers are tried fewest vias
+      first. A pair needs its members in the same order at both ends (a polarity swap is not routed
+      yet), is checked against every clearance of the board before it is kept, and is placed fixed
+      until the last stage so the rip-up and the optimizer leave it alone. A pair that cannot be
+      routed this way is left to the ordinary router
       and the log says why (`Pair <name> (<pin> to <pin>): left to the router: ...`). Log lines:
       `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and, per
-      connection, `Pair <name> (...): routed on layer L, lengths A and B mm, skew S mm`. When it
+      connection, `Pair <name> (...): routed on layer L[ with N via pair(s)], lengths A and B mm, skew S mm`. When it
       helps: boards with USB, Ethernet, MIPI or LVDS pairs that must keep their gap. It costs
       little on a board without pairs. CLI: `--router.autorouter.differential_pairs=off`.
     - **`pair_gap_um`**: The gap in micrometers, edge to edge, between the members of a pair that
