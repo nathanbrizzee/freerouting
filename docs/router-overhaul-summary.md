@@ -4,7 +4,7 @@ For the maintainers of Freerouting. This is the write-up behind a fork branch th
 of upstream `master` (`5aa1b24`). It lists every change, what each one was measured to do, what was tried and
 dropped, and what is still open, so that a pull request can be cut from it in pieces.
 
-- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.2.jar`.
+- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.3.jar`.
 - Baseline for every comparison: the released v2.5.0 jar (built from `b647a2f`), and upstream `master` for the
   code.
 - The branch is large (184 files, +17.5k / -0.5k lines, 51 new test files, about half of it docs), so section 7
@@ -196,6 +196,11 @@ measured GUI run spent 3 of 162 sampled seconds drawing. New GUI text exists in 
 - **Upstream master merged** (102 commits): the preserved-trace junction model, width-safe target regions and aligned search/locator clearance envelopes, the `neck_width_um` micro-neckdown fix, SES geometry preservation, DRC false-positive fixes and the `DifferentialPair` detector. On bm01 the merged tree needs 168 s (619 CPU s) against 485 s (4435 CPU s) before; completion is the same on the other small boards. Our fixed-track split at T-junctions was dropped because upstream's centerline contact model makes it unnecessary.
 - **Wire ends snap onto pin centres.** A DSN exporter that rounds to a micrometre leaves a wire end half a micrometre off its pin centre; the router bridged the gap with a sub-micron stub that EDA tools import as a dangling track. Reading the board now moves an end onto the centre of a same-net pin within 1 um (only when the segment keeps its axis or 45 degree direction). Stubs elsewhere, for example at vias, are not covered.
 
+### Changes since 2.5.0-nb.2
+
+- **Upstream master merged again** (197 commits, the 2.6.0-RC10 line): a stagnation-loop fix, a pad-clearance fix (#1047), the AWT-free geometry layer, the optimizer rank score, `-mt` as a stage ceiling, hole-to-hole and via-in-pad handling, exact rational SES import and the freerouting.net part 3 improvements (exit stubs, ball escape order, two-layer BGA start). 34 files conflicted; where both sides had fixed the same thing the upstream form was kept, and what we had added beside it was kept too (rip history and pin-access costs, blind and buried via spans, the fanout-escape guard, movable session routes, the progress-counting stagnation test, the step-budget search limit). A fixed via in a pad of its own net is not a clearance violation, and a `class_class` rule for all layers only raises shared item classes, so clearance 0 between twin classes still holds. On the 24 PCBench boards plus one (2-minute cap, optimizer on) the merged tree finished 16 boards clean with 1,286 open connections, our nb.2 jar 15 with 1,229 and upstream master alone 12 with 1,433.
+- **Differential pair routing** (`router.autorouter.differential_pairs`, on by default except in `classic`). A pair declared in the DSN with `(pair (nets P N (gap g)))`, or found by net name, is routed before everything else as two coupled traces: the pads at each end escape together to the coupled gap, one wide virtual trace is searched along the pair's centre line, and the members are that line offset to either side, with a via pair at an end whose pads are on another layer. A pair is kept only if the board checker finds no clearance violation in its copper; otherwise nothing is left behind and the ordinary router takes it, with the reason in the log. The pair copper is fixed until the last stage. `scripts/kicad/dsn_pairs.py` adds the pairs, the class's differential pair gap and width to a KiCad DSN, since KiCad's exporter writes none. Not done: polarity swaps, length tuning (the skew of a routed pair is reported, up to 1.3 mm on the CM5 test board), BGA breakouts. On the CM5 test board (6 layers, 32 pairs) 13 of 18 pair connections route as pairs and the board then finishes with 6 open in 45 s against 8 open in 245 s without pairs; on the 24 PCBench boards nothing got worse (16 clean, 1,313 open).
+
 ## 4. Tried and dropped (so nobody repeats them)
 
 Each has a row in the progress log with numbers. In short:
@@ -289,10 +294,10 @@ Reviewers who want a single number to check: `--router.profile=classic` against 
 ## 8. Reproducing
 
 ```
-java -jar freerouting-2.5.0-nb.2.jar -de board.dsn -do board.ses --gui.enabled=false \
+java -jar freerouting-2.5.0-nb.3.jar -de board.dsn -do board.ses --gui.enabled=false \
   --router.job_timeout=00:10:00 --router.result_json=board.json
 # the original router's behaviour, same jar:
-java -jar freerouting-2.5.0-nb.2.jar ... --router.profile=classic
+java -jar freerouting-2.5.0-nb.3.jar ... --router.profile=classic
 ```
 
 The comparison against v2.5.0 uses the released v2.5.0 jar and the same command. The harness scripts are in `scripts/benchmark/overhaul/`.

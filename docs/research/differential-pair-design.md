@@ -5,6 +5,19 @@ Specctra facts come from the reference in `docs/reference/` (v10, May 2000). The
 application notes, Cadence, Altium, Siemens and KiCad documentation, and the routing literature; sources are listed at
 the end. Numbers quoted from vendor notes are marked as such and are not read from the interface standards themselves.
 
+## Status (2026-11-08)
+
+Phase 0 is done (upstream merged twice). Phase 1 is partly done: `(pair (nets P N (gap g)))` is read, pairs are
+also found by name, and `scripts/kicad/dsn_pairs.py` writes the pair gap and width from KiCad's net classes. The
+length and delay rules, `NetLengthReport`, group matching and the DRC checks for gap, uncoupled length and skew
+are not built. Phase 2 is done for the case that matters first: coupled routing by one virtual centre-line trace
+(`autoroute/pipeline/PairRouting`), pad escapes with 45 degree legs along the four axes and four diagonals, via
+pairs where an end's pads are on another layer, the exact check against the board's clearances before a pair is
+kept. Not built: polarity swap, BGA breakouts, necked breakouts at fine-pitch pads, skew tuning (phase 3), the
+transactional move and the optimizer pair object (phase 4), impedance checks (phase 5). Decisions in section 8:
+1 done; 2 and 3 taken as proposed except that pair routing is on in every profile but `classic` and does not
+switch the profile; 4 done (the script ships in `scripts/kicad/`).
+
 ## 1. What we are solving
 
 The user's manual flow on a high-speed board, which the router should reproduce:
