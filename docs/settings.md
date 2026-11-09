@@ -323,8 +323,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       meets the design rules, so the search does not close them in. Default `true`.
     - **`differential_pairs`**: Routes differential pairs as two coupled traces before the rest of
       the board: `auto` (default) or `off`. A pair is declared in the DSN with
-      `(pair (nets P N (gap g)))` inside `(network ...)` (KiCad's exporter writes none; see
-      `bench/overhaul/dsn_pairs.py`) or found by net name (`_P/_N`, `D+/D-`, `_DP/_DM` and the
+      `(pair (nets P N (gap g)))` inside `(network ...)` (KiCad's exporter writes none; run
+      `scripts/kicad/dsn_pairs.py board.kicad_pcb in.dsn out.dsn` to add them, with each net class's
+      differential pair gap and width, before routing) or found by net name (`_P/_N`, `D+/D-`, `_DP/_DM` and the
       like). For each connection of a pair the two pads at each end are escaped together to the
       coupled gap, and the maze search routes one virtual trace as wide as both members and the gap
       along the pair's centre line, so every clearance check covers the finished pair; the two
