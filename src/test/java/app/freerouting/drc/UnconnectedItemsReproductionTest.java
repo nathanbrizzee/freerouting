@@ -9,7 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.freerouting.Freerouting;
 import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.structure.Component;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.fixtures.RoutingFixtureTest;
 import app.freerouting.io.kicad.KiCadDrcReport;
@@ -31,8 +33,11 @@ public class UnconnectedItemsReproductionTest extends RoutingFixtureTest {
   private static final String TEST_BOARD =
       "Issue575-drc_Natural_Tone_Preamp_7_unconnected_items.dsn";
 
-  /** Expected counts from the reference freerouting DRC JSON for this board. */
-  private static final int EXPECTED_UNCONNECTED_NET_GROUPS = 9;
+  /**
+   * Lower bounds for this board: the unconnected items reported by KiCad's own DRC, and the
+   * dangling tracks and vias documented in the reference freerouting DRC JSON.
+   */
+  private static final int EXPECTED_UNCONNECTED_NET_GROUPS = 7;
 
   private static final int EXPECTED_DANGLING_TRACKS = 24;
   private static final int EXPECTED_DANGLING_VIAS = 4;
@@ -68,12 +73,23 @@ public class UnconnectedItemsReproductionTest extends RoutingFixtureTest {
         trace2.getNetNumber(0),
         "Traces 2402 and 2411 must belong to the same net");
 
-    // Trace 2402 ends half a micrometre off the centre of a pin in the DSN (rounding by the
-    // exporter). Reading the wire moves the end onto the centre, so the trace is connected, as
-    // KiCad's own report says: it lists no GND item among its unconnected items.
-    assertFalse(
-        trace1.isTail(),
-        "Trace 2402 (GND) must be connected once its end is moved onto the pin centre.");
+    // Trace 2402 ends inside the pad of GND pin 4 of U3, 0.2 um off its centre. KiCad treats it
+    // as connected (its DRC report does not list it as dangling), so the reader joins it to the
+    // pin.
+    Component u3 = board.components.get("U3");
+    assertNotNull(u3, "Component U3 must exist");
+    Pin u3Pin4 =
+        board.getComponentItems(u3.id).stream()
+            .filter(Pin.class::isInstance)
+            .map(Pin.class::cast)
+            .filter(p -> "4".equals(p.name()))
+            .findFirst()
+            .orElse(null);
+    assertNotNull(u3Pin4, "U3 pin 4 not found");
+    assertFalse(trace1.isTail(), "Trace 2402 (GND) must not dangle: it ends inside U3 pin 4");
+    assertTrue(
+        trace1.getConnectedSet(trace1.getNetNumber(0)).contains(u3Pin4),
+        "Trace 2402 must be connected to U3 pin 4");
 
     DesignRulesChecker drc = new DesignRulesChecker(board, new DesignRulesCheckerSettings());
     Collection<UnconnectedItems> allIssues = drc.getAllUnconnectedItems();
@@ -111,21 +127,21 @@ public class UnconnectedItemsReproductionTest extends RoutingFixtureTest {
 
     System.out.println("Unconnected net groups detected: " + unconnectedNetGroups);
 
-    // Normalization failures inflate the count well above the reference value
-    // of 9 (each failed net produces additional disconnected components).
+    // Normalization failures inflate the count above KiCad's value of 7
+    // (each failed net produces additional disconnected components).
     // Use a lower-bound guard so the test catches under-detection regressions
     // while remaining tolerant of the over-detection caused by normalization artefacts.
     assertTrue(
         unconnectedNetGroups >= EXPECTED_UNCONNECTED_NET_GROUPS,
         "DRC should detect at least "
             + EXPECTED_UNCONNECTED_NET_GROUPS
-            + " unconnected net groups (per reference JSON); actual="
+            + " unconnected net groups (per KiCad DRC); actual="
             + unconnectedNetGroups
             + ".");
 
-    // The tracks the old connectivity model listed as dangling by id (2372, 2433, 2436) have an
-    // end half a micrometre off a pin centre. Reading the board moves the end onto the pin, so
-    // they are connected, which is what KiCad reports; the counts above are the check.
+    // The tracks the reference JSON lists as dangling by id (2372, 2433, 2436) have an end within a
+    // micrometre of a pin centre. Reading the board moves the end onto the pin, so they are
+    // connected, which is what KiCad reports; the counts above are the check.
 
     KiCadDrcReport report = drc.generateReport(TEST_BOARD, "mm");
 
@@ -156,8 +172,8 @@ public class UnconnectedItemsReproductionTest extends RoutingFixtureTest {
             + EXPECTED_DANGLING_VIAS
             + " via_dangling violations; actual="
             + viaDanglingViolations);
-    // Unconnected net groups: normalization failures inflate the count above the
-    // reference value of 9, so we use a lower-bound guard here as well.
+    // Unconnected net groups: normalization failures inflate the count above
+    // KiCad's value of 7, so we use a lower-bound guard here as well.
     assertTrue(
         report.unconnectedItems.size() >= EXPECTED_UNCONNECTED_NET_GROUPS,
         "Report should contain at least "

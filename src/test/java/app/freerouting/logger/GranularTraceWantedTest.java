@@ -47,15 +47,15 @@ class GranularTraceWantedTest {
 
   @Test
   void notWantedWhenTracingAndDebuggingAreOff() {
-    assertFalse(FRLogger.isGranularTraceWanted());
+    assertFalse(FRLogger.isGranularTraceActive());
   }
 
   @Test
   void wantedWhileTheDebuggerStepsOrDelays() {
     Freerouting.globalSettings.debugSettings.singleStepExecution = true;
-    assertTrue(FRLogger.isGranularTraceWanted(), "single stepping");
+    assertTrue(FRLogger.isGranularTraceActive(), "single stepping");
     Freerouting.globalSettings.debugSettings.singleStepExecution = false;
     Freerouting.globalSettings.debugSettings.traceInsertionDelay = 50;
-    assertTrue(FRLogger.isGranularTraceWanted(), "trace insertion delay");
+    assertTrue(FRLogger.isGranularTraceActive(), "trace insertion delay");
   }
 }

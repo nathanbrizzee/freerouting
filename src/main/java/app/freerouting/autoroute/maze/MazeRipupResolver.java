@@ -81,6 +81,13 @@ final class MazeRipupResolver {
       // escapes at base cost, and the next pass puts them back: the fanout oscillation.
       return -1;
     }
+    if (!ctrl.netsNotToRip.isEmpty()) {
+      for (int i = 0; i < obstacleItem.netCount(); i++) {
+        if (ctrl.netsNotToRip.contains(obstacleItem.getNetNumber(i))) {
+          return -1;
+        }
+      }
+    }
     if (doorIsSmall && !enterThroughSmallDoor(listElement, obstacleItem)) {
       return -1;
     }
@@ -185,29 +192,31 @@ final class MazeRipupResolver {
     for (int i = 0; i < nets.length; i++) {
       nets[i] = obstacleItem.getNetNumber(i);
     }
-    FRLogger.trace(
-        "CHECK_RIPUP net="
-            + ctrl.netNumber
-            + ", obstacle_id="
-            + obstacleItem.getId()
-            + ", obstacle_nets="
-            + java.util.Arrays.toString(nets)
-            + ", connectionItems="
-            + connectionItemIds
-            + ", halfWidth="
-            + costFactor
-            + ", ripupCosts="
-            + ctrl.ripupCosts
-            + ", traceLength="
-            + traceLength
-            + ", minTraceLength="
-            + minTraceLength
-            + ", itemCount="
-            + itemCount
-            + ", detour="
-            + detour
-            + ", result="
-            + result);
+    if (FRLogger.isTraceEnabled()) {
+      FRLogger.trace(
+          "CHECK_RIPUP net="
+              + ctrl.netNumber
+              + ", obstacle_id="
+              + obstacleItem.getId()
+              + ", obstacle_nets="
+              + java.util.Arrays.toString(nets)
+              + ", connectionItems="
+              + connectionItemIds
+              + ", halfWidth="
+              + costFactor
+              + ", ripupCosts="
+              + ctrl.ripupCosts
+              + ", traceLength="
+              + traceLength
+              + ", minTraceLength="
+              + minTraceLength
+              + ", itemCount="
+              + itemCount
+              + ", detour="
+              + detour
+              + ", result="
+              + result);
+    }
     return result;
   }
 

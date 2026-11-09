@@ -147,6 +147,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
         router guided by the plan (`docs/research/global-planner-design.md`). Under construction:
         until the planner lands it routes exactly like `freerouting-router`.
     - **`max_passes`**: Maximum autorouter passes. `0` means no limit.
+    - **`stagnation_pass_limit`**: Consecutive passes without score improvement before the autorouter stops. Default is `10`. `0` (or negative) disables stagnation detection and allows routing to proceed up to `max_passes`. Equivalent CLI flag: `--router.autorouter.stagnation_pass_limit=<int>` (or `-spl <int>`).
     - **`max_items`**: Maximum items attempted in the autorouter stage.
     - **`fallback_strategies`**: Comma-separated attempts tried in order when the pass loop stops
       with open connections or new violations. The default is
@@ -305,12 +306,31 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       which shows what budget a board needs and how much of a pass goes into searches that fail. A second line, `Auto-routing pass #N: Rip-up: ...`, counts the
       other nets' items the pass ripped and the net pairs that have ripped each other back and
       forth so far. CLI: `--router.autorouter.max_search_steps_per_connection=<steps>`.
+    - **`via_in_pad`**: Allows the router to place vias directly in SMD pads of their own net, as
+      if the via padstack attached to SMD pads. Default off. A board whose own vias already sit in
+      pads of their net turns it on at load, with a log line (`The board's own vias decide`). Not
+      the same as `force_via_in_pad`, which only overrides the DSN's `(attach off)` for the
+      long-standing fallback. Fanout and planned fanout follow the DSN either way.
+    - **`via_touching_pad`**: Allows vias that touch an SMD pad of their own net with the drill hole
+      outside the pad. Default off. A narrower permission than `via_in_pad`, which includes it.
+    - **`via_centre_of_gravity`**: Offers the centre of gravity of a free piece that contains an SMD
+      pad as an extra via candidate. Default: on while `via_in_pad` is off, off with it.
+    - **`fanout_via_pad_gap`**: Extra cost for fanout vias that sit inside the clearance of a pad of
+      their own net. Default `0` (no extra cost).
+    - **`ball_escape_order`**: The order the first pass routes the balls of a ball grid part in:
+      `auto` (default), `off`, `outer_first` or `inner_first`.
+    - **`exit_stubs`**: Pre-places straight exit stubs for fine-pitch pins whose clearance exactly
+      meets the design rules, so the search does not close them in. Default `true`.
+    - **`item_order_seed`**: Optional extra seed for signal-item permutations after the first
+      autorouter pass, for example `--router.autorouter.item_order_seed=42`. The first pass
+      retains its existing ordering policy.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
     - **`ignore_net_classes`**: Net class names the autorouter should skip.
-    - **`max_threads`**: Canonical CLI is `--router.autorouter.max_threads`. The autorouter pass
-      does not read it. Fanout is also single-threaded. The optimizer pool uses
-      `--router.optimizer.max_threads`. The legacy flat `--router.max_threads` remains as a
-      fallback / GUI knob and is still copied onto both pools.
+    - **`max_threads`**: Stage-specific autorouter worker-thread limit. Canonical CLI is
+      `--router.autorouter.max_threads`. Bounded by the global `--router.max_threads` ceiling. The
+      autorouter pass is single-threaded and does not read it; it is reserved for future
+      multi-threaded passes. Fanout is also single-threaded. The optimizer pool uses
+      `--router.optimizer.max_threads`.
 - **`stop_file`**: Optional path that a run (headless, or a GUI run started with `-de`) checks every 2 seconds. When a file appears
   there, the job stops after the connection it is routing, skips the remaining fallback and
   optimizer stages, and writes its best board to the output file and the result manifest; the
@@ -353,10 +373,12 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   stops at the same point on every run and machine, however busy it is. Use it for benchmarks and
   repeatable experiments; keep `job_timeout` as a safety net. Each pass logs its steps
   (`Search work: ...`). Not set by default. CLI: `--router.max_search_steps=<steps>`.
-- **`max_threads`**: Legacy flat / GUI worker-thread cap. `setMaxThreads()` still copies this
-  value into both `autorouter.max_threads` and `optimizer.max_threads`. Prefer the nested CLI
-  flags (`--router.autorouter.max_threads`, `--router.optimizer.max_threads`) when the two pools
-  must differ. `-mt N` sets **optimizer** threads only, and `-mt 0` turns the optimizer off.
+- **`max_threads`**: Global worker-thread ceiling across all stages (fanout, autorouter, and
+  optimizer). From any source (GUI, JSON, environment, `--router.max_threads`), setting this caps
+  the maximum number of threads any stage may use. Defaults to `cores - 1`. `0` means all
+  processors. Nested stage settings (`--router.autorouter.max_threads`,
+  `--router.optimizer.max_threads`) allow stage-specific fine-tuning within this ceiling.
+  Legacy `-mt` maps here; `-mt 0` disables the optimizer like `--router.optimizer.enabled=false`.
 - **`improvement_threshold`**: Minimum improvement required to continue routing.
 - **`trace_pull_tight_accuracy`**: Accuracy for pulling traces tight.
 - **`allowed_via_types`**: Enables or disables the use of different via types.
@@ -381,6 +403,14 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   clearance). Negative values are ignored with a warning.
 - **`clearance_tolerance_um`**: Clearance shortfalls (required minus actual) up to this many
   micrometers count as rounding noise, not as violations. Default `1`.
+- **`hole_to_hole_um`**: KiCad's hole-to-hole minimum in micrometers: the edge-to-edge distance a
+  via's drill keeps from every other drilled hole, of any net. Vias of one net keep only this from
+  each other, as KiCad keeps no copper clearance within a net. A KiCad board sets its own; a DSN,
+  which has none, gets KiCad's default of `250`. `0` turns it off.
+- **`drc_epsilon_um`**: Tolerance of the board checker in micrometers. Default `0`.
+- **`exact_copper`**: Measures a pin's or via's copper (a circle, a pad polygon) where the search
+  tree's octagons overlap, in the clearance query, the via checks, via shoves and moves, and the
+  clearance checker, instead of refusing the pair on the octagons. Default `true`.
 - **`strict_drc`**: When `true`, a routed connection whose new traces or vias carry clearance
   violations is ripped up again and counted as not routed in that pass, instead of being kept with
   the violations. Default `false`. Violations between two existing items of other nets that a
@@ -456,6 +486,26 @@ The router and optimizer versions are independent. CLI aliases are
 `--router-scoring-version=v1|v2`, `--optimizer-scoring-version=v1|v2`, and
 `--scoring-version=v1|v2` to select both.
 
+##### Reproducible placement import
+
+All DSN imports (headless jobs, composite/API inputs, GUI sessions, and default reader overloads)
+allocate component placements in exact reference-name order by default before routing.
+For unique references, changing the order or grouping of placement records alone (e.g. from
+KiCad re-saving and regenerating footprint UUIDs) preserves component, pad, and package-keepout
+identities. Package association, geometry, side, fixed state, and pin-net membership remain
+unchanged. Duplicate references retain their relative source order and are excluded from the
+placement-order guarantee.
+
+Any configured `router.autorouter.item_order_seed` is applied only after these identities exist,
+providing an explicit, reproducible shuffle without relying on file order as an implicit seed.
+Embedding callers can explicitly supply `DsnReadOptions.INPUT_ORDER` if legacy source order is
+specifically required.
+
+Use the same seed, settings, worker count, and deterministic work limits when comparing routing
+runs. This guarantee does not canonicalize other DSN scopes or electrically equivalent copper
+representations. In particular, KiCad can join fixed track segments differently on separate
+exports; matching the seed alone does not make those different router inputs identical.
+
 ##### **`optimizer` Sub-section**
 
 Configures the optional route-optimization stage that runs after autorouting.
@@ -480,9 +530,10 @@ Configures the optional route-optimization stage that runs after autorouting.
     - `3.5 – 5.0` (3.5% – 5.0%): Fast mode. Cuts optimizer time by ~45%, retaining ~65% via cuts.
     - `> 5.5` (> 5.5%): Rapid prototyping. Stops after 1–2 passes; not recommended for production boards.
 - **`enable_preflight_guards`**: Whether pre-flight optimization guards are evaluated before starting the
-  optimizer loop. If enabled, bypasses the optimizer stage when the board has unrouted connections, has no vias
-  to eliminate (with trace length already near optimal), has an initial score at or near theoretical maximum,
-  or all vias are mandatory layer transitions between SMD pins that cannot be eliminated. Default is `true`.
+  optimizer loop. If enabled, bypasses the optimizer stage when the board has no vias to eliminate (with trace
+  length already near optimal), has an initial score at or near theoretical maximum, or all vias are mandatory
+  layer transitions between SMD pins that cannot be eliminated. Default is `true`. A board with unrouted
+  connections is optimized as well; the optimizer leaves those connections unrouted.
 - **`max_consecutive_failures`**: Maximum consecutive candidate failures allowed before concluding the
   current pass. Default is `50`.
 - **`max_consecutive_failures_pass1`**: Maximum consecutive candidate failures allowed in pass 1 before
@@ -534,6 +585,12 @@ Configures the SMD-pin fanout pre-pass stage.
     - `"direct_first"`: Same-layer pin connections are routed first, without vias; failed pins are left to the autorouter.
     - `"planned"`: Before the fanout passes, every SMD pin that still needs a connection gets an escape via on a short stub, so no pin is enclosed by copper before it can change layer. The via goes as close to the pad as fits: outward along the pad, then to either side of it, then behind it under the part, then diagonally; the stub grows only when no closer site fits, up to `max_escape_length_mm`. The densest components choose first. The escapes are unfixed, so the autorouter rips them up as needed. Pins with no room go to the eager passes. CLI: `--router.fanout.strategy=planned`.
       When it helps: dense boards whose pins get enclosed by copper before they can drop a via. Measured with defaults otherwise (2026-10-20): a dense 6-layer HV card went from 6 to 3 unrouted at a 30-minute cap, a dense 6-layer carrier from 179 to 158 after its first pass, and Issue070 from 2 unrouted to finished in 56 s instead of 88 s. On a less crowded 4-layer HV card (7 to 8) and on the DAC2020 bm05 board (5 to 8) it was slightly worse, so it is opt-in. The planned step itself takes 1-6 s on most boards (60 s on the large carrier).
+
+- **`two_layer_bga`**: How the main attempt starts on a board with exactly two signal layers and
+  a ball grid array, where every escape via closes both layers. `no_fanout` (default) starts
+  without the fanout, `direct_first` with the direct-first fanout, `off` keeps the configured
+  fanout. Applies only while the fanout strategy is the default `eager`: the standard profile
+  starts the planned `bga` fanout instead, which this setting leaves alone.
 
 #### **`usage_and_diagnostic_data` Section**
 

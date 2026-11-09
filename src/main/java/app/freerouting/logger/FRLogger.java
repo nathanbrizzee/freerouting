@@ -365,12 +365,13 @@ public final class FRLogger {
   }
 
   /**
-   * Whether a granular {@code trace(method, operation, message, impactedItems, ...)} call can have
-   * any effect: granular trace logging is on, or the GUI debugger steps or delays. Hot paths build
-   * their messages only when it is true.
+   * Returns true when a granular {@code trace(method, operation, message, impactedItems)} call has
+   * an effect: granular TRACE output, or a debug session that may pause on it. Hot call sites check
+   * it first, so that they do not build a message nobody reads.
    */
-  public static boolean isGranularTraceWanted() {
-    return (enabled && granularTraceEnabled) || DebugControl.getInstance().isSteppingOrDelayed();
+  public static boolean isGranularTraceActive() {
+    return (enabled && granularTraceEnabled && isTraceEnabled())
+        || DebugControl.getInstance().isActive();
   }
 
   /**

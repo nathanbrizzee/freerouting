@@ -31,11 +31,11 @@ class RatsnestClearanceHeadlessTest {
   private static final String VIOLATION_FIXTURE =
       "Issue575-drc_BBD_Mars-64_6_track_1_hole_clearance_violations.dsn";
 
-  // Open connections on the Natural Tone board. Wire ends that the DSN rounding left half a
-  // micrometre off a pin centre are moved onto it when the board is read (the dev-board fixture
-  // then has none left, as in the KiCad report), and the centerline contact model counts
-  // T-junctions as connected.
-  private static final int EXPECTED_UNCONNECTED = 51;
+  // 8 unconnected components remain on Natural Tone Preamp (KiCad reports 7 unconnected items).
+  // The dev-board fixture used before is fully connected since wire ends inside pads are joined.
+  private static final int EXPECTED_UNCONNECTED = 8;
+  // A via the designer fixed in a pad of its own net is a choice, not a clearance violation, so the
+  // violation fixture reports 3 where counting each such via gave 67 (KiCad itself lists 7 items).
   private static final int EXPECTED_UNIQUE_VIOLATIONS = 3;
 
   private static BasicBoard loadBoard(String filename) throws Exception {
@@ -66,7 +66,7 @@ class RatsnestClearanceHeadlessTest {
 
     AirLine[] airlines = drc.getAllAirlines();
     assertNotNull(airlines, "getAllAirlines must not return null");
-    assertFalse(airlines.length == 0, "a board with 9 incompletes must produce airlines");
+    assertFalse(airlines.length == 0, "a board with incompletes must produce airlines");
     assertEquals(
         EXPECTED_UNCONNECTED, airlines.length, "one airline per incomplete connection expected");
 

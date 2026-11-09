@@ -175,7 +175,8 @@ public class BoardHistory {
         if (entry.restoreCount <= maxAllowedRestoreCount) {
           entry.restoreCount++;
           RoutingBoard restored = (RoutingBoard) BasicBoard.deserialize(entry.board);
-          restored.clearanceBaseline = this.clearanceBaseline;
+          // The baseline is transient: without it, every pre-existing violation counts as new.
+          restored.clearanceBaseline = entry.clearanceBaseline;
           return restored;
         }
       }
@@ -221,12 +222,15 @@ public class BoardHistory {
     public final byte[] board;
     public final String hash;
     public final float score;
+    public final transient ClearanceBaseline clearanceBaseline;
     public int restoreCount;
 
     public BoardHistoryEntry(RoutingBoard board, RouterSettings routerSettings) {
       this.board = board.serialize(false);
       this.hash = board.getHash();
       this.score = new BoardStatistics(board).getRouterScore(routerSettings);
+      // Read after the statistics, which wait for the post-load DRC that builds the baseline.
+      this.clearanceBaseline = board.clearanceBaseline;
       this.restoreCount = 0;
     }
   }

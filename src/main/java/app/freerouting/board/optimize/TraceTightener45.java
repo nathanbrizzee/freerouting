@@ -48,12 +48,7 @@ class TraceTightener45 extends TraceTightener {
   public Polyline pullTight(Polyline polyline) {
     Polyline newResult = avoidAcidTraps(polyline);
     Polyline prevResult = null;
-    int rounds = 0;
-    while (newResult != prevResult && !this.isStopRequested()) {
-      if (++rounds > MAX_PULL_TIGHT_ROUNDS) {
-        warnCap("pullTight", MAX_PULL_TIGHT_ROUNDS, newResult);
-        break;
-      }
+    for (int rounds = 0; newResult != prevResult && !mustStopAfter(rounds); ++rounds) {
       prevResult = newResult;
       Polyline tmp1 = reduceCorners(prevResult);
       Polyline tmp2 = smoothenCorners(tmp1);

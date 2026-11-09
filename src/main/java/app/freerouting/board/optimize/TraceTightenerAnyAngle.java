@@ -35,12 +35,7 @@ class TraceTightenerAnyAngle extends TraceTightener {
   public Polyline pullTight(Polyline polyline) {
     Polyline newResult = avoidAcidTraps(polyline);
     Polyline prevResult = null;
-    int rounds = 0;
-    while (newResult != prevResult && !isStopRequested()) {
-      if (++rounds > TraceTightener45.MAX_PULL_TIGHT_ROUNDS) {
-        // Without a job timeout nothing else ends a trace that keeps changing.
-        break;
-      }
+    for (int rounds = 0; newResult != prevResult && !mustStopAfter(rounds); ++rounds) {
       prevResult = newResult;
       Polyline tmp = skipSegmentsOfLength0(prevResult);
       Polyline tmp0 = reduceLines(tmp);

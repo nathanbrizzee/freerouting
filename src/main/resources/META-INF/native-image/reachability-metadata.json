@@ -65,6 +65,14 @@
       "serializable": true
     },
     {
+      "type": "app.freerouting.autoroute.RoutingFailureLog$ItemFailureInfo",
+      "serializable": true
+    },
+    {
+      "type": "app.freerouting.autoroute.AutorouteAttemptState",
+      "serializable": true
+    },
+    {
       "type": "app.freerouting.board.actions.ItemIdGenerator",
       "serializable": true
     },
@@ -138,6 +146,10 @@
     },
     {
       "type": "app.freerouting.board.model.items.ViaObstacleArea",
+      "serializable": true
+    },
+    {
+      "type": "app.freerouting.board.model.items.WireObstacleArea",
       "serializable": true
     },
     {
@@ -318,6 +330,43 @@
       ]
     },
     {
+      "type": "app.freerouting.core.results.RoutingResultManifest$FallbackAttempt",
+      "fields": [
+        {
+          "name": "clearanceViolations"
+        },
+        {
+          "name": "durationSeconds"
+        },
+        {
+          "name": "newOrChangedViolations"
+        },
+        {
+          "name": "routerScore"
+        },
+        {
+          "name": "stopReason"
+        },
+        {
+          "name": "strategy"
+        },
+        {
+          "name": "unrouted"
+        }
+      ]
+    },
+    {
+      "type": "app.freerouting.core.results.RoutingResultManifest$FallbackDetail",
+      "fields": [
+        {
+          "name": "attempts"
+        },
+        {
+          "name": "chosen"
+        }
+      ]
+    },
+    {
       "type": "app.freerouting.core.results.RoutingResultManifest$FixtureInfo",
       "fields": [
         {
@@ -359,6 +408,9 @@
       "fields": [
         {
           "name": "autorouter"
+        },
+        {
+          "name": "fallback"
         },
         {
           "name": "fanout"
@@ -498,6 +550,24 @@
         },
         {
           "name": "size"
+        }
+      ],
+      "serializable": true
+    },
+    {
+      "type": "app.freerouting.core.scoring.BoardStatisticsRectangle",
+      "fields": [
+        {
+          "name": "height"
+        },
+        {
+          "name": "width"
+        },
+        {
+          "name": "x"
+        },
+        {
+          "name": "y"
         }
       ],
       "serializable": true
@@ -2057,29 +2127,6 @@
     },
     {
       "type": "jakarta.servlet.Servlet"
-    },
-    {
-      "type": "java.awt.geom.Rectangle2D"
-    },
-    {
-      "type": "java.awt.geom.Rectangle2D$Float",
-      "fields": [
-        {
-          "name": "height"
-        },
-        {
-          "name": "width"
-        },
-        {
-          "name": "x"
-        },
-        {
-          "name": "y"
-        }
-      ]
-    },
-    {
-      "type": "java.awt.geom.RectangularShape"
     },
     {
       "type": "java.lang.Boolean",
@@ -3931,6 +3978,34 @@
     },
     {
       "type": "sun.util.resources.cldr.CalendarData"
+    },
+    {
+      "type": "java.util.EnumMap",
+      "serializable": true
+    },
+    {
+      "type": "java.util.EnumSet",
+      "serializable": true
+    },
+    {
+      "type": "java.util.RegularEnumSet",
+      "serializable": true
+    },
+    {
+      "type": "java.util.JumboEnumSet",
+      "serializable": true
+    },
+    {
+      "type": "java.util.EnumSet$SerializationProxy",
+      "serializable": true
+    },
+    {
+      "type": "java.util.LinkedHashMap",
+      "serializable": true
+    },
+    {
+      "type": "java.lang.Number",
+      "serializable": true
     }
   ],
   "resources": [

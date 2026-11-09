@@ -46,8 +46,24 @@ public class GlobalSettings implements Serializable {
     return currentInstance;
   }
 
+  // Resolved once: every granular trace call reads the settings, and Class.forName plus getField
+  // on each read cost more than the trace itself.
+  private static volatile java.lang.reflect.Field freeroutingGlobalSettingsField;
+  private static volatile boolean freeroutingGlobalSettingsFieldResolved;
+
   private static GlobalSettings getFreeroutingGlobalSettingsIfAvailable() {
-    java.lang.reflect.Field field = FreeroutingField.FIELD;
+    if (!freeroutingGlobalSettingsFieldResolved) {
+      try {
+        Class<?> freeroutingClass =
+            Class.forName(
+                "app.freerouting.Freerouting", false, GlobalSettings.class.getClassLoader());
+        freeroutingGlobalSettingsField = freeroutingClass.getField("globalSettings");
+      } catch (Throwable _) {
+        // Ignored in environments where Freerouting is not loaded or unavailable
+      }
+      freeroutingGlobalSettingsFieldResolved = true;
+    }
+    java.lang.reflect.Field field = freeroutingGlobalSettingsField;
     if (field == null) {
       return null;
     }
@@ -60,27 +76,6 @@ public class GlobalSettings implements Serializable {
       // Ignored in environments where Freerouting is not loaded or unavailable
     }
     return null;
-  }
-
-  /**
-   * {@code Freerouting.globalSettings}, looked up once, or null where Freerouting is not loaded.
-   * The router's trace calls reach {@link #current()} millions of times per run, and the class and
-   * field lookup was most of their cost. The field itself is still read on every call, since tests
-   * replace it.
-   */
-  private static final class FreeroutingField {
-    static final java.lang.reflect.Field FIELD = find();
-
-    private static java.lang.reflect.Field find() {
-      try {
-        Class<?> freeroutingClass =
-            Class.forName(
-                "app.freerouting.Freerouting", false, GlobalSettings.class.getClassLoader());
-        return freeroutingClass.getField("globalSettings");
-      } catch (Throwable _) {
-        return null;
-      }
-    }
   }
 
   /** Sets the currently active GlobalSettings instance. */
@@ -833,6 +828,11 @@ public class GlobalSettings implements Serializable {
               routerSettings.autorouter.maxPasses = 9999;
             }
             // Note: 0 is allowed and means no limit
+            i++;
+          }
+        } else if (args[i].startsWith("-spl")) {
+          if (args.length > i + 1 && !args[i + 1].startsWith("-")) {
+            routerSettings.autorouter.stagnationPassLimit = Integer.decode(args[i + 1]);
             i++;
           }
         } else if (args[i].startsWith("-mt")) {

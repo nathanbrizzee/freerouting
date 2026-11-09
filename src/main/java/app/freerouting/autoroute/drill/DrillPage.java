@@ -33,6 +33,9 @@ public class DrillPage implements ExpandableObject {
   /** The number of the net, for which the drills are calculated. */
   private int netNumber = -1;
 
+  private boolean attachSmdCached;
+  private boolean centreOfGravityCandidateCached;
+
   /** Creates a new instance of DrillPage. */
   public DrillPage(IntBox shape, RoutingBoard board) {
     this.shape = shape;
@@ -62,7 +65,7 @@ public class DrillPage implements ExpandableObject {
 
   /** Returns the drills on this page for through vias; attachSmd allows drilling to SMD pins. */
   public Collection<ExpansionDrill> getDrills(AutorouteEngine autorouteEngine, boolean attachSmd) {
-    return getDrills(autorouteEngine, attachSmd, null);
+    return getDrills(autorouteEngine, attachSmd, null, true);
   }
 
   /**
@@ -73,8 +76,25 @@ public class DrillPage implements ExpandableObject {
    */
   public Collection<ExpansionDrill> getDrills(
       AutorouteEngine autorouteEngine, boolean attachSmd, java.util.List<int[]> viaSpans) {
-    if (this.drills == null || autorouteEngine.getNetNumber() != this.netNumber) {
+    return getDrills(autorouteEngine, attachSmd, viaSpans, true);
+  }
+
+  /**
+   * Returns the drills on this page, as above. With {@code centreOfGravityCandidate}, free pieces
+   * containing an SMD pad also offer their centre of gravity as a via candidate.
+   */
+  public Collection<ExpansionDrill> getDrills(
+      AutorouteEngine autorouteEngine,
+      boolean attachSmd,
+      java.util.List<int[]> viaSpans,
+      boolean centreOfGravityCandidate) {
+    if (this.drills == null
+        || autorouteEngine.getNetNumber() != this.netNumber
+        || this.attachSmdCached != attachSmd
+        || this.centreOfGravityCandidateCached != centreOfGravityCandidate) {
       this.netNumber = autorouteEngine.getNetNumber();
+      this.attachSmdCached = attachSmd;
+      this.centreOfGravityCandidateCached = centreOfGravityCandidate;
       this.drills = new LinkedList<>();
       int lastBoardLayer = this.board.getLayerCount() - 1;
       java.util.List<int[]> spans =
@@ -82,7 +102,7 @@ public class DrillPage implements ExpandableObject {
               ? java.util.List.of(new int[] {0, lastBoardLayer})
               : viaSpans;
       for (int[] span : spans) {
-        if (!addDrills(autorouteEngine, attachSmd, span[0], span[1])) {
+        if (!addDrills(autorouteEngine, attachSmd, span[0], span[1], centreOfGravityCandidate)) {
           // Interrupted, not failed: do not cache an empty page for later searches.
           this.drills = null;
           return new LinkedList<>();
@@ -94,7 +114,11 @@ public class DrillPage implements ExpandableObject {
 
   /** Adds the drills of one layer range to the page. Returns false when the search was stopped. */
   private boolean addDrills(
-      AutorouteEngine autorouteEngine, boolean attachSmd, int drillFirstLayer, int drillLastLayer) {
+      AutorouteEngine autorouteEngine,
+      boolean attachSmd,
+      int drillFirstLayer,
+      int drillLastLayer,
+      boolean centreOfGravityCandidate) {
     {
       ShapeSearchTree searchTree = autorouteEngine.autorouteSearchTree;
       Collection<TreeEntry> overlaps = new LinkedList<>();
@@ -168,7 +192,7 @@ public class DrillPage implements ExpandableObject {
         if (newDrill.calculateExpansionRooms(autorouteEngine)) {
           this.drills.add(newDrill);
         }
-        if (pinCenter != null) {
+        if (centreOfGravityCandidate && pinCenter != null) {
           Point centreOfGravity = currentDrillShape.centreOfGravity().round();
           if (!centreOfGravity.equals(pinCenter)) {
             ExpansionDrill cogDrill =

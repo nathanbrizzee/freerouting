@@ -24,6 +24,6 @@ class OptimizerThreadsFlagTest {
   void countSetsTheOptimizerPool() {
     RouterSettings settings = merged("-de", "a.dsn", "-do", "a.ses", "-mt", "3");
     assertTrue(settings.getRunOptimizer());
-    assertEquals(3, settings.optimizer.maxThreads);
+    assertEquals(3, settings.getOptimizerMaxThreads());
   }
 }
