@@ -794,6 +794,23 @@ public abstract class FoundConnectionLocator {
     return false;
   }
 
+  /** One trace of a located connection: its layer and its corners from start to target. */
+  public record Segment(int layer, IntPoint[] corners) {}
+
+  /**
+   * The traces of the located connection in the order they were built, without inserting them into
+   * the board.
+   */
+  public List<Segment> segments() {
+    List<Segment> result = new ArrayList<>();
+    if (this.connectionItems != null) {
+      for (ResultItem item : this.connectionItems) {
+        result.add(new Segment(item.layer, item.corners.clone()));
+      }
+    }
+    return result;
+  }
+
   /**
    * Type of a single item in the result list connectionItems. Used to create a new PolylineTrace.
    */

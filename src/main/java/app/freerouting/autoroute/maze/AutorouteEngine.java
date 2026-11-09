@@ -260,6 +260,55 @@ public class AutorouteEngine {
   }
 
   /**
+   * Searches a connection between startSet and destSet like {@link #autorouteConnection} but does
+   * not rip or insert anything: returns the traces of the found connection, or null when none was
+   * found. Used where the caller builds the copper itself, such as a differential pair that routes
+   * one wide trace along its centre line.
+   */
+  public List<FoundConnectionLocator.Segment> locateConnection(
+      Set<Item> startSet, Set<Item> destSet, AutorouteControl ctrl) {
+    MazeSearchEngine mazeSearchAlgo;
+    try {
+      mazeSearchAlgo = MazeSearchEngine.getInstance(startSet, destSet, this, ctrl);
+    } catch (Exception e) {
+      FRLogger.error("AutorouteEngine.locateConnection: Exception in MazeSearchEngine", e);
+      mazeSearchAlgo = null;
+    }
+    MazeSearchEngine.Result searchResult = null;
+    if (mazeSearchAlgo != null) {
+      try {
+        searchResult = mazeSearchAlgo.findConnection();
+      } catch (Exception e) {
+        FRLogger.error("AutorouteEngine.locateConnection: Exception in find_connection", e);
+      }
+    }
+    FoundConnectionLocator located = null;
+    if (searchResult != null) {
+      try {
+        located =
+            FoundConnectionLocator.getInstance(
+                searchResult,
+                ctrl,
+                this.autorouteSearchTree,
+                board.rules.getTraceAngleRestriction(),
+                new TreeSet<>(),
+                null);
+      } catch (Exception e) {
+        FRLogger.error("AutorouteEngine.locateConnection: Exception in FoundConnectionLocator", e);
+      }
+    }
+    if (!this.maintainDatabase) {
+      this.clear();
+    } else {
+      this.resetAllDoors();
+    }
+    if (located == null || located.connectionItems == null) {
+      return null;
+    }
+    return located.segments();
+  }
+
+  /**
    * Removes the connections of {@code rippedItems} the same way a commit does after the maze.
    * Returns the nets whose tails were removed.
    */

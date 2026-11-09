@@ -1452,6 +1452,7 @@ public class Network extends ScopeKeyword {
     Collection<NetClass.ClassClass> classClassList = new LinkedList<>();
     Collection<ViaInfo> viaInfos = new LinkedList<>();
     Collection<Collection<String>> viaRules = new LinkedList<>();
+    List<PairRule> pairRules = new ArrayList<>();
     Object nextToken = null;
     for (; ; ) {
       Object prevToken = nextToken;
@@ -1500,6 +1501,8 @@ public class Network extends ScopeKeyword {
             return false;
           }
           classes.add(currentClass);
+        } else if (Keyword.matches(nextToken, Keyword.PAIR)) {
+          readPairScope(scopeParameter.scanner, pairRules);
         } else if (nextToken == Keyword.CLASS_CLASS) {
           NetClass.ClassClass currentClassClass =
               NetClass.readClassClassScope(scopeParameter.scanner);
@@ -1563,9 +1566,139 @@ public class Network extends ScopeKeyword {
     insertViaRules(viaRules, scopeParameter.boardHandling.getRoutingBoard());
     insertNetClasses(classes, scopeParameter);
     insertClassPairs(classClassList, scopeParameter);
+    insertDifferentialPairs(pairRules, scopeParameter);
     insertComponents(scopeParameter);
     insertLogicalParts(scopeParameter);
     return true;
+  }
+
+  /** A {@code (pair (nets P N (gap g)))} rule: the nets and the coupled gap in DSN units. */
+  private record PairRule(String positive, String negative, Double gap) {}
+
+  /**
+   * Reads a {@code (pair ...)} scope. Only the net pair descriptor {@code (nets P N [(gap g)])} is
+   * used; wire pairs and bundles are skipped.
+   */
+  private static void readPairScope(IJFlexScanner scanner, List<PairRule> pairRules) {
+    Object previous = null;
+    for (; ; ) {
+      Object token;
+      try {
+        token = scanner.nextToken();
+      } catch (IOException e) {
+        FRLogger.error("Network.read_pair_scope: IO error scanning file", e);
+        return;
+      }
+      if (token == null || token == CLOSED_BRACKET) {
+        return;
+      }
+      if (previous == OPEN_BRACKET) {
+        if (Keyword.matches(token, Keyword.NETS)) {
+          readNetPairDescriptor(scanner, pairRules);
+        } else {
+          skipScope(scanner);
+        }
+      }
+      previous = token;
+    }
+  }
+
+  private static void readNetPairDescriptor(IJFlexScanner scanner, List<PairRule> pairRules) {
+    String positive = scanner.nextString();
+    String negative = scanner.nextString();
+    Double gap = null;
+    Object previous = null;
+    for (; ; ) {
+      Object token;
+      try {
+        token = scanner.nextToken();
+      } catch (IOException e) {
+        FRLogger.error("Network.read_net_pair_descriptor: IO error scanning file", e);
+        return;
+      }
+      if (token == null) {
+        return;
+      }
+      if (token == CLOSED_BRACKET) {
+        break;
+      }
+      if (previous == OPEN_BRACKET) {
+        if (Keyword.matches(token, Keyword.GAP)) {
+          Double value = scanner.nextDouble();
+          // The first gap without a layer applies to every layer; -1 resets it to the clearance.
+          if (gap == null && value != null && value >= 0) {
+            gap = value;
+          }
+          // the layers of a gap, if any, then the end of the gap scope
+          for (; ; ) {
+            Object inner;
+            try {
+              inner = scanner.nextToken();
+            } catch (IOException e) {
+              return;
+            }
+            if (inner == null || inner == CLOSED_BRACKET) {
+              break;
+            }
+            if (inner == OPEN_BRACKET) {
+              try {
+                scanner.nextToken();
+              } catch (IOException e) {
+                return;
+              }
+              skipScope(scanner);
+            }
+          }
+        } else {
+          skipScope(scanner);
+        }
+      }
+      previous = token;
+    }
+    if (positive != null && negative != null && !positive.isEmpty() && !negative.isEmpty()) {
+      pairRules.add(new PairRule(positive, negative, gap));
+    }
+  }
+
+  /** Registers the explicit pair rules, which the name detector then leaves alone. */
+  private static void insertDifferentialPairs(
+      List<PairRule> pairRules, ReadScopeParameter scopeParameter) {
+    RoutingBoard board = scopeParameter.boardHandling.getRoutingBoard();
+    for (PairRule rule : pairRules) {
+      app.freerouting.rules.Net positive = board.rules.nets.get(rule.positive(), 1);
+      app.freerouting.rules.Net negative = board.rules.nets.get(rule.negative(), 1);
+      if (positive == null || negative == null || positive.equals(negative)) {
+        FRLogger.warn(
+            "Network.insert_differential_pairs: pair ("
+                + rule.positive()
+                + ", "
+                + rule.negative()
+                + ") names a net that does not exist; ignored.");
+        continue;
+      }
+      double gap =
+          rule.gap() != null ? scopeParameter.coordinateTransform.dsnToBoard(rule.gap()) : 0.0;
+      String baseName = commonBaseName(positive.name, negative.name);
+      try {
+        board.rules.differentialPairs.add(
+            new app.freerouting.rules.DifferentialPair(positive, negative, baseName, gap, 0.0));
+      } catch (IllegalArgumentException e) {
+        FRLogger.warn("Network.insert_differential_pairs: " + e.getMessage());
+      }
+    }
+  }
+
+  /** The longest common prefix of the two names without a trailing separator or polarity. */
+  private static String commonBaseName(String first, String second) {
+    int n = 0;
+    while (n < first.length() && n < second.length() && first.charAt(n) == second.charAt(n)) {
+      n++;
+    }
+    String base = first.substring(0, n);
+    while (!base.isEmpty() && "_.+-".indexOf(base.charAt(base.length() - 1)) >= 0) {
+      base = base.substring(0, base.length() - 1);
+    }
+    return base.isEmpty() ? first : base;
   }
 
   private boolean readNetScope(

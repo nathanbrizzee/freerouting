@@ -28,6 +28,7 @@ public final class RoutingPipeline {
   private final BatchOptimizer optimizer;
   private final List<StageListener> stageListeners = new ArrayList<>();
   private final List<Integer> exitStubItems = new ArrayList<>();
+  private final List<Integer> pairItems = new ArrayList<>();
 
   private RoutingPipeline(RoutingJob job, Function<RoutingJob, BatchOptimizer> optimizerFactory) {
     this.job = job;
@@ -86,6 +87,14 @@ public final class RoutingPipeline {
   public void run() {
     if (this.job != null && this.job.board != null) {
       this.job.board.awaitPostLoad();
+      List<String> pairLines =
+          PairRouting.apply(
+              this.job.routerSettings, this.job.board, this.job.thread, this.pairItems);
+      if (pairLines != null) {
+        for (String line : pairLines) {
+          this.job.logInfo(line);
+        }
+      }
       String chosen = TwoLayerBga.apply(this.job.routerSettings, this.job.board);
       if (chosen != null) {
         this.job.logInfo(chosen);
@@ -97,6 +106,7 @@ public final class RoutingPipeline {
     }
     runRoutingStage();
     runOptimizationStage();
+    releasePairs();
     releaseExitStubs();
     removeDanglingCopper();
     this.job.stage = RoutingStage.IDLE;
@@ -114,6 +124,16 @@ public final class RoutingPipeline {
       if (line != null) {
         this.job.logInfo(line);
       }
+    }
+  }
+
+  private void releasePairs() {
+    if (!this.pairItems.isEmpty() && this.job.board != null) {
+      String line = PairRouting.release(this.job.board, this.pairItems);
+      if (line != null) {
+        this.job.logInfo(line);
+      }
+      this.pairItems.clear();
     }
   }
 

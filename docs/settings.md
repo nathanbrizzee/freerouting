@@ -321,6 +321,25 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       `auto` (default), `off`, `outer_first` or `inner_first`.
     - **`exit_stubs`**: Pre-places straight exit stubs for fine-pitch pins whose clearance exactly
       meets the design rules, so the search does not close them in. Default `true`.
+    - **`differential_pairs`**: Routes differential pairs as two coupled traces before the rest of
+      the board: `auto` (default) or `off`. A pair is declared in the DSN with
+      `(pair (nets P N (gap g)))` inside `(network ...)` (KiCad's exporter writes none; see
+      `bench/overhaul/dsn_pairs.py`) or found by net name (`_P/_N`, `D+/D-`, `_DP/_DM` and the
+      like). For each connection of a pair the two pads at each end are escaped together to the
+      coupled gap, and the maze search routes one virtual trace as wide as both members and the gap
+      along the pair's centre line, so every clearance check covers the finished pair; the two
+      members are that line offset to either side. A pair keeps one layer, needs its members in the
+      same order at both ends, and is placed fixed until the last stage so the rip-up and the
+      optimizer leave it alone. A pair that cannot be routed this way is left to the ordinary router
+      and the log says why (`Pair <name> (<pin> to <pin>): left to the router: ...`). Log lines:
+      `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and, per
+      connection, `Pair <name> (...): routed on layer L, lengths A and B mm, skew S mm`. When it
+      helps: boards with USB, Ethernet, MIPI or LVDS pairs that must keep their gap. It costs
+      little on a board without pairs. CLI: `--router.autorouter.differential_pairs=off`.
+    - **`pair_gap_um`**: The gap in micrometers, edge to edge, between the members of a pair that
+      gives none (name-detected pairs and `(pair ...)` rules without `(gap ...)`). Default: the
+      clearance between the two nets. A gap below that clearance is raised to it, as the board
+      checker would flag it otherwise. CLI: `--router.autorouter.pair_gap_um=<um>`.
     - **`item_order_seed`**: Optional extra seed for signal-item permutations after the first
       autorouter pass, for example `--router.autorouter.item_order_seed=42`. The first pass
       retains its existing ordering policy.

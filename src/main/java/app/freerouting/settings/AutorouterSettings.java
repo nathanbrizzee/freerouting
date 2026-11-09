@@ -312,6 +312,24 @@ public class AutorouterSettings implements Serializable, Cloneable {
   @Schema(description = "Pre-place straight exit stubs for fine-pitch pins with exact clearance")
   public Boolean exitStubs;
 
+  /**
+   * Routes differential pairs as two coupled traces before the rest of the board: {@code "auto"}
+   * (default) routes the pairs the DSN declares with {@code (pair (nets P N (gap g)))} and the ones
+   * found by net name ({@code _P/_N}, {@code D+/D-} and the like); {@code "off"} routes every net
+   * on its own.
+   */
+  @SerializedName("differential_pairs")
+  @Schema(description = "Route differential pairs as coupled traces first ('auto', 'off')")
+  public String differentialPairs;
+
+  /**
+   * Coupled gap (edge to edge) in micrometers for a pair that gives none; absent: the clearance
+   * between the two nets. A gap below that clearance is raised to it.
+   */
+  @SerializedName("pair_gap_um")
+  @Schema(description = "Gap in micrometers between the members of a pair with no gap rule")
+  public Double pairGapUm;
+
   @Override
   public AutorouterSettings clone() {
     try {

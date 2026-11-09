@@ -1,0 +1,33 @@
+(pcb pair_basic
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (layer B.Cu (type signal))
+    (boundary (rect pcb 0 0 50000 30000))
+    (via "Via[0-1]_600:300_um")
+    (rule (width 150) (clearance 150)))
+  (placement
+    (component Conn
+      (place J1 5000 10000 front 0)
+      (place U1 45000 12000 front 0))
+    (component Blk
+      (place X1 25000 10000 front 0)))
+  (library
+    (image Conn
+      (pin Pad 1 0 0)
+      (pin Pad 2 0 800))
+    (image Blk
+      (pin BigPad 1 0 0))
+    (padstack Pad (shape (rect F.Cu -500 -200 500 200)) (attach off))
+    (padstack BigPad (shape (rect F.Cu -2000 -5000 2000 5000)) (attach off))
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off)))
+  (network
+    (net D+ (pins J1-1 U1-1))
+    (net D- (pins J1-2 U1-2))
+    (net GND (pins X1-1))
+    (class kicad_default "" D+ D- GND
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 150) (clearance 150)))
+    (pair (nets D+ D- (gap 200)))))
