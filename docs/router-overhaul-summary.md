@@ -4,7 +4,7 @@ For the maintainers of Freerouting. This is the write-up behind a fork branch th
 of upstream `master` (`5aa1b24`). It lists every change, what each one was measured to do, what was tried and
 dropped, and what is still open, so that a pull request can be cut from it in pieces.
 
-- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.4.jar`.
+- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.5.jar`.
 - Baseline for every comparison: the released v2.5.0 jar (built from `b647a2f`), and upstream `master` for the
   code.
 - The branch is large (184 files, +17.5k / -0.5k lines, 51 new test files, about half of it docs), so section 7
@@ -201,6 +201,15 @@ measured GUI run spent 3 of 162 sampled seconds drawing. New GUI text exists in 
 - **Upstream master merged again** (197 commits, the 2.6.0-RC10 line): a stagnation-loop fix, a pad-clearance fix (#1047), the AWT-free geometry layer, the optimizer rank score, `-mt` as a stage ceiling, hole-to-hole and via-in-pad handling, exact rational SES import and the freerouting.net part 3 improvements (exit stubs, ball escape order, two-layer BGA start). 34 files conflicted; where both sides had fixed the same thing the upstream form was kept, and what we had added beside it was kept too (rip history and pin-access costs, blind and buried via spans, the fanout-escape guard, movable session routes, the progress-counting stagnation test, the step-budget search limit). A fixed via in a pad of its own net is not a clearance violation, and a `class_class` rule for all layers only raises shared item classes, so clearance 0 between twin classes still holds. On the 24 PCBench boards plus one (2-minute cap, optimizer on) the merged tree finished 16 boards clean with 1,286 open connections, our nb.2 jar 15 with 1,229 and upstream master alone 12 with 1,433.
 - **Differential pair routing** (`router.autorouter.differential_pairs`, on by default except in `classic`). A pair declared in the DSN with `(pair (nets P N (gap g)))`, or found by net name, is routed before everything else as two coupled traces: the pads at each end escape together to the coupled gap, one wide virtual trace is searched along the pair's centre line, and the members are that line offset to either side, with a via pair at an end whose pads are on another layer. A pair is kept only if the board checker finds no clearance violation in its copper; otherwise nothing is left behind and the ordinary router takes it, with the reason in the log. The pair copper is fixed until the last stage. `scripts/kicad/dsn_pairs.py` adds the pairs, the class's differential pair gap and width to a KiCad DSN, since KiCad's exporter writes none. Not done: polarity swaps, length tuning (the skew of a routed pair is reported, up to 1.3 mm on the CM5 test board), BGA breakouts. On the CM5 test board (6 layers, 32 pairs) 13 of 18 pair connections route as pairs and the board then finishes with 6 open in 45 s against 8 open in 245 s without pairs; on the 24 PCBench boards nothing got worse (16 clean, 1,313 open).
 
+### Changes since 2.5.0-nb.4
+
+- **Pairs replace existing fanout** (`router.autorouter.pair_fanout`, `replace` by default, or `keep`). A board may
+  arrive fanned out or not. Before a pair connection is routed, the movable dead-end fanout on its four pins (a
+  stub and its via, copper that reaches no other pin and carries only that net) is lifted, and the pair leaves the
+  pads itself. If the pair routes, the fanout stays removed and the log line ends with `, replacing N fanout
+  item(s)`; if not, the fanout is put back as it was. Locked copper and copper that reaches another pin are never
+  lifted. Before, the other member's fanout was an obstacle to both breakouts.
+
 ### Changes since 2.5.0-nb.3
 
 Fixes from the first test of the pair router on a real board (six layers, four Ethernet pairs and one USB pair),
@@ -316,10 +325,10 @@ Reviewers who want a single number to check: `--router.profile=classic` against 
 ## 8. Reproducing
 
 ```
-java -jar freerouting-2.5.0-nb.4.jar -de board.dsn -do board.ses --gui.enabled=false \
+java -jar freerouting-2.5.0-nb.5.jar -de board.dsn -do board.ses --gui.enabled=false \
   --router.job_timeout=00:10:00 --router.result_json=board.json
 # the original router's behaviour, same jar:
-java -jar freerouting-2.5.0-nb.4.jar ... --router.profile=classic
+java -jar freerouting-2.5.0-nb.5.jar ... --router.profile=classic
 ```
 
 The comparison against v2.5.0 uses the released v2.5.0 jar and the same command. The harness scripts are in `scripts/benchmark/overhaul/`.
