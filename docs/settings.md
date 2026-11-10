@@ -355,6 +355,16 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       gives none (name-detected pairs and `(pair ...)` rules without `(gap ...)`). Default: the
       clearance between the two nets. A gap below that clearance is raised to it, as the board
       checker would flag it otherwise. CLI: `--router.autorouter.pair_gap_um=<um>`.
+    - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
+      `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces
+      and vias connected to it are lifted while the pair is routed from the pad, when they reach no
+      other pin, are all movable and carry only that net (a fanout stub and its via, or a dead-end
+      route); fixed copper and copper that reaches another pin stay. If the pair is routed the
+      lifted copper stays removed and the `Pair ...: routed ...` line ends with `, replacing N
+      fanout item(s)`; if not, it is put back as it was. With `keep` the fanout stays and is an
+      obstacle to the pair like any other copper. When it helps: `keep` when the fanout of the
+      pair's pins was placed by hand on purpose (it is better to lock that copper in the DSN,
+      which `replace` also leaves alone). CLI: `--router.autorouter.pair_fanout=keep`.
     - **`item_order_seed`**: Optional extra seed for signal-item permutations after the first
       autorouter pass, for example `--router.autorouter.item_order_seed=42`. The first pass
       retains its existing ordering policy.

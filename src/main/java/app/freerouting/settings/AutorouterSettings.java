@@ -330,6 +330,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
   @Schema(description = "Gap in micrometers between the members of a pair with no gap rule")
   public Double pairGapUm;
 
+  /**
+   * What the pair router does with fanout copper already on a pair's pins: {@code "replace"}
+   * (default) lifts the movable dead-end traces and vias of each pin while it routes the pair from
+   * the pad, and puts them back if the pair fails; {@code "keep"} leaves them as obstacles.
+   */
+  @SerializedName("pair_fanout")
+  @Schema(description = "Existing fanout on pair pins: 'replace' (default) or 'keep'")
+  public String pairFanout;
+
   @Override
   public AutorouterSettings clone() {
     try {

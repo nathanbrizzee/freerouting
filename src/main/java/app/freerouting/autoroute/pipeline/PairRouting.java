@@ -113,11 +113,22 @@ public final class PairRouting {
                     : "the clearance")
                 + " if larger.");
       }
+      boolean replaceFanout =
+          settings.autorouter == null
+              || settings.autorouter.pairFanout == null
+              || !settings.autorouter.pairFanout.equalsIgnoreCase("keep");
       for (ConnectionPlan plan : plans) {
         attempted++;
+        List<Runnable> restore = replaceFanout ? liftFanout(board, plan) : List.of();
         String outcome = routeConnection(board, settings, thread, pair, plan, itemIds);
         if (outcome.startsWith("routed")) {
           connections++;
+          if (!restore.isEmpty()) {
+            outcome += ", replacing " + restore.size() + " fanout item(s)";
+          }
+        } else {
+          restore.forEach(Runnable::run);
+          board.clearTransientAutorouteState();
         }
         lines.add("Pair " + pair.baseName() + " (" + plan.describe() + "): " + outcome);
       }
@@ -252,6 +263,69 @@ public final class PairRouting {
       }
     }
     return best;
+  }
+
+  /**
+   * Lifts the fanout copper already on the four pins of a connection, so the pair can leave the
+   * pads itself: per pin, the traces and vias connected to it, when they reach no other pin, are
+   * all movable and carry only that net (a fanout stub and its via, or a dead-end route). Copper
+   * that is fixed or reaches another pin stays. Returns one action per lifted item that puts it
+   * back.
+   */
+  private static List<Runnable> liftFanout(RoutingBoard board, ConnectionPlan plan) {
+    List<Runnable> restore = new ArrayList<>();
+    for (Pin pin : new Pin[] {plan.firstP(), plan.firstN(), plan.secondP(), plan.secondN()}) {
+      int net = pin.getNetNumber(0);
+      List<Item> copper = new ArrayList<>();
+      boolean movable = true;
+      for (Item item : pin.getConnectedSet(net)) {
+        if (item == pin) {
+          continue;
+        }
+        if (!(item instanceof PolylineTrace || item instanceof Via)
+            || item.getFixedState() != FixedState.UNFIXED
+            || item.netCount() != 1) {
+          movable = false;
+          break;
+        }
+        copper.add(item);
+      }
+      if (!movable || copper.isEmpty()) {
+        continue;
+      }
+      // Deterministic order, vias first, so traces come back onto their vias.
+      copper.sort(
+          Comparator.<Item>comparingInt(i -> i instanceof Via ? 0 : 1)
+              .thenComparingInt(Item::getId));
+      for (Item item : copper) {
+        restore.add(restorer(board, item));
+        board.removeItem(item);
+      }
+    }
+    if (!restore.isEmpty()) {
+      board.clearTransientAutorouteState();
+    }
+    return restore;
+  }
+
+  /** An action that inserts a copy of a lifted trace or via. */
+  private static Runnable restorer(RoutingBoard board, Item item) {
+    int[] nets = item.netNumbers.clone();
+    int clearanceClass = item.clearanceClassIndex();
+    if (item instanceof Via via) {
+      Padstack padstack = via.getPadstack();
+      Point centre = via.getCenter();
+      boolean attach = via.attachAllowed;
+      return () ->
+          board.insertVia(padstack, centre, nets, clearanceClass, FixedState.UNFIXED, attach);
+    }
+    PolylineTrace trace = (PolylineTrace) item;
+    Polyline polyline = trace.polyline();
+    int layer = trace.getLayer();
+    int halfWidth = trace.getHalfWidth();
+    return () ->
+        board.insertTraceWithoutCleaning(
+            polyline, layer, halfWidth, nets, clearanceClass, FixedState.UNFIXED);
   }
 
   private static TreeMap<Integer, List<Pin>> pinsByComponent(RoutingBoard board, int netNumber) {

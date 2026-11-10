@@ -126,6 +126,65 @@ class PairRoutingTest extends RoutingFixtureTest {
         lines.stream().anyMatch(l -> l.contains("layer 0:")), "F.Cu must not be tried: " + lines);
   }
 
+  private static long count(RoutingJob job, Class<? extends Item> type, String netName) {
+    int net = job.board.rules.nets.get(netName, 1).netNumber;
+    return job.board.getItems().stream()
+        .filter(i -> type.isInstance(i) && i.containsNet(net))
+        .count();
+  }
+
+  @Test
+  void existingFanoutOnThePairPinsIsReplacedByThePair() {
+    // The D- fanout runs in front of the D+ pad to a via; the pair lifts both pins' fanout and
+    // leaves the pads itself.
+    RoutingJob job = getRoutingJob("PairFanout.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    assertEquals(1, count(job, Via.class, "D-"), "the fixture has a D- fanout via");
+    List<Integer> placed = new ArrayList<>();
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, placed);
+    assertTrue(
+        lines != null && lines.stream().anyMatch(l -> l.contains("replacing 4 fanout item(s)")),
+        "the pair must route and replace the fanout: " + lines);
+    assertEquals(0, count(job, Via.class, "D-"), "the D- fanout via must be gone");
+    assertEquals(0, count(job, Via.class, "D+"), "the D+ fanout via must be gone");
+  }
+
+  @Test
+  void fanoutIsKeptWhenAskedAndPutBackWhenThePairFails() {
+    RoutingJob keep = getRoutingJob("PairFanout.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(keep);
+    keep.routerSettings.autorouter.pairFanout = "keep";
+    List<Integer> fanout = new ArrayList<>();
+    for (Item item : keep.board.getItems()) {
+      if (item instanceof PolylineTrace || item instanceof Via) {
+        fanout.add(item.getId());
+      }
+    }
+    assertEquals(4, fanout.size(), "the fixture has two fanout traces and two vias");
+    PairRouting.apply(keep.routerSettings, keep.board, null, new ArrayList<>());
+    for (int id : fanout) {
+      assertTrue(keep.board.getItem(id) != null, "pair_fanout=keep must not lift item " + id);
+    }
+
+    RoutingJob blocked = getRoutingJob("PairFanoutBlocked.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(blocked);
+    long tracesP = count(blocked, PolylineTrace.class, "D+");
+    long tracesN = count(blocked, PolylineTrace.class, "D-");
+    List<Integer> placed = new ArrayList<>();
+    List<String> lines = PairRouting.apply(blocked.routerSettings, blocked.board, null, placed);
+    assertTrue(lines != null && lines.stream().anyMatch(l -> l.contains("left to the router")));
+    assertTrue(placed.isEmpty(), "no pair copper may be left from a pair that failed");
+    assertEquals(1, count(blocked, Via.class, "D+"), "the D+ fanout via must be back");
+    assertEquals(1, count(blocked, Via.class, "D-"), "the D- fanout via must be back");
+    assertEquals(tracesP, count(blocked, PolylineTrace.class, "D+"), "D+ fanout trace back");
+    assertEquals(tracesN, count(blocked, PolylineTrace.class, "D-"), "D- fanout trace back");
+    for (Pin pin : blocked.board.getPins()) {
+      if (pin.componentName().equals("J1")) {
+        assertFalse(pin.getNormalContacts().isEmpty(), "the fanout must reach " + pin.name());
+      }
+    }
+  }
+
   @Test
   void aDeclaredPairRoutesAsTwoCoupledTraces() {
     TestingSettings settings = new TestingSettings();

@@ -103,6 +103,7 @@ Options worth knowing (all `--router.` on the command line):
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
 | `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g)))`) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
+| `autorouter.pair_fanout=keep` | By default a pair lifts the movable fanout already on its pins and leaves the pads itself; the fanout comes back if the pair fails. | Keep fanout placed by hand on purpose, or lock it in KiCad (locked copper is never lifted). |
 | `autorouter.pair_gap_um=<um>` | Gap between the members of a pair that declares none. Default: the clearance between the two nets. | Set it to the board's differential pair gap (KiCad: net class, Differential pair gap), which a KiCad DSN does not carry. Better: add the pairs, their gap and their width to the DSN first with `python3 scripts/kicad/dsn_pairs.py board.kicad_pcb in.dsn out.dsn`, which reads them from the net classes in the `.kicad_pro` next to the board. |
 
 ## 4. Watching and stopping a run
@@ -156,7 +157,8 @@ reading, in the order they appear:
   how much failed, and which net pairs rip each other.
 - `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and one `Pair
   <name> (<pin> to <pin>): routed on layer L, lengths A and B mm, skew S mm` or `... left to the
-  router: <reason>` line per pair connection.
+  router: <reason>` line per pair connection. A routed line ends with `, replacing N fanout item(s)` when
+  the pair took the place of fanout already on its pins.
 - `Routing fallback ...` lines: when the pass loop stalls, other strategies are tried
   (`fanout-retry`, `short-escape`, `direct-first`, `open-escape`, `no-fanout`, seeds), and
   `Routing fallback chose '<name>'` says which board was kept.
