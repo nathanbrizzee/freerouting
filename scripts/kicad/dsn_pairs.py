@@ -15,6 +15,11 @@ width, because a DSN net class has one width and Freerouting routes a pair at it
 Every (class_class ...) rule that names the original class is repeated for the copy, so a clearance
 to another class (a high-voltage class, say) still holds for the moved nets.
 
+A pair width below the board's minimum track width (Board Setup, Constraints, in the .kicad_pro)
+is raised to it, with a warning, and the script prints the --router.min_trace_width_um flag to pass
+to Freerouting, since a DSN cannot carry the minimum and the router would otherwise neck traces
+down below it at pins.
+
 Power and ground nets (V+/V-, VS+/VS-, GND..., VCC...) are never paired, with the same exclusions
 as Freerouting's own name detection. A pair whose two nets are in different net classes gets no
 rule and a warning on stderr.
@@ -174,9 +179,14 @@ def main(argv):
     src_pcb, src_dsn, out = args
     pro = os.path.splitext(src_pcb)[0] + ".kicad_pro"
     classes = {}
+    min_track_um = None
     if os.path.exists(pro):
-        settings = json.load(open(pro)).get("net_settings", {}) or {}
+        project = json.load(open(pro))
+        settings = project.get("net_settings", {}) or {}
         classes = {c["name"]: c for c in settings.get("classes", [])}
+        rules = ((project.get("board") or {}).get("design_settings") or {}).get("rules") or {}
+        if rules.get("min_track_width"):
+            min_track_um = rules["min_track_width"] * 1000
     default = classes.get("Default", {})
 
     text = open(src_dsn).read()
@@ -224,6 +234,13 @@ def main(argv):
             continue
         gap = setting(cls, "diff_pair_gap", options.get("--gap-um"))
         width = setting(cls, "diff_pair_width", options.get("--width-um"))
+        if width and min_track_um and width < min_track_um - 0.05:
+            print(
+                f"warning: {pos}/{neg}: pair width {width:g} um is below the board's minimum track"
+                f" width {min_track_um:g} um; raised to it.",
+                file=sys.stderr,
+            )
+            width = min_track_um
         track = setting(cls, "track_width", None)
         if gap:
             rules.append(f"\n    (pair (nets {quote(pos)} {quote(neg)} (gap {gap:g})))")
@@ -263,6 +280,11 @@ def main(argv):
         f"{out}: {len(rules)} pair rule(s), {len(retarget)} class(es) copied for a pair width "
         f"({len(pairs)} name pair(s) found)"
     )
+    if min_track_um:
+        print(
+            f"Route with --router.min_trace_width_um={min_track_um:g} so that no trace is necked"
+            " below the board's minimum track width."
+        )
     return 0
 
 

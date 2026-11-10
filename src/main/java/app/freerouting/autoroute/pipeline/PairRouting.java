@@ -119,6 +119,7 @@ public final class PairRouting {
               || !settings.autorouter.pairFanout.equalsIgnoreCase("keep");
       for (ConnectionPlan plan : plans) {
         attempted++;
+        debugContext = pair.baseName() + " (" + plan.describe() + ")";
         List<Runnable> restore = replaceFanout ? liftFanout(board, plan) : List.of();
         String outcome = routeConnection(board, settings, thread, pair, plan, itemIds);
         if (outcome.startsWith("routed")) {
@@ -492,9 +493,12 @@ public final class PairRouting {
     return "left to the router: " + (reasons.isEmpty() ? lastFailure : summary(reasons));
   }
 
+  /** The pair connection the debug lines are about. */
+  private static String debugContext = "";
+
   private static void debug(String message) {
     if (System.getProperty("pairs.debug") != null) {
-      FRLogger.info("PAIRDBG " + message);
+      FRLogger.info("PAIRDBG " + debugContext + ": " + message);
     }
   }
 
@@ -824,7 +828,14 @@ public final class PairRouting {
             g.allowance(),
             ownPads(board, g));
     if (stub < 0) {
-      debug("stub blocked on layer " + layer + " " + start + " -> " + tip + " slack " + stub);
+      debug(
+          String.format(
+              Locale.ROOT,
+              "stub blocked on layer %d %s -> %s, slack %.1f um",
+              layer,
+              start,
+              tip,
+              toMm(board, stub) * 1000));
     }
     return stub >= 0;
   }
@@ -860,13 +871,12 @@ public final class PairRouting {
             board, corners, layer, halfWidth, net, traceClass, g.allowance(), ignored);
     if (slack < 0) {
       debug(
-          "  slack "
-              + slack
-              + " (half width "
-              + halfWidth
-              + ", "
-              + ignored.size()
-              + " pad(s) next to the start ignored)");
+          String.format(
+              Locale.ROOT,
+              "  slack %.1f um (half width %.1f um, %d pad(s) next to the start ignored)",
+              toMm(board, slack) * 1000,
+              toMm(board, halfWidth) * 1000,
+              ignored.size()));
     }
     return slack >= 0;
   }
@@ -1060,7 +1070,7 @@ public final class PairRouting {
             && insertPieces(
                 board, List.of(negativeMiddle), g.halfWidth(), g.netN(), g.classN(), placed);
     if (inserted) {
-      String violation = firstViolation(placed);
+      String violation = firstViolation(board, placed);
       if (violation != null) {
         removeAll(board, placed);
         return "the coupled traces would violate a clearance (" + violation + ")";
@@ -1128,14 +1138,23 @@ public final class PairRouting {
    * Describes the first clearance violation of the new copper, or null: the exact check after the
    * quick one, which catches the members of the pair against each other and vias against traces.
    */
-  private static String firstViolation(List<Item> placed) {
+  private static String firstViolation(RoutingBoard board, List<Item> placed) {
     for (Item item : placed) {
       for (var v : item.clearanceViolations()) {
+        FloatPoint at = v.shape.centreOfGravity();
         return item.getClass().getSimpleName()
             + " against "
             + v.secondItem.getClass().getSimpleName()
+            + (v.secondItem instanceof Pin pin ? " " + pin.componentName() + "-" + pin.name() : "")
             + " on layer "
-            + v.layer;
+            + v.layer
+            + String.format(
+                Locale.ROOT,
+                " at (%.3f, %.3f) mm, %.3f of %.3f mm",
+                toMm(board, at.x),
+                toMm(board, at.y),
+                toMm(board, Math.max(0, v.actualClearance)),
+                toMm(board, v.expectedClearance));
       }
     }
     return null;

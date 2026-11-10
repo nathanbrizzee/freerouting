@@ -1,0 +1,48 @@
+(pcb pair_fine_pitch
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (layer B.Cu (type signal))
+    (boundary (rect pcb 0 0 40000 30000))
+    (via "Via[0-1]_600:300_um")
+    (rule (width 203.2) (clearance 203.2)))
+  (placement
+    (component Lqfp
+      (place U200 20000 20000 front 0))
+    (component Sot323
+      (place U263 21000 8000 front 0)))
+  (library
+    (image Lqfp
+      (pin Lead 1 -2000 0)
+      (pin Lead 2 -1500 0)
+      (pin Lead 3 -1000 0)
+      (pin Lead 4 -500 0)
+      (pin Lead 5 0 0)
+      (pin Lead 6 500 0)
+      (pin Lead 7 1000 0)
+      (pin Lead 8 1500 0)
+      (pin Lead 9 2000 0))
+    (image Sot323
+      (pin Small 1 -650 0)
+      (pin Small 2 650 0)
+      (pin Small 3 0 1900))
+    (padstack Lead (shape (rect F.Cu -150 -750 150 750)) (attach off))
+    (padstack Small (shape (rect F.Cu -300 -350 300 350)) (attach off))
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off)))
+  (network
+    (net USB_DP (pins U200-5 U263-1))
+    (net USB_DM (pins U200-6 U263-2))
+    (net A1 (pins U200-1))
+    (net A2 (pins U200-2))
+    (net A3 (pins U200-3))
+    (net A4 (pins U200-4))
+    (net A7 (pins U200-7))
+    (net A8 (pins U200-8))
+    (net A9 (pins U200-9))
+    (net GND (pins U263-3))
+    (class kicad_default "" USB_DP USB_DM A1 A2 A3 A4 A7 A8 A9 GND
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 203.2) (clearance 203.2)))
+    (pair (nets USB_DP USB_DM (gap 250)))))

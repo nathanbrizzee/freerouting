@@ -186,6 +186,28 @@ class PairRoutingTest extends RoutingFixtureTest {
   }
 
   @Test
+  void aPairOnAdjacentFinePitchPinsLeavesThePackage() {
+    // Two adjacent pins of a 0.5 mm pitch row (0.3 x 1.5 mm pads), 0.2032 mm width and clearance,
+    // 0.25 mm gap: the members leave straight out between the neighbouring pads.
+    RoutingJob job = getRoutingJob("PairFinePitch.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>());
+    assertTrue(
+        lines != null && lines.stream().anyMatch(l -> l.contains("U200-5") && l.contains("routed")),
+        "the fine-pitch pair must be coupled: " + lines);
+    // The 0.3 mm pads at 0.5 mm pitch are 0.2 mm apart, below the clearance: those pad-to-pad
+    // violations come with the board. None may involve the pair's copper.
+    assertTrue(
+        new DesignRulesChecker(job.board, new DesignRulesCheckerSettings())
+            .getAllClearanceViolations().stream()
+                .noneMatch(
+                    v ->
+                        v.firstItem instanceof PolylineTrace
+                            || v.secondItem instanceof PolylineTrace),
+        "the pair must not violate a clearance");
+  }
+
+  @Test
   void aDeclaredPairRoutesAsTwoCoupledTraces() {
     TestingSettings settings = new TestingSettings();
     settings.setMaxPasses(2);

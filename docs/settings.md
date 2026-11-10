@@ -329,7 +329,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       like: a `_` or `.` must come before the suffix, so a bare `ETH_RXP`/`ETH_RXN` is not found; the
       script also finds a bare `P/N` and `DP/DM`, because it only pairs nets that both exist; it
       never pairs power nets such as `V+/V-`, repeats each `class_class` rule of a class it copies
-      for a pair width, and warns about a pair whose nets are in different net classes). For each connection of a pair the two pads at each end are escaped together to the
+      for a pair width, warns about a pair whose nets are in different net classes, raises a pair
+      width below the board's minimum track width to it, and prints the `min_trace_width_um` value to
+      route with). For each connection of a pair the two pads at each end are escaped together to the
       coupled gap, and the maze search routes one virtual trace as wide as both members and the gap
       along the pair's centre line, so every clearance check covers the finished pair; the two
       members are that line offset to either side. The coupled run keeps one layer, chosen among
