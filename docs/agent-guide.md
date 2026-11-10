@@ -3,7 +3,7 @@
 This guide is for an AI agent that runs Freerouting on a printed circuit board and reports the
 result to a person. It covers how to start a run, which options to reach for, how to watch and stop
 a run, and how to read the log and the result file. `java -jar freerouting.jar --agent-guide` prints
-the guide of the jar you have; the full option reference is `docs/settings.md` in the source tree of
+the guide of the jar you have and `--version` prints its version (neither opens the GUI); the full option reference is `docs/settings.md` in the source tree of
 the same version.
 
 ## 1. What Freerouting does

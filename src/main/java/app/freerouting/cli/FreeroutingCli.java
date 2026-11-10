@@ -1,6 +1,7 @@
 package app.freerouting.cli;
 
 import app.freerouting.AgentGuide;
+import app.freerouting.VersionFlag;
 import app.freerouting.analytics.FRAnalytics;
 import app.freerouting.constants.Constants;
 import app.freerouting.logger.FRLogger;
@@ -36,6 +37,9 @@ public final class FreeroutingCli {
   public static void main(String[] args) {
     if (AgentGuide.requested(args)) {
       System.exit(AgentGuide.print());
+    }
+    if (VersionFlag.requested(args)) {
+      System.exit(VersionFlag.print());
     }
     UserDataPathResolver.ResolvedUserDataPath userdataPath =
         UserDataPathResolver.resolveAndLock(args);

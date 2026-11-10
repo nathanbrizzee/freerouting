@@ -509,6 +509,9 @@ public class Freerouting {
     if (AgentGuide.requested(args)) {
       System.exit(AgentGuide.print());
     }
+    if (VersionFlag.requested(args)) {
+      System.exit(VersionFlag.print());
+    }
     originalSystemOut = System.out;
     boolean isStdioMode = false;
     if (args.length > 0) {

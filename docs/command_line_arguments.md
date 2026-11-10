@@ -197,6 +197,13 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 - **`-help`**
   Displays help information and exits.
 
+- **`--version`** (also `-version`)
+  Prints the version and build date, for example `Freerouting 2.5.0 (build-date: 2026-01-01)`, and exits
+  without opening the GUI or starting a job.
+
+- **`--agent-guide`**
+  Prints the guide for AI agents that ships inside the jar (`docs/agent-guide.md` of the same version) and exits.
+
 ## Adjusting Internal Settings
 
 Freerouting allows you to fine-tune its internal settings beyond the standard command-line options. To modify these settings, use the double dash `--` prefix followed by the setting name and its value.
