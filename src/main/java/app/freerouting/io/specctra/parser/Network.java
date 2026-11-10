@@ -495,6 +495,14 @@ public class Network extends ScopeKeyword {
     }
     for (String currentNetName : netClass.netList) {
       Collection<app.freerouting.rules.Net> currentNetList = board.rules.nets.get(currentNetName);
+      if (currentNetList.isEmpty() && !currentNetName.isEmpty()) {
+        FRLogger.warn(
+            "Network.insert_net_class: class '"
+                + boardNetClass.getName()
+                + "' lists '"
+                + currentNetName
+                + "', which is not a net of the board; ignored.");
+      }
       for (app.freerouting.rules.Net currentNet : currentNetList) {
         currentNet.setClass(boardNetClass);
       }
@@ -1682,6 +1690,15 @@ public class Network extends ScopeKeyword {
       try {
         board.rules.differentialPairs.add(
             new app.freerouting.rules.DifferentialPair(positive, negative, baseName, gap, 0.0));
+        FRLogger.info(
+            "Declared differential pair: "
+                + baseName
+                + " ("
+                + positive.name
+                + ", "
+                + negative.name
+                + ")"
+                + (rule.gap() != null ? ", gap " + rule.gap() + " (DSN units)" : ", no gap"));
       } catch (IllegalArgumentException e) {
         FRLogger.warn("Network.insert_differential_pairs: " + e.getMessage());
       }

@@ -114,6 +114,34 @@ class ClassClassClearanceOverhaulTest {
   }
 
   @Test
+  void classClassRuleCopiedForAPairWidthClassReachesItsTraces() {
+    // scripts/kicad/dsn_pairs.py moves pair nets into a quoted copy of their class and repeats
+    // every class_class rule of the original class for the copy.
+    String dsn =
+        DSN.replace(
+                "(class HV HV1",
+                "(class \"kicad_default_pair_150um\" \"\" LV1\n"
+                    + "      (circuit (use_via \"Via[0-1]_600:300_um\"))\n"
+                    + "      (rule (width 150) (clearance 200)))\n"
+                    + "    (class HV HV1")
+            .replace("(class kicad_default \"\" LV1", "(class kicad_default \"\"")
+            .replace(
+                "(class_class (classes HV kicad_default) (rule (clearance 510)))",
+                "(class_class (classes HV kicad_default) (rule (clearance 510)))\n"
+                    + "    (class_class (classes HV \"kicad_default_pair_150um\")"
+                    + " (rule (clearance 510)))");
+    RoutingBoard board = loadBoard(dsn);
+    NetClass pairClass = board.rules.netClasses.get("kicad_default_pair_150um");
+    NetClass hv = board.rules.netClasses.get("HV");
+    assertEquals(
+        pairClass, board.rules.nets.get("LV1", 1).getNetClass(), "LV1 must be in the copy");
+    int value =
+        board.rules.clearanceMatrix.getValue(
+            hv.getTraceClearanceClass(), pairClass.getTraceClearanceClass(), 0, false);
+    assertTrue(value >= 5100, "HV to pair-width class clearance is " + value);
+  }
+
+  @Test
   void zeroClassClassRuleIsExactForOwnClassesAndNeverLowersSharedOnes() {
     // Held-net workflows use clearance 0 between twin classes. That value must stay exact for
     // the classes named after the net classes, and must not lower the shared "smd" class.

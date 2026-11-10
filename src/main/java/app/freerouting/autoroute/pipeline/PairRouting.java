@@ -95,7 +95,6 @@ public final class PairRouting {
     List<DifferentialPair> pairs = new ArrayList<>(board.rules.differentialPairs.all());
     pairs.sort(Comparator.comparing(DifferentialPair::baseName, String.CASE_INSENSITIVE_ORDER));
     List<String> lines = new ArrayList<>();
-    int routed = 0;
     int connections = 0;
     int attempted = 0;
     for (DifferentialPair pair : pairs) {
@@ -103,6 +102,17 @@ public final class PairRouting {
         break;
       }
       List<ConnectionPlan> plans = plan(board, pair, lines);
+      if (!plans.isEmpty() && pair.coupledSpacing() <= 0) {
+        boolean fromSetting = settings.autorouter != null && settings.autorouter.pairGapUm != null;
+        lines.add(
+            "Pair "
+                + pair.baseName()
+                + ": no declared gap, using "
+                + (fromSetting
+                    ? "pair_gap_um (" + settings.autorouter.pairGapUm + " um), or the clearance"
+                    : "the clearance")
+                + " if larger.");
+      }
       for (ConnectionPlan plan : plans) {
         attempted++;
         String outcome = routeConnection(board, settings, thread, pair, plan, itemIds);
@@ -110,9 +120,6 @@ public final class PairRouting {
           connections++;
         }
         lines.add("Pair " + pair.baseName() + " (" + plan.describe() + "): " + outcome);
-      }
-      if (!plans.isEmpty()) {
-        routed++;
       }
     }
     if (attempted == 0 && lines.isEmpty()) {
@@ -160,8 +167,11 @@ public final class PairRouting {
   }
 
   /**
-   * The connections to route for a pair: the components that have exactly one pin of each member
-   * are the ends; with more than two, a minimum spanning tree over them by distance.
+   * The connections to route for a pair: every component that has a pin of each member is an end,
+   * at its closest pair of a positive and a negative pin (a connector that has several pins on a
+   * member, like the paralleled CC pins of a USB-C receptacle, joins at the pair that sits
+   * together); with more than two ends, a minimum spanning tree over them by distance. The other
+   * pins of such a component are left to the ordinary router.
    */
   private static List<ConnectionPlan> plan(
       RoutingBoard board, DifferentialPair pair, List<String> lines) {
@@ -169,18 +179,20 @@ public final class PairRouting {
     Net negative = pair.negativeNet();
     TreeMap<Integer, List<Pin>> positiveByComponent = pinsByComponent(board, positive.netNumber);
     TreeMap<Integer, List<Pin>> negativeByComponent = pinsByComponent(board, negative.netNumber);
-    List<Integer> ends = new ArrayList<>();
+    // The pin pair each end joins at.
+    TreeMap<Integer, Pin[]> endPins = new TreeMap<>();
     for (var entry : positiveByComponent.entrySet()) {
       List<Pin> n = negativeByComponent.get(entry.getKey());
-      if (n != null && entry.getValue().size() == 1 && n.size() == 1) {
-        ends.add(entry.getKey());
+      if (n != null && !entry.getValue().isEmpty() && !n.isEmpty()) {
+        endPins.put(entry.getKey(), closestPair(entry.getValue(), n));
       }
     }
+    List<Integer> ends = new ArrayList<>(endPins.keySet());
     if (ends.size() < 2) {
       lines.add(
           "Pair "
               + pair.baseName()
-              + ": not routed as a pair, it has fewer than two parts with one pin of each net.");
+              + ": not routed as a pair, it has fewer than two parts with a pin of each net.");
       return List.of();
     }
     List<ConnectionPlan> plans = new ArrayList<>();
@@ -195,10 +207,8 @@ public final class PairRouting {
       for (int from : inTree) {
         for (int to : rest) {
           double d =
-              middle(positiveByComponent.get(from).get(0), negativeByComponent.get(from).get(0))
-                  .distance(
-                      middle(
-                          positiveByComponent.get(to).get(0), negativeByComponent.get(to).get(0)));
+              middle(endPins.get(from)[0], endPins.get(from)[1])
+                  .distance(middle(endPins.get(to)[0], endPins.get(to)[1]));
           if (d < bestDistance) {
             bestDistance = d;
             bestFrom = from;
@@ -208,10 +218,10 @@ public final class PairRouting {
       }
       plans.add(
           new ConnectionPlan(
-              positiveByComponent.get(bestFrom).get(0),
-              negativeByComponent.get(bestFrom).get(0),
-              positiveByComponent.get(bestTo).get(0),
-              negativeByComponent.get(bestTo).get(0)));
+              endPins.get(bestFrom)[0],
+              endPins.get(bestFrom)[1],
+              endPins.get(bestTo)[0],
+              endPins.get(bestTo)[1]));
       inTree.add(bestTo);
       rest.remove(Integer.valueOf(bestTo));
     }
@@ -226,6 +236,22 @@ public final class PairRouting {
       }
     }
     return open;
+  }
+
+  /** The positive and the negative pin that are closest together; the first of a tie wins. */
+  private static Pin[] closestPair(List<Pin> positives, List<Pin> negatives) {
+    Pin[] best = null;
+    double bestDistance = Double.POSITIVE_INFINITY;
+    for (Pin p : positives) {
+      for (Pin n : negatives) {
+        double d = p.getCenter().toFloat().distance(n.getCenter().toFloat());
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = new Pin[] {p, n};
+        }
+      }
+    }
+    return best;
   }
 
   private static TreeMap<Integer, List<Pin>> pinsByComponent(RoutingBoard board, int netNumber) {
@@ -305,10 +331,10 @@ public final class PairRouting {
     int netN = pair.negativeNet().netNumber;
     NetClass classP = board.rules.nets.get(netP).getNetClass();
     NetClass classN = board.rules.nets.get(netN).getNetClass();
-    String lastFailure = "no signal layer";
+    String lastFailure = "no signal layer the router and both net classes allow";
     List<String> reasons = new ArrayList<>();
     int searches = 0;
-    for (int layer : routeLayers(board, plan)) {
+    for (int layer : routeLayers(board, settings, classP, classN, plan)) {
       int halfWidth = classP.getTraceHalfWidth(layer);
       if (classN.getTraceHalfWidth(layer) != halfWidth) {
         reasons.add("layer " + layer + ": the two members have different trace widths");
@@ -406,13 +432,22 @@ public final class PairRouting {
 
   /**
    * The layers to try for the coupled run, fewest vias first: a layer all four pads are on needs
-   * none, a layer one end's pads are not on needs a via pair at that end.
+   * none, a layer one end's pads are not on needs a via pair at that end. Only signal layers the
+   * router may use and both members' net classes allow, as the maze search would allow them.
    */
-  private static List<Integer> routeLayers(RoutingBoard board, ConnectionPlan plan) {
+  private static List<Integer> routeLayers(
+      RoutingBoard board,
+      RouterSettings settings,
+      NetClass classP,
+      NetClass classN,
+      ConnectionPlan plan) {
     int count = board.getLayerCount();
     List<Integer> layers = new ArrayList<>();
     for (int layer = 0; layer < count; layer++) {
-      if (board.layerStructure.layers[layer].isSignal) {
+      if (board.layerStructure.layers[layer].isSignal
+          && settings.getLayerActive(layer)
+          && classP.isActiveRoutingLayer(layer)
+          && classN.isActiveRoutingLayer(layer)) {
         layers.add(layer);
       }
     }
@@ -749,6 +784,16 @@ public final class PairRouting {
     double slack =
         ExitStubs.pathSlack(
             board, corners, layer, halfWidth, net, traceClass, g.allowance(), ignored);
+    if (slack < 0) {
+      debug(
+          "  slack "
+              + slack
+              + " (half width "
+              + halfWidth
+              + ", "
+              + ignored.size()
+              + " pad(s) next to the start ignored)");
+    }
     return slack >= 0;
   }
 

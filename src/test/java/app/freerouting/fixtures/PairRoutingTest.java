@@ -94,6 +94,39 @@ class PairRoutingTest extends RoutingFixtureTest {
   }
 
   @Test
+  void aPairThroughASeriesPartIsRoutedOnEveryHop() {
+    RoutingJob job = getRoutingJob("PairSeries.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    List<Integer> placed = new ArrayList<>();
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, placed);
+    assertTrue(lines != null, "the pair must be found");
+    long routed = lines.stream().filter(l -> l.contains(": routed on layer")).count();
+    assertEquals(2, routed, "both hops must be coupled pair connections: " + lines);
+    assertTrue(
+        lines.stream().anyMatch(l -> l.contains("J1-1") && l.contains("D1-1")),
+        "the hop from the connector to the diode is missing: " + lines);
+    assertTrue(
+        lines.stream().anyMatch(l -> l.contains("D1-1") && l.contains("U1-")),
+        "the hop to the part with two pins per member is missing: " + lines);
+  }
+
+  @Test
+  void aPairKeepsToTheLayersItsNetClassAllows() {
+    // The net class allows B.Cu only; the pads are on F.Cu, so the pair needs a via pair at each
+    // end and must not be tried on F.Cu.
+    RoutingJob job = getRoutingJob("PairLayerRestricted.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    List<Integer> placed = new ArrayList<>();
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, placed);
+    assertTrue(lines != null, "the pair must be found");
+    assertTrue(
+        lines.stream().anyMatch(l -> l.contains("routed on layer 1 with 2 via pair(s)")),
+        "the pair must run on B.Cu: " + lines);
+    assertFalse(
+        lines.stream().anyMatch(l -> l.contains("layer 0:")), "F.Cu must not be tried: " + lines);
+  }
+
+  @Test
   void aDeclaredPairRoutesAsTwoCoupledTraces() {
     TestingSettings settings = new TestingSettings();
     settings.setMaxPasses(2);

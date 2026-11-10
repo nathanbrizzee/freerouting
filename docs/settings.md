@@ -326,17 +326,27 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       `(pair (nets P N (gap g)))` inside `(network ...)` (KiCad's exporter writes none; run
       `scripts/kicad/dsn_pairs.py board.kicad_pcb in.dsn out.dsn` to add them, with each net class's
       differential pair gap and width, before routing) or found by net name (`_P/_N`, `D+/D-`, `_DP/_DM` and the
-      like). For each connection of a pair the two pads at each end are escaped together to the
+      like: a `_` or `.` must come before the suffix, so a bare `ETH_RXP`/`ETH_RXN` is not found; the
+      script also finds a bare `P/N` and `DP/DM`, because it only pairs nets that both exist; it
+      never pairs power nets such as `V+/V-`, repeats each `class_class` rule of a class it copies
+      for a pair width, and warns about a pair whose nets are in different net classes). For each connection of a pair the two pads at each end are escaped together to the
       coupled gap, and the maze search routes one virtual trace as wide as both members and the gap
       along the pair's centre line, so every clearance check covers the finished pair; the two
-      members are that line offset to either side. The coupled run keeps one layer. Where the pads
+      members are that line offset to either side. The coupled run keeps one layer, chosen among
+      the signal layers the router may use (`layers`) and both members' net classes allow. Where the pads
       of an end are on another layer, a via pair beside the pads (the net class's narrowest via
       that spans both layers) takes the members to the run's layer; the layers are tried fewest vias
       first. A pair needs its members in the same order at both ends (a polarity swap is not routed
       yet), is checked against every clearance of the board before it is kept, and is placed fixed
       until the last stage so the rip-up and the optimizer leave it alone. A pair that cannot be
       routed this way is left to the ordinary router
-      and the log says why (`Pair <name> (<pin> to <pin>): left to the router: ...`). Log lines:
+      and the log says why (`Pair <name> (<pin> to <pin>): left to the router: ...`). Every part
+      with a pin of each member is an end, so a pair that runs through a series part (a connector,
+      an ESD diode) has one connection per hop; a part with several pins on a member joins at its
+      closest positive and negative pin, and the rest are left to the ordinary router. Log lines:
+      `Declared differential pair: <name> (<P>, <N>), gap G (DSN units)` per pair read from the DSN,
+      `Auto-detected differential pair: ...` per pair found by name, `Pair <name>: no declared gap,
+      using the clearance if larger` where the gap comes from `pair_gap_um` or the clearance,
       `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and, per
       connection, `Pair <name> (...): routed on layer L[ with N via pair(s)], lengths A and B mm, skew S mm`. When it
       helps: boards with USB, Ethernet, MIPI or LVDS pairs that must keep their gap. It costs
