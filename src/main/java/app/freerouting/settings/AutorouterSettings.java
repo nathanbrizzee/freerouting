@@ -335,6 +335,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
    * (default) lifts the movable dead-end traces and vias of each pin while it routes the pair from
    * the pad, and puts them back if the pair fails; {@code "keep"} leaves them as obstacles.
    */
+  /**
+   * Skew a routed pair may keep, in micrometers: when the two members of a pair connection differ
+   * by more, the shorter one gets length bumps. Default 100; negative turns the tuning off. A skew
+   * rule of the pair in the board file takes precedence.
+   */
+  @SerializedName("pair_max_skew_um")
+  @Schema(description = "Largest length difference within a pair before tuning, in um (-1: off)")
+  public Double pairMaxSkewUm;
+
   @SerializedName("pair_fanout")
   @Schema(description = "Existing fanout on pair pins: 'replace' (default) or 'keep'")
   public String pairFanout;

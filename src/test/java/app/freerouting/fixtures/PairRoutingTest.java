@@ -207,6 +207,68 @@ class PairRoutingTest extends RoutingFixtureTest {
         "the pair must not violate a clearance");
   }
 
+  private static double skewOf(String line) {
+    var m = java.util.regex.Pattern.compile("skew ([0-9.]+) mm").matcher(line);
+    assertTrue(m.find(), "no skew in " + line);
+    return Double.parseDouble(m.group(1));
+  }
+
+  @Test
+  void theShorterMemberGetsLengthBumpsUntilThePairMatches() {
+    // The pair turns from going down to going right, so the inner member is shorter.
+    RoutingJob untuned = getRoutingJob("PairSkew.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(untuned);
+    untuned.routerSettings.autorouter.pairMaxSkewUm = -1.0;
+    List<String> before =
+        PairRouting.apply(untuned.routerSettings, untuned.board, null, new ArrayList<>());
+    String beforeLine =
+        before.stream().filter(l -> l.contains("routed on layer")).findFirst().orElseThrow();
+    assertTrue(skewOf(beforeLine) > 0.1, "the fixture must make skew: " + beforeLine);
+
+    RoutingJob tuned = getRoutingJob("PairSkew.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(tuned);
+    List<String> after =
+        PairRouting.apply(tuned.routerSettings, tuned.board, null, new ArrayList<>());
+    String afterLine =
+        after.stream().filter(l -> l.contains("routed on layer")).findFirst().orElseThrow();
+    assertTrue(afterLine.contains("tuned from"), "the pair must be tuned: " + afterLine);
+    assertTrue(skewOf(afterLine) <= 0.1, "skew must be within 0.1 mm: " + afterLine);
+    assertTrue(
+        new DesignRulesChecker(tuned.board, new DesignRulesCheckerSettings())
+            .getAllClearanceViolations()
+            .isEmpty(),
+        "the bumps must not violate a clearance");
+  }
+
+  @Test
+  void aPairNeverRunsInsideThePadRingOfAQuadPackage() {
+    // The pair's pins are on the right side of a four-sided pad ring and its other end is to the
+    // left of the package: through the ring would be shortest, but would close the inner ends of
+    // the other pins. The pair goes round outside or is left to the router.
+    RoutingJob job = getRoutingJob("PairPadRing.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    long itemsBefore = job.board.getItems().size();
+    List<Integer> placed = new ArrayList<>();
+    PairRouting.apply(job.routerSettings, job.board, null, placed);
+    // Board units are 0.1 um: the pin centres span 17000..23000 um, the pads reach 500 um inward.
+    int inner = 175000;
+    int outer = 225000;
+    for (Item item : job.board.getItems()) {
+      if (item instanceof PolylineTrace trace) {
+        for (int i = 0; i < trace.polyline().cornerCount(); i++) {
+          FloatPoint c = trace.polyline().cornerApprox(i);
+          boolean inside =
+              c.x > inner + 10000 && c.x < outer - 10000 && c.y > 105000 && c.y < 195000;
+          assertFalse(inside, "a pair corner lies inside the pad ring: " + c);
+        }
+      }
+    }
+    assertEquals(
+        itemsBefore + placed.size(),
+        job.board.getItems().size(),
+        "the temporary keepouts must be gone");
+  }
+
   @Test
   void aDeclaredPairRoutesAsTwoCoupledTraces() {
     TestingSettings settings = new TestingSettings();

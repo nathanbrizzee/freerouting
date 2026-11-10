@@ -334,7 +334,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       route with). For each connection of a pair the two pads at each end are escaped together to the
       coupled gap, and the maze search routes one virtual trace as wide as both members and the gap
       along the pair's centre line, so every clearance check covers the finished pair; the two
-      members are that line offset to either side. The coupled run keeps one layer, chosen among
+      members are that line offset to either side. No breakout, corridor or length bump of a pair
+      enters the inside of a four-sided pad ring (a QFP or a QFN without an exposed pad: pins on
+      all four sides, none inside), where it would close the inner escapes of the other pins; such
+      a pin pair is left to the ordinary router when it has no way out to the outside yet. The
+      coupled run keeps one layer, chosen among
       the signal layers the router may use (`layers`) and both members' net classes allow. Where the pads
       of an end are on another layer, a via pair beside the pads (the net class's narrowest via
       that spans both layers) takes the members to the run's layer; the layers are tried fewest vias
@@ -357,6 +361,16 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       gives none (name-detected pairs and `(pair ...)` rules without `(gap ...)`). Default: the
       clearance between the two nets. A gap below that clearance is raised to it, as the board
       checker would flag it otherwise. CLI: `--router.autorouter.pair_gap_um=<um>`.
+    - **`pair_max_skew_um`**: The length difference a routed pair connection may keep between its
+      two members, in micrometers. Default `100`; negative turns tuning off. When the members differ
+      by more, the shorter one gets trapezoid length bumps (45 degrees out, a short top, 45 degrees
+      back) on the side away from its partner, at most twice the gap high, kept clear of the bends,
+      on straight axis-parallel stretches first; each bump and then the whole trace is checked
+      against the board's clearances, and a pair with no room keeps its skew. The routed line ends
+      with `, tuned from S mm` or `, not tuned: no room for length bumps beside the shorter member`.
+      A skew rule of the pair in the board file takes precedence. Set it to the skew allowance of
+      the interface (USB 2.0 and 100 Mbit Ethernet allow millimetres, USB 3 and PCIe about 0.1 mm).
+      CLI: `--router.autorouter.pair_max_skew_um=<um>`.
     - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
       `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces
       and vias connected to it are lifted while the pair is routed from the pad, when they reach no

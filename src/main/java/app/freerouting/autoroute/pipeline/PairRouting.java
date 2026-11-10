@@ -64,6 +64,9 @@ public final class PairRouting {
   /** Most searches one pair connection may use over all its layers and gather points. */
   private static final int MAX_SEARCHES = 12;
 
+  /** Skew a routed pair may keep when the board gives no rule and no setting is made. */
+  private static final double DEFAULT_MAX_SKEW_UM = 100;
+
   /** Cost of a via pair in coupled spacings of breakout length. */
   private static final double VIA_PAIR_COST = 40;
 
@@ -97,6 +100,43 @@ public final class PairRouting {
     List<String> lines = new ArrayList<>();
     int connections = 0;
     int attempted = 0;
+    List<Item> rings = padRingKeepouts(board);
+    try {
+      attempted = routePairs(board, settings, thread, pairs, itemIds, lines);
+    } finally {
+      removeAll(board, rings);
+      board.clearTransientAutorouteState();
+    }
+    for (String line : lines) {
+      if (line.contains("): routed on layer")) {
+        connections++;
+      }
+    }
+    if (attempted == 0 && lines.isEmpty()) {
+      return null;
+    }
+    board.clearTransientAutorouteState();
+    lines.add(
+        0,
+        "Differential pairs: "
+            + pairs.size()
+            + " found, "
+            + connections
+            + " of "
+            + attempted
+            + " pair connection(s) routed as coupled traces.");
+    return lines;
+  }
+
+  /** Routes every connection of every pair; returns the number of connections tried. */
+  private static int routePairs(
+      RoutingBoard board,
+      RouterSettings settings,
+      StoppableThread thread,
+      List<DifferentialPair> pairs,
+      List<Integer> itemIds,
+      List<String> lines) {
+    int attempted = 0;
     for (DifferentialPair pair : pairs) {
       if (thread != null && (thread.isStopRequested() || thread.isStopAutoRouterRequested())) {
         break;
@@ -123,7 +163,6 @@ public final class PairRouting {
         List<Runnable> restore = replaceFanout ? liftFanout(board, plan) : List.of();
         String outcome = routeConnection(board, settings, thread, pair, plan, itemIds);
         if (outcome.startsWith("routed")) {
-          connections++;
           if (!restore.isEmpty()) {
             outcome += ", replacing " + restore.size() + " fanout item(s)";
           }
@@ -134,20 +173,83 @@ public final class PairRouting {
         lines.add("Pair " + pair.baseName() + " (" + plan.describe() + "): " + outcome);
       }
     }
-    if (attempted == 0 && lines.isEmpty()) {
-      return null;
+    return attempted;
+  }
+
+  /** Parts with at least this many pins can have a pad ring a pair must not run inside. */
+  private static final int PAD_RING_MIN_PINS = 8;
+
+  /**
+   * Temporary wire keepouts over the inside of every pad ring: a part with at least {@link
+   * #PAD_RING_MIN_PINS} pins on all four sides and none inside the box of its pin centres shrunk by
+   * its largest pad (QFP, QFN without an exposed pad; not a BGA, a two-row header or an SOIC). A
+   * pair inside such a ring would run in front of the inner ends of the other pins and close their
+   * escapes, so no breakout, corridor or length bump of a pair may enter it. On every signal layer,
+   * because escape vias pass through all.
+   */
+  private static List<Item> padRingKeepouts(RoutingBoard board) {
+    TreeMap<Integer, List<Pin>> byComponent = new TreeMap<>();
+    for (Pin pin : board.getPins()) {
+      byComponent.computeIfAbsent(pin.getComponentId(), k -> new ArrayList<>()).add(pin);
     }
-    board.clearTransientAutorouteState();
-    lines.add(
-        0,
-        "Differential pairs: "
-            + pairs.size()
-            + " found, "
-            + connections
-            + " of "
-            + attempted
-            + " pair connection(s) routed as coupled traces.");
-    return lines;
+    List<Item> keepouts = new ArrayList<>();
+    for (List<Pin> pins : byComponent.values()) {
+      if (pins.size() < PAD_RING_MIN_PINS) {
+        continue;
+      }
+      int minX = Integer.MAX_VALUE;
+      int minY = Integer.MAX_VALUE;
+      int maxX = Integer.MIN_VALUE;
+      int maxY = Integer.MIN_VALUE;
+      int pad = 0;
+      for (Pin pin : pins) {
+        IntPoint c = centre(pin);
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x);
+        maxY = Math.max(maxY, c.y);
+        IntBox box = pin.boundingBox();
+        pad = Math.max(pad, Math.max(box.ur.x - box.ll.x, box.ur.y - box.ll.y) / 2);
+      }
+      IntBox inside = new IntBox(minX + pad, minY + pad, maxX - pad, maxY - pad);
+      if (inside.ll.x >= inside.ur.x || inside.ll.y >= inside.ur.y) {
+        continue;
+      }
+      // A ring has pins on all four sides and none inside; two-row parts (headers, SOIC,
+      // transformers) and area arrays (BGA) are left alone.
+      boolean ring = true;
+      int[] sides = new int[4];
+      for (Pin pin : pins) {
+        IntPoint c = centre(pin);
+        if (c.x > inside.ll.x && c.x < inside.ur.x && c.y > inside.ll.y && c.y < inside.ur.y) {
+          ring = false;
+          break;
+        }
+        // Only pins between the corners count for a side, so a grid's corner pins do not.
+        boolean midX = c.x > minX + pad && c.x < maxX - pad;
+        boolean midY = c.y > minY + pad && c.y < maxY - pad;
+        sides[0] += c.x <= minX + pad && midY ? 1 : 0;
+        sides[1] += c.x >= maxX - pad && midY ? 1 : 0;
+        sides[2] += c.y <= minY + pad && midX ? 1 : 0;
+        sides[3] += c.y >= maxY - pad && midX ? 1 : 0;
+      }
+      if (!ring || Math.min(Math.min(sides[0], sides[1]), Math.min(sides[2], sides[3])) < 2) {
+        continue;
+      }
+      for (int layer = 0; layer < board.getLayerCount(); layer++) {
+        if (board.layerStructure.layers[layer].isSignal) {
+          // Unfixed: a fixed item cannot be removed again after the pair stage.
+          Item keepout = board.insertWireObstacle(inside, layer, 0, FixedState.UNFIXED);
+          if (keepout != null) {
+            keepouts.add(keepout);
+          }
+        }
+      }
+    }
+    if (!keepouts.isEmpty()) {
+      board.clearTransientAutorouteState();
+    }
+    return keepouts;
   }
 
   /** Lets the rip-up and the optimizer work on the pair copper again. */
@@ -393,7 +495,8 @@ public final class PairRouting {
       int netN,
       int classP,
       int classN,
-      NetClass netClassP) {}
+      NetClass netClassP,
+      int skewTarget) {}
 
   private static String routeConnection(
       RoutingBoard board,
@@ -443,7 +546,8 @@ public final class PairRouting {
               netN,
               classP.getTraceClearanceClass(),
               classN.getTraceClearanceClass(),
-              classP);
+              classP,
+              skewTarget(board, settings, pair));
       List<End> endsA =
           endCandidates(board, plan.firstP(), plan.firstN(), plan.secondP(), plan.secondN(), g);
       List<End> endsB =
@@ -808,7 +912,7 @@ public final class PairRouting {
   private static boolean clear(
       RoutingBoard board, Geometry g, Escape e, int layer, int dx, int dy) {
     IntPoint start = tipAt(e.gather(), dx, dy, g.padding());
-    IntPoint tip = tipAt(e.gather(), dx, dy, g.padding() + g.virtualHalf());
+    IntPoint tip = tipAt(e.gather(), dx, dy, g.padding() + stubLength(g));
     if (!clearPath(board, e.positive(), layer, g.halfWidth(), g.netP(), g.classP(), g)) {
       debug("P breakout blocked on layer " + layer + " " + java.util.Arrays.toString(e.positive()));
       return false;
@@ -1033,6 +1137,10 @@ public final class PairRouting {
       int compensation = control.compensatedTraceHalfWidth[layer] - control.traceHalfWidth[layer];
       control.traceHalfWidth[layer] = g.virtualHalf();
       control.compensatedTraceHalfWidth[layer] = g.virtualHalf() + compensation;
+      // The free-space rooms of the search are sized by this offset, which the control computed
+      // from the narrow trace width; without it the wide trace slips through gaps only one
+      // member fits.
+      control.updateTraceClearanceOffset(layer, board);
       AutorouteEngine engine =
           board.initAutoroute(
               Nets.hidden_net_number, g.classP(), thread, TimeLimit.ofSteps(SEARCH_STEPS), false);
@@ -1066,12 +1174,20 @@ public final class PairRouting {
     Piece positiveMiddle = middle(a.routePositive(), b.routePositive(), positiveLine);
     Piece negativeMiddle = middle(a.routeNegative(), b.routeNegative(), negativeLine);
     boolean inserted =
-        insertPieces(board, List.of(positiveMiddle), g.halfWidth(), g.netP(), g.classP(), placed)
+        insertPieces(board, List.of(positiveMiddle), g.halfWidth(), g.netP(), g.classP(), placed);
+    Item middleP = inserted ? placed.get(placed.size() - 1) : null;
+    inserted =
+        inserted
             && insertPieces(
                 board, List.of(negativeMiddle), g.halfWidth(), g.netN(), g.classN(), placed);
+    Item middleN = inserted ? placed.get(placed.size() - 1) : null;
     if (inserted) {
       String violation = firstViolation(board, placed);
       if (violation != null) {
+        debug("rejected: " + violation);
+        debug("  centre line " + centreLine);
+        debug("  P middle " + java.util.Arrays.toString(positiveMiddle.corners()));
+        debug("  N middle " + java.util.Arrays.toString(negativeMiddle.corners()));
         removeAll(board, placed);
         return "the coupled traces would violate a clearance (" + violation + ")";
       }
@@ -1084,22 +1200,190 @@ public final class PairRouting {
       removeAll(board, placed);
       return "the coupled traces did not connect the pads";
     }
+    debug("accepted on layer " + layer + ", centre line " + centreLine);
+    double lengthP = memberLength(a.positive(), b.positive(), positiveMiddle);
+    double lengthN = memberLength(a.negative(), b.negative(), negativeMiddle);
+    String tuning = "";
+    if (g.skewTarget() >= 0 && Math.abs(lengthP - lengthN) > g.skewTarget()) {
+      boolean shorterP = lengthP < lengthN;
+      double skewBefore = Math.abs(lengthP - lengthN);
+      double added =
+          tuneSkew(
+              board,
+              g,
+              shorterP ? positiveMiddle : negativeMiddle,
+              shorterP ? middleP : middleN,
+              shorterP ? a.positiveSide() : -a.positiveSide(),
+              shorterP ? g.netP() : g.netN(),
+              shorterP ? g.classP() : g.classN(),
+              skewBefore,
+              placed);
+      if (added > 0) {
+        if (shorterP) {
+          lengthP += added;
+        } else {
+          lengthN += added;
+        }
+        tuning = String.format(Locale.ROOT, ", tuned from %.3f mm", toMm(board, skewBefore));
+      } else {
+        tuning = ", not tuned: no room for length bumps beside the shorter member";
+      }
+    }
     for (Item item : placed) {
       // Fixed only now: a fixed item cannot be removed again, which a failed attempt needs.
       item.setFixedState(PLACED_STATE);
       itemIds.add(item.getId());
     }
-    double lengthP = memberLength(a.positive(), b.positive(), positiveMiddle);
-    double lengthN = memberLength(a.negative(), b.negative(), negativeMiddle);
     int viaPairs = (a.vias().size() + b.vias().size()) / 2;
     return String.format(
         Locale.ROOT,
-        "routed on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm",
+        "routed on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm%s",
         layer,
         viaPairs == 0 ? "" : " with " + viaPairs + " via pair(s)",
         toMm(board, lengthP),
         toMm(board, lengthN),
-        toMm(board, Math.abs(lengthP - lengthN)));
+        toMm(board, Math.abs(lengthP - lengthN)),
+        tuning);
+  }
+
+  /**
+   * The skew a pair may keep, in board units, or -1 for no tuning: the pair's own rule when the
+   * board gives one, else {@code pair_max_skew_um} (negative: off).
+   */
+  private static int skewTarget(
+      RoutingBoard board, RouterSettings settings, DifferentialPair pair) {
+    if (pair.maxSkew() > 0) {
+      return (int) Math.round(pair.maxSkew());
+    }
+    Double um = settings.autorouter != null ? settings.autorouter.pairMaxSkewUm : null;
+    if (um == null) {
+      um = DEFAULT_MAX_SKEW_UM;
+    }
+    return um < 0 ? -1 : umToBoard(board, um);
+  }
+
+  /** Extra length of a 45 degree bump per unit of its height: two legs of sqrt(2) for 2 along. */
+  private static final double BUMP_GAIN = 2 * (Math.sqrt(2) - 1);
+
+  /**
+   * Intra-pair skew tuning: adds trapezoid bumps (45 degrees out, a short top, 45 degrees back) to
+   * the middle trace of the shorter member, on the side away from its partner, so both members end
+   * up the same length. Bumps are at most twice the gap high, kept clear of the bends, placed on
+   * axis-parallel stretches first, and each is checked against the board's clearances before it is
+   * used; the new trace is checked exactly. Returns the length added, or 0 when the trace is left
+   * as it was.
+   */
+  private static double tuneSkew(
+      RoutingBoard board,
+      Geometry g,
+      Piece middle,
+      Item oldTrace,
+      int outward,
+      int net,
+      int traceClass,
+      double skew,
+      List<Item> placed) {
+    if (!(oldTrace instanceof PolylineTrace)) {
+      return 0;
+    }
+    int gap = g.spacing() - g.width();
+    double maxHeight = Math.max(g.width(), 2.0 * gap);
+    int count = (int) Math.ceil(skew / (BUMP_GAIN * maxHeight));
+    double top = Math.max(2.0 * g.width(), maxHeight);
+    double between = Math.max(3.0 * g.width(), maxHeight);
+    double margin = g.spacing() + maxHeight;
+    IntPoint[] corners = middle.corners();
+    // Candidate spots, axis-parallel stretches first, each checked at the full height.
+    record Spot(int segment, double at) {}
+    List<Spot> spots = new ArrayList<>();
+    for (int pass = 0; pass < 2 && spots.size() < count; pass++) {
+      for (int i = 0; i + 1 < corners.length && spots.size() < count; i++) {
+        IntPoint from = corners[i];
+        IntPoint to = corners[i + 1];
+        boolean axis = from.x == to.x || from.y == to.y;
+        if (axis != (pass == 0)) {
+          continue;
+        }
+        double length = from.toFloat().distance(to.toFloat());
+        for (double at = margin;
+            at + 2 * maxHeight + top <= length - margin && spots.size() < count;
+            at += 2 * maxHeight + top + between) {
+          IntPoint[] bump = bump(from, to, at, maxHeight, top, outward);
+          if (ExitStubs.pathSlack(
+                  board, bump, g.layer(), g.halfWidth(), net, traceClass, g.allowance())
+              >= 0) {
+            spots.add(new Spot(i, at));
+          }
+        }
+      }
+    }
+    if (spots.isEmpty()) {
+      debug("no room for length bumps on layer " + g.layer());
+      return 0;
+    }
+    // Lower bumps inside the checked outline when fewer are needed.
+    double height = Math.min(maxHeight, skew / (BUMP_GAIN * spots.size()));
+    List<IntPoint> tuned = new ArrayList<>();
+    for (int i = 0; i + 1 < corners.length; i++) {
+      tuned.add(corners[i]);
+      for (Spot spot : spots) {
+        if (spot.segment() == i) {
+          tuned.addAll(List.of(bump(corners[i], corners[i + 1], spot.at(), height, top, outward)));
+        }
+      }
+    }
+    tuned.add(corners[corners.length - 1]);
+    PolylineTrace old = (PolylineTrace) oldTrace;
+    board.removeItem(old);
+    PolylineTrace replacement =
+        board.insertTraceWithoutCleaning(
+            new Polyline(simplify(tuned).toArray(new IntPoint[0])),
+            g.layer(),
+            g.halfWidth(),
+            new int[] {net},
+            traceClass,
+            FixedState.UNFIXED);
+    if (replacement != null && replacement.clearanceViolations().isEmpty()) {
+      placed.set(placed.indexOf(old), replacement);
+      return pathLength(replacement.polyline().corners()) - pathLength(corners);
+    }
+    debug("length bumps rejected by the exact check on layer " + g.layer());
+    if (replacement != null) {
+      board.removeItem(replacement);
+    }
+    PolylineTrace back =
+        board.insertTraceWithoutCleaning(
+            new Polyline(corners),
+            g.layer(),
+            g.halfWidth(),
+            new int[] {net},
+            traceClass,
+            FixedState.UNFIXED);
+    placed.set(placed.indexOf(old), back);
+    return 0;
+  }
+
+  /**
+   * The four corners of one bump on the segment from {@code from} to {@code to}, starting {@code
+   * at} along it: out at 45 degrees by {@code height} to the {@code outward} side (+1 left of the
+   * direction of travel), {@code top} along, back at 45 degrees.
+   */
+  private static IntPoint[] bump(
+      IntPoint from, IntPoint to, double at, double height, double top, int outward) {
+    double[] d = unit(from, to);
+    double nx = -d[1] * outward;
+    double ny = d[0] * outward;
+    double[][] p = {
+      {at, 0}, {at + height, height}, {at + height + top, height}, {at + 2 * height + top, 0}
+    };
+    IntPoint[] result = new IntPoint[4];
+    for (int k = 0; k < 4; k++) {
+      result[k] =
+          new IntPoint(
+              (int) Math.round(from.x + d[0] * p[k][0] + nx * p[k][1]),
+              (int) Math.round(from.y + d[1] * p[k][0] + ny * p[k][1]));
+    }
+    return result;
   }
 
   /** Inserts the breakout traces and via pair of one end. */
@@ -1288,8 +1572,17 @@ public final class PairRouting {
     return tipAt(end.gather(), end.dx(), end.dy(), g.padding());
   }
 
+  /**
+   * Length of the virtual stub at a gather point: long enough that its far part lies in free space
+   * where the search can still reach it after shrinking the room by the wide trace's clearance
+   * offset; the near part starts one clearance from the breakouts.
+   */
+  private static int stubLength(Geometry g) {
+    return 3 * g.virtualHalf();
+  }
+
   private static IntPoint tip(End end, Geometry g) {
-    return tipAt(end.gather(), end.dx(), end.dy(), g.padding() + g.virtualHalf());
+    return tipAt(end.gather(), end.dx(), end.dy(), g.padding() + stubLength(g));
   }
 
   private static boolean onSegment(IntPoint p, IntPoint a, IntPoint b) {
