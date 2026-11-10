@@ -16,7 +16,8 @@ pairs where an end's pads are on another layer, the exact check against the boar
 kept. Not built: polarity swap, BGA breakouts, necked breakouts at fine-pitch pads, skew tuning (phase 3), the
 transactional move and the optimizer pair object (phase 4), impedance checks (phase 5). Decisions in section 8:
 1 done; 2 and 3 taken as proposed except that pair routing is on in every profile but `classic` and does not
-switch the profile; 4 done (the script ships in `scripts/kicad/`).
+switch the profile; 4 done (the script ships in `scripts/kicad/`). 2026-11-10: fixes from the first real-board
+test (section 4.1 also lists what impedance-matched traces would still need).
 
 ## 1. What we are solving
 
@@ -171,6 +172,29 @@ edge-to-edge gap, Er relative permittivity:
 The check would only warn when the supplied width, gap and stackup give a Zdiff more than about 15 percent from the
 class's stated target (KiCad classes are often named `90ohm`, `100ohm`). The fabricator's field solver is the
 authority. This is phase 5 and optional; nothing else depends on it.
+
+### 4.1 Impedance-matched traces: what it would take (2026-11-10)
+
+Written after the pair router shipped, so the work is not lost; nothing here is scheduled. Specctra carries no
+impedance, so "supporting impedance from the DSN" means carrying the geometry rules the designer's tool computed
+and keeping the conditions those numbers assume. The pair router already keeps the gap and keeps a pair on one
+layer between via pairs. What is left, applying to single-ended controlled traces and to pairs alike:
+
+| Item | In the DSN | Today | Work |
+|---|---|---|---|
+| Width per layer (outer and inner layers need different widths for the same ohms) | `(layer_rule L1 L4 (rule (width w)))` inside a class | Parsed and used by the router and the pair router (`Network.insertNetClasses`, `NetClass.getTraceHalfWidth(layer)`) | None in Freerouting. KiCad writes one width per class, so a script (`dsn_pairs.py` or a sibling) would add `layer_rule` widths from a table the user gives. Small. |
+| No neck-down on a controlled net | No keyword | `automatic_neckdown`, the fanout micro neck-down and the necked retry (`neck_width_um`) can narrow any trace at a pad | Mark controlled classes (a setting listing class names, since the DSN cannot say it) and exempt them. Small. |
+| Pair gap per layer | `(gap g (layer ...))` inside `(nets ...)` | Only the first gap without a layer is read | Read the per-layer gaps into `DifferentialPair` and use them in `PairRouting` per layer. Small. |
+| Spacing to neighbours (3 W single-ended, 5 W around a pair) | Class clearance, `class_class` | Works today | A script option to write the class clearance. None to small. |
+| Layer change limit | `(circuit (max_total_vias n))` | Not parsed | Parse it; enforce in the maze search per connection (via cost to infinity after n) and report. Medium. |
+| Impedance sanity check | No stackup in DSN | None | Read the stackup from the `.kicad_pcb` on the script side, apply the section 4 formulas, warn on more than about 15 percent from the class's target. Advisory, phase 5. Medium. |
+| Stay over an unbroken reference plane | Plane copper is in the DSN (`plane` scopes, conductive shapes on power layers); which plane a signal layer references is not | None | A coverage map of the adjacent plane layer per signal layer, and a search cost or ban on segments outside it, plus a check of the routed copper. Large: needs a plane model the router does not have. |
+| Length limits and matching | `(length max min)`, `match_net_length`, `match_fromto_length`, `length_factor` | `length` read and reported, not routed to; matching not read | Phase 3 (meander tuning). Large. |
+| Crosstalk limits | `parallel_segment`, `tandem_segment`, `max_noise`, `shield` | Not parsed | Parallel run tracking in the search and a check. Large. |
+
+Suggested order if it is ever built: one small batch of per-layer widths (script), the neck-down exemption, the
+per-layer pair gap and the neighbour-spacing option; then `max_total_vias`; then the advisory impedance check;
+the plane model, length matching and crosstalk last. Measure each batch on the pair boards in section 7 as usual.
 
 Coupling choice, for defaults when a board gives a width but no gap: tight coupling (S about W) saves space and
 rejects common-mode noise but makes Zdiff sensitive to etch; S = 2 W is the common compromise; S of 3 W or more is
