@@ -10,6 +10,8 @@ This is a fork (`origin` = nathanbrizzee/freerouting, `upstream` = freerouting/f
 
 The `router-overhaul` branch (from `perf-fixes`) carries the larger plan in `docs/research/router-overhaul-roadmap.md`: bug fixes first, then speed, then a grid finisher, an agent API and a global router. One commit per fix, each logged in `docs/research/router-overhaul-progress.md`. The user's hardware-board requirements and the answers to their questions are in `docs/research/hardware-board-routing-brief.md`. Benchmark with default settings (fallbacks on); run the board set only at milestones, and use an SES diff for changes meant to keep routes identical.
 
+Open bug reports from the user's boards are rows in the roadmap's section 4 table marked **Open, reported <date>**. Details of the user's private boards, and the rules for their files, are in `CLAUDE.local.md` (not committed); read it before working on those reports.
+
 ## Commands
 
 Java 25 and Gradle 9 (use the wrapper). Run from the repo root.
