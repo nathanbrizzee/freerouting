@@ -9,6 +9,7 @@ import app.freerouting.core.StoppableThread;
 import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.io.BoardReadResult;
 import app.freerouting.io.specctra.DsnReader;
+import app.freerouting.logger.AllowErrorLogs;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.settings.sources.DefaultSettings;
 import java.io.ByteArrayInputStream;
@@ -62,6 +63,29 @@ class BatchOptimizerPartialBoardTest {
         after.traces.totalLengthMm,
         0.5f,
         "the detour must become a straight trace, the trace of WALLED must stay");
+  }
+
+  /**
+   * An {@link OutOfMemoryError} in the optimizer must not lose the routed board: the stage ends,
+   * and the job keeps the best board it had, here the board as routed.
+   */
+  @Test
+  @AllowErrorLogs("the test injects an OutOfMemoryError, which the optimizer logs as an error")
+  void keepsTheRoutedBoardWhenTheOptimizerRunsOutOfMemory() {
+    RoutingJob job = jobFor(loadBoard());
+    BatchOptimizer optimizer = new BatchOptimizer(job);
+    optimizer.addBoardUpdatedEventListener(
+        event -> {
+          throw new OutOfMemoryError("injected by the test");
+        });
+
+    optimizer.runBatchLoop();
+
+    BoardStatistics after = job.board.getStatistics();
+    assertEquals(1, after.connections.incompleteCount);
+    assertEquals(0, after.clearanceViolations.totalCount);
+    assertEquals(
+        62.0f, after.traces.totalLengthMm, 0.01f, "the board must be the one that was routed");
   }
 
   private static RoutingBoard loadBoard() {
