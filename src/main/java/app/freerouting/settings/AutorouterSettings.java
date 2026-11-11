@@ -344,6 +344,18 @@ public class AutorouterSettings implements Serializable, Cloneable {
   @Schema(description = "Largest length difference within a pair before tuning, in um (-1: off)")
   public Double pairMaxSkewUm;
 
+  /**
+   * Longest coupled route a pair connection may take, as a multiple of the direct 45 degree
+   * distance between its two ends. When the first layer's route is much longer than that, the other
+   * layers are tried and the shortest is used; if even that is longer than this limit, the pair is
+   * left to the ordinary router. Default 2.5; below 1 turns the check off.
+   */
+  @SerializedName("pair_max_detour")
+  @Schema(
+      description =
+          "Longest coupled pair route as a multiple of the direct distance (below 1: off)")
+  public Double pairMaxDetour;
+
   @SerializedName("pair_fanout")
   @Schema(description = "Existing fanout on pair pins: 'replace' (default) or 'keep'")
   public String pairFanout;

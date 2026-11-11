@@ -76,6 +76,37 @@ class PairRoutingTest extends RoutingFixtureTest {
   }
 
   @Test
+  void aCoupledRouteLongerThanTheDetourLimitIsLeftToTheOrdinaryRouter() {
+    // PairViaBasic needs a via pair, and each via pair counts as extra length: with the limit at
+    // the lowest value (1 = the direct distance) the coupled route is too long, with the default
+    // it is taken.
+    RoutingJob limited = getRoutingJob("PairViaBasic.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(limited);
+    Set<Integer> before = new HashSet<>();
+    for (Item item : limited.board.getItems()) {
+      before.add(item.getId());
+    }
+    limited.routerSettings.autorouter.pairMaxDetour = 1.0;
+    List<Integer> placed = new ArrayList<>();
+    List<String> lines = PairRouting.apply(limited.routerSettings, limited.board, null, placed);
+    assertTrue(
+        lines != null && lines.stream().anyMatch(l -> l.contains("pair_max_detour")),
+        "the line must say why the pair was left to the router: " + lines);
+    assertTrue(placed.isEmpty(), "no copper may be left from a pair that was refused");
+    for (Item item : limited.board.getItems()) {
+      assertTrue(before.contains(item.getId()), "an item was left behind: " + item);
+    }
+
+    RoutingJob normal = getRoutingJob("PairViaBasic.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(normal);
+    List<String> routed =
+        PairRouting.apply(normal.routerSettings, normal.board, null, new ArrayList<>());
+    assertTrue(
+        routed != null && routed.stream().anyMatch(l -> l.contains("): routed on layer")),
+        "the default limit must keep the coupled route: " + routed);
+  }
+
+  @Test
   void aPairThatCannotBeCoupledLeavesNothingBehind() {
     RoutingJob job = getRoutingJob("PairBlocked.dsn", new TestingSettings());
     BoardLoader.loadBoardIfNeeded(job);

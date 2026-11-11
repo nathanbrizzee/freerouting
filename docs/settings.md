@@ -371,6 +371,20 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       A skew rule of the pair in the board file takes precedence. Set it to the skew allowance of
       the interface (USB 2.0 and 100 Mbit Ethernet allow millimetres, USB 3 and PCIe about 0.1 mm).
       CLI: `--router.autorouter.pair_max_skew_um=<um>`.
+    - **`pair_max_detour`**: The longest coupled route a pair connection may take, as a multiple of
+      the direct distance (with 45 degree bends) between the middles of its two pad pairs. Default
+      `2.5`; a value below `1` turns the check off. A route up to 1.5 times the direct distance is
+      taken at once. A longer one is kept as a fallback while the other signal layers are tried (a
+      via pair at an end can make a much shorter route possible), and the shortest is used, with
+      each via pair counted as ten coupled spacings of extra length when layers are compared. On
+      each layer the corridor search runs twice when the first route is not short: once sized for
+      the whole pair, once with the narrow trace's corridor, which finds gaps the pair fits through
+      but the wide search rejects; the exact clearance check of the two members decides in both
+      cases. If even the shortest route is longer than the limit, the pair is left to the ordinary
+      router and the log says `left to the router: the shortest coupled route is L mm for D mm
+      direct (pair_max_detour R)`. When it helps: boards where the pads of a pair sit among
+      obstacles, so the first layer's corridor winds around them. CLI:
+      `--router.autorouter.pair_max_detour=<ratio>`.
     - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
       `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces
       and vias connected to it are lifted while the pair is routed from the pad, when they reach no

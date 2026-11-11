@@ -61,14 +61,30 @@ public final class PairRouting {
   /** Candidate gather points tried per end, best first. */
   private static final int END_CANDIDATES = 3;
 
-  /** Most searches one pair connection may use over all its layers and gather points. */
-  private static final int MAX_SEARCHES = 12;
+  /**
+   * Most searches one pair connection may use over all its layers, gather points and the two search
+   * widths (see {@code tryRoute}).
+   */
+  private static final int MAX_SEARCHES = 24;
 
   /** Skew a routed pair may keep when the board gives no rule and no setting is made. */
   private static final double DEFAULT_MAX_SKEW_UM = 100;
 
   /** Cost of a via pair in coupled spacings of breakout length. */
   private static final double VIA_PAIR_COST = 40;
+
+  /**
+   * A coupled route up to this many times the direct (45 degree) distance between the two ends is
+   * taken at once; a longer one is kept as a fallback while the other layers are tried, and the
+   * shortest is used.
+   */
+  private static final double GOOD_DETOUR = 1.5;
+
+  /** Default of {@code pair_max_detour}: the longest coupled route, in direct distances. */
+  private static final double DEFAULT_MAX_DETOUR = 2.5;
+
+  /** What a via pair adds to a route's length when layers are compared, in coupled spacings. */
+  private static final double VIA_PAIR_LENGTH_PENALTY = 10;
 
   private static final int[][] DIRECTIONS = {
     {1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}
@@ -512,6 +528,13 @@ public final class PairRouting {
     String lastFailure = "no signal layer the router and both net classes allow";
     List<String> reasons = new ArrayList<>();
     int searches = 0;
+    boolean limitReached = false;
+    double maxDetour = maxDetour(settings);
+    double direct = directDistance(plan);
+    // With the limit off the first route found is taken, as before.
+    double acceptWithin =
+        maxDetour > 0 ? Math.min(GOOD_DETOUR, maxDetour) * direct : Double.POSITIVE_INFINITY;
+    Fallback fallback = null;
     for (int layer : routeLayers(board, settings, classP, classN, plan)) {
       int halfWidth = classP.getTraceHalfWidth(layer);
       if (classN.getTraceHalfWidth(layer) != halfWidth) {
@@ -578,23 +601,118 @@ public final class PairRouting {
       }
       combinations.sort(Comparator.comparingDouble(c -> c[0].cost() + c[1].cost()));
       for (End[] c : combinations) {
-        if (searches++ >= MAX_SEARCHES) {
-          reasons.add("search limit of " + MAX_SEARCHES + " tries reached");
-          return "left to the router: " + summary(reasons);
+        boolean found = false;
+        // First with the corridor sized for the whole pair; when that gives no good route, again
+        // with the narrow trace's corridor, which finds gaps the pair fits through but the wide
+        // search rejects. The exact check of the members decides in both cases.
+        for (int mode = 0; mode < 2; mode++) {
+          boolean narrow = mode == 1;
+          if (searches++ >= MAX_SEARCHES) {
+            reasons.add("search limit of " + MAX_SEARCHES + " tries reached");
+            limitReached = true;
+            break;
+          }
+          double[] score = new double[2];
+          String outcome =
+              tryRoute(
+                  board,
+                  settings,
+                  thread,
+                  pair,
+                  plan,
+                  g,
+                  c[0],
+                  c[1],
+                  itemIds,
+                  narrow,
+                  acceptWithin,
+                  score);
+          if (outcome.startsWith("routed")) {
+            return outcome;
+          }
+          String reason = "layer " + layer + (narrow ? " (narrow search): " : ": ") + outcome;
+          if (score[0] > 0) {
+            // A route too long to take at once: remember it and try the other layers.
+            if (fallback == null || score[0] < fallback.score()) {
+              fallback = new Fallback(g, c[0], c[1], narrow, score[0], score[1]);
+            }
+            found = true;
+          }
+          if (!reasons.contains(reason)) {
+            reasons.add(reason);
+          }
+          if (thread != null && thread.isStopRequested()) {
+            return "left to the router: " + summary(reasons);
+          }
         }
-        String outcome = tryRoute(board, settings, thread, pair, plan, g, c[0], c[1], itemIds);
-        if (outcome.startsWith("routed")) {
-          return outcome;
-        }
-        if (!reasons.contains("layer " + layer + ": " + outcome)) {
-          reasons.add("layer " + layer + ": " + outcome);
-        }
-        if (thread != null && thread.isStopRequested()) {
-          return "left to the router: " + summary(reasons);
+        if (found || limitReached) {
+          break;
         }
       }
+      if (limitReached) {
+        break;
+      }
+    }
+    if (fallback != null) {
+      if (maxDetour > 0 && fallback.length() > maxDetour * direct) {
+        return String.format(
+            Locale.ROOT,
+            "left to the router: the shortest coupled route is %.1f mm for %.1f mm direct"
+                + " (pair_max_detour %.1f)",
+            toMm(board, fallback.length()),
+            toMm(board, direct),
+            maxDetour);
+      }
+      double[] score = new double[2];
+      String outcome =
+          tryRoute(
+              board,
+              settings,
+              thread,
+              pair,
+              plan,
+              fallback.geometry(),
+              fallback.first(),
+              fallback.second(),
+              itemIds,
+              fallback.narrow(),
+              Double.POSITIVE_INFINITY,
+              score);
+      if (outcome.startsWith("routed")) {
+        return outcome
+            + String.format(
+                Locale.ROOT,
+                ", %.1f times the direct distance, the shortest of the layers tried",
+                fallback.length() / Math.max(1.0, direct));
+      }
+      reasons.add(outcome);
     }
     return "left to the router: " + (reasons.isEmpty() ? lastFailure : summary(reasons));
+  }
+
+  /** A long coupled route that was found: where to find it again, and its score. */
+  private record Fallback(
+      Geometry geometry, End first, End second, boolean narrow, double score, double length) {}
+
+  /** The longest coupled route as a multiple of the direct distance; 0 when the check is off. */
+  private static double maxDetour(RouterSettings settings) {
+    Double ratio = settings.autorouter != null ? settings.autorouter.pairMaxDetour : null;
+    if (ratio == null) {
+      return DEFAULT_MAX_DETOUR;
+    }
+    return ratio < 1 ? 0 : ratio;
+  }
+
+  /**
+   * The shortest a route between the two ends of the connection can be with 45 degree bends, in
+   * board units, measured between the middles of the two pad pairs.
+   */
+  private static double directDistance(ConnectionPlan plan) {
+    FloatPoint from = middle(plan.firstP(), plan.firstN());
+    FloatPoint to = middle(plan.secondP(), plan.secondN());
+    double dx = Math.abs(from.x - to.x);
+    double dy = Math.abs(from.y - to.y);
+    return Math.max(dx, dy) + (Math.sqrt(2) - 1) * Math.min(dx, dy);
   }
 
   /** The pair connection the debug lines are about. */
@@ -1078,10 +1196,14 @@ public final class PairRouting {
       Geometry g,
       End a,
       End b,
-      List<Integer> itemIds) {
+      List<Integer> itemIds,
+      boolean narrow,
+      double acceptWithin,
+      double[] score) {
     List<Item> placed = new ArrayList<>();
     try {
-      return tryRoute(board, settings, thread, plan, g, a, b, itemIds, placed);
+      return tryRoute(
+          board, settings, thread, plan, g, a, b, itemIds, placed, narrow, acceptWithin, score);
     } catch (RuntimeException e) {
       // Whatever went wrong, the pair goes back to the ordinary router and the board is as before.
       removeAll(board, placed);
@@ -1100,7 +1222,10 @@ public final class PairRouting {
       End a,
       End b,
       List<Integer> itemIds,
-      List<Item> placed) {
+      List<Item> placed,
+      boolean narrow,
+      double acceptWithin,
+      double[] score) {
     int layer = g.layer();
     // The breakouts and via pairs of both ends go in first. They are copper the pair will have, and
     // they keep the wide virtual trace out of the space between its gather points and the pads, so
@@ -1138,9 +1263,12 @@ public final class PairRouting {
       control.traceHalfWidth[layer] = g.virtualHalf();
       control.compensatedTraceHalfWidth[layer] = g.virtualHalf() + compensation;
       // The free-space rooms of the search are sized by this offset, which the control computed
-      // from the narrow trace width; without it the wide trace slips through gaps only one
-      // member fits.
-      control.updateTraceClearanceOffset(layer, board);
+      // from the narrow trace width. Recomputed for the wide trace, the search keeps out of gaps
+      // only one member fits; the narrow search keeps the narrow trace's offset and leaves it to
+      // the exact check to refuse a route where the members do not fit.
+      if (!narrow) {
+        control.updateTraceClearanceOffset(layer, board);
+      }
       AutorouteEngine engine =
           board.initAutoroute(
               Nets.hidden_net_number, g.classP(), thread, TimeLimit.ofSteps(SEARCH_STEPS), false);
@@ -1229,21 +1357,33 @@ public final class PairRouting {
         tuning = ", not tuned: no room for length bumps beside the shorter member";
       }
     }
+    int viaPairs = (a.vias().size() + b.vias().size()) / 2;
+    String text =
+        String.format(
+            Locale.ROOT,
+            "on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm%s",
+            layer,
+            viaPairs == 0 ? "" : " with " + viaPairs + " via pair(s)",
+            toMm(board, lengthP),
+            toMm(board, lengthN),
+            toMm(board, Math.abs(lengthP - lengthN)),
+            tuning);
+    double length = Math.max(lengthP, lengthN) + viaPairs * VIA_PAIR_LENGTH_PENALTY * g.spacing();
+    if (length > acceptWithin) {
+      // Too long to take at once: the board goes back as it was and the caller may try another
+      // layer.
+      removeAll(board, placed);
+      board.clearTransientAutorouteState();
+      score[0] = length;
+      score[1] = Math.max(lengthP, lengthN);
+      return "a long coupled route was found " + text;
+    }
     for (Item item : placed) {
       // Fixed only now: a fixed item cannot be removed again, which a failed attempt needs.
       item.setFixedState(PLACED_STATE);
       itemIds.add(item.getId());
     }
-    int viaPairs = (a.vias().size() + b.vias().size()) / 2;
-    return String.format(
-        Locale.ROOT,
-        "routed on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm%s",
-        layer,
-        viaPairs == 0 ? "" : " with " + viaPairs + " via pair(s)",
-        toMm(board, lengthP),
-        toMm(board, lengthN),
-        toMm(board, Math.abs(lengthP - lengthN)),
-        tuning);
+    return "routed " + text;
   }
 
   /**
