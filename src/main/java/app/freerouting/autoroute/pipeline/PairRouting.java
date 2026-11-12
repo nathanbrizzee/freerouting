@@ -1357,6 +1357,12 @@ public final class PairRouting {
     if (g.skewTarget() >= 0 && Math.abs(lengthP - lengthN) > g.skewTarget()) {
       boolean shorterP = lengthP < lengthN;
       double skewBefore = Math.abs(lengthP - lengthN);
+      // How far each end's breakout leaves the shorter member behind; the bumps go nearest the end
+      // that does it most (TI SPRACP4A: as close to the mismatched end as possible).
+      double sign = shorterP ? -1 : 1;
+      double shortAtA = sign * (totalLength(a.positive()) - totalLength(a.negative()));
+      double shortAtB = sign * (totalLength(b.positive()) - totalLength(b.negative()));
+      boolean fromB = shortAtB > shortAtA && shortAtB > 0;
       double added =
           tuneSkew(
               board,
@@ -1367,6 +1373,7 @@ public final class PairRouting {
               shorterP ? g.netP() : g.netN(),
               shorterP ? g.classP() : g.classN(),
               skewBefore,
+              fromB,
               placed);
       if (added > 0) {
         if (shorterP) {
@@ -1430,10 +1437,10 @@ public final class PairRouting {
   /**
    * Intra-pair skew tuning: adds trapezoid bumps (45 degrees out, a short top, 45 degrees back) to
    * the middle trace of the shorter member, on the side away from its partner, so both members end
-   * up the same length. Bumps are at most twice the gap high, kept clear of the bends, placed on
-   * axis-parallel stretches first, and each is checked against the board's clearances before it is
-   * used; the new trace is checked exactly. Returns the length added, or 0 when the trace is left
-   * as it was.
+   * up the same length. Bumps are at most twice the gap high, kept clear of the bends, placed
+   * nearest the end the skew comes from first ({@code fromB}: the second end of the middle trace),
+   * and each is checked against the board's clearances before it is used; the new trace is checked
+   * exactly. Returns the length added, or 0 when the trace is left as it was.
    */
   private static double tuneSkew(
       RoutingBoard board,
@@ -1444,9 +1451,17 @@ public final class PairRouting {
       int net,
       int traceClass,
       double skew,
+      boolean fromB,
       List<Item> placed) {
     if (!(oldTrace instanceof PolylineTrace)) {
       return 0;
+    }
+    // Worked from the end the bumps should be nearest; reversing the trace swaps its sides.
+    IntPoint[] corners = middle.corners().clone();
+    int side = outward;
+    if (fromB) {
+      java.util.Collections.reverse(java.util.Arrays.asList(corners));
+      side = -outward;
     }
     int gap = g.spacing() - g.width();
     double maxHeight = Math.max(g.width(), 2.0 * gap);
@@ -1454,28 +1469,21 @@ public final class PairRouting {
     double top = Math.max(2.0 * g.width(), maxHeight);
     double between = Math.max(3.0 * g.width(), maxHeight);
     double margin = g.spacing() + maxHeight;
-    IntPoint[] corners = middle.corners();
-    // Candidate spots, axis-parallel stretches first, each checked at the full height.
+    // Candidate spots, nearest the chosen end first, each checked at the full height.
     record Spot(int segment, double at) {}
     List<Spot> spots = new ArrayList<>();
-    for (int pass = 0; pass < 2 && spots.size() < count; pass++) {
-      for (int i = 0; i + 1 < corners.length && spots.size() < count; i++) {
-        IntPoint from = corners[i];
-        IntPoint to = corners[i + 1];
-        boolean axis = from.x == to.x || from.y == to.y;
-        if (axis != (pass == 0)) {
-          continue;
-        }
-        double length = from.toFloat().distance(to.toFloat());
-        for (double at = margin;
-            at + 2 * maxHeight + top <= length - margin && spots.size() < count;
-            at += 2 * maxHeight + top + between) {
-          IntPoint[] bump = bump(from, to, at, maxHeight, top, outward);
-          if (ExitStubs.pathSlack(
-                  board, bump, g.layer(), g.halfWidth(), net, traceClass, g.allowance())
-              >= 0) {
-            spots.add(new Spot(i, at));
-          }
+    for (int i = 0; i + 1 < corners.length && spots.size() < count; i++) {
+      IntPoint from = corners[i];
+      IntPoint to = corners[i + 1];
+      double length = from.toFloat().distance(to.toFloat());
+      for (double at = margin;
+          at + 2 * maxHeight + top <= length - margin && spots.size() < count;
+          at += 2 * maxHeight + top + between) {
+        IntPoint[] bump = bump(from, to, at, maxHeight, top, side);
+        if (ExitStubs.pathSlack(
+                board, bump, g.layer(), g.halfWidth(), net, traceClass, g.allowance())
+            >= 0) {
+          spots.add(new Spot(i, at));
         }
       }
     }
@@ -1490,11 +1498,15 @@ public final class PairRouting {
       tuned.add(corners[i]);
       for (Spot spot : spots) {
         if (spot.segment() == i) {
-          tuned.addAll(List.of(bump(corners[i], corners[i + 1], spot.at(), height, top, outward)));
+          tuned.addAll(List.of(bump(corners[i], corners[i + 1], spot.at(), height, top, side)));
         }
       }
     }
     tuned.add(corners[corners.length - 1]);
+    if (fromB) {
+      java.util.Collections.reverse(tuned);
+      corners = middle.corners();
+    }
     PolylineTrace old = (PolylineTrace) oldTrace;
     board.removeItem(old);
     PolylineTrace replacement =

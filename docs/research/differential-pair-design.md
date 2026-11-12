@@ -364,6 +364,10 @@ open connections are routed, the pair is routed again by the pair router, and th
 is coupled again, fewer connections are open and no violation is new. Fixture `PairReroute.dsn`: a one-layer wall
 with two gaps, of which only the pair's direct gap fits a 1 mm trace.
 
+Item 1 below was built the same day: the tuner works out how far each end's breakout leaves the shorter member
+behind and places the bumps from that end of the middle trace, nearest first (`PairSkewEnd.dsn`,
+`lengthBumpsGoNearTheEndThatCausesTheSkew`).
+
 Queued, in this order. Each gets a small hand-written fixture in `fixtures/` with a `PairRoutingTest` case, so the
 behaviour is pinned by a test, not only by the benchmark boards:
 

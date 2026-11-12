@@ -308,6 +308,44 @@ class PairRoutingTest extends RoutingFixtureTest {
         "the bumps must not violate a clearance");
   }
 
+  /**
+   * The pads at J1 sit side by side across the route; at U1 the D- pad sits 1.2 mm further along,
+   * so D+ comes up short at the U1 end. The bumps that make up for it go near that end (TI
+   * SPRACP4A: as close to the mismatched end as possible), not wherever the run starts.
+   */
+  @Test
+  void lengthBumpsGoNearTheEndThatCausesTheSkew() {
+    RoutingJob job = getRoutingJob("PairSkewEnd.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>());
+    String line =
+        lines.stream().filter(l -> l.contains("routed on layer")).findFirst().orElseThrow();
+    assertTrue(line.contains("tuned from"), "the pair must be tuned: " + line);
+    assertTrue(skewOf(line) <= 0.1, "skew must be within 0.1 mm: " + line);
+
+    // D+ runs straight at y = 15200 um between the ends; its bump corners leave that line.
+    int netP = job.board.rules.nets.get("D+", 1).netNumber;
+    int bumpCorners = 0;
+    for (PolylineTrace trace : tracesOf(job, netP)) {
+      for (int i = 0; i < trace.polyline().cornerCount(); i++) {
+        FloatPoint corner = trace.polyline().cornerApprox(i);
+        boolean onRun = corner.x > 100000 && corner.x < 430000;
+        if (onRun && Math.abs(corner.y - 152000) > 1000) {
+          bumpCorners++;
+          assertTrue(
+              corner.x > 245000,
+              "a bump corner is in the J1 half, far from the staggered U1 pads: " + corner);
+        }
+      }
+    }
+    assertTrue(bumpCorners > 0, "the shorter member must have bumps: " + line);
+    assertTrue(
+        new DesignRulesChecker(job.board, new DesignRulesCheckerSettings())
+            .getAllClearanceViolations()
+            .isEmpty(),
+        "the bumps must not violate a clearance");
+  }
+
   @Test
   void aPairNeverRunsInsideThePadRingOfAQuadPackage() {
     // The pair's pins are on the right side of a four-sided pad ring and its other end is to the

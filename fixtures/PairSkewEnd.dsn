@@ -1,0 +1,26 @@
+(pcb pair_skew_end
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (boundary (rect pcb 0 0 50000 30000))
+    (rule (width 150) (clearance 150)))
+  (placement
+    (component Even
+      (place J1 5000 15000 front 0))
+    (component Staggered
+      (place U1 44000 15000 front 0)))
+  (library
+    (image Even
+      (pin Pad 1 0 400)
+      (pin Pad 2 0 -400))
+    (image Staggered
+      (pin Pad 1 0 400)
+      (pin Pad 2 1200 -400))
+    (padstack Pad (shape (rect F.Cu -300 -200 300 200)) (attach off)))
+  (network
+    (net D+ (pins J1-1 U1-1))
+    (net D- (pins J1-2 U1-2))
+    (class kicad_default "" D+ D-
+      (rule (width 150) (clearance 150)))
+    (pair (nets D+ D- (gap 200)))))

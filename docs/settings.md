@@ -364,8 +364,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
     - **`pair_max_skew_um`**: The length difference a routed pair connection may keep between its
       two members, in micrometers. Default `100`; negative turns tuning off. When the members differ
       by more, the shorter one gets trapezoid length bumps (45 degrees out, a short top, 45 degrees
-      back) on the side away from its partner, at most twice the gap high, kept clear of the bends,
-      on straight axis-parallel stretches first; each bump and then the whole trace is checked
+      back) on the side away from its partner, at most twice the gap high, kept clear of the bends.
+      The skew is the difference of the whole members, breakouts at both ends included; the bumps go
+      nearest the end whose breakout leaves the shorter member behind (offset pads, the turn into
+      the pair), as close to the mismatched end as the room allows, and from the start of the run
+      when the bends alone cause the skew. Each bump and then the whole trace is checked
       against the board's clearances, and a pair with no room keeps its skew. The routed line ends
       with `, tuned from S mm` or `, not tuned: no room for length bumps beside the shorter member`.
       A skew rule of the pair in the board file takes precedence. Set it to the skew allowance of
