@@ -87,6 +87,10 @@ public final class RoutingPipeline {
   public void run() {
     if (this.job != null && this.job.board != null) {
       this.job.board.awaitPostLoad();
+      String memoryWarning = app.freerouting.core.MemoryBudget.startupWarning();
+      if (memoryWarning != null) {
+        this.job.logWarning(memoryWarning);
+      }
       List<String> pairLines =
           PairRouting.apply(
               this.job.routerSettings, this.job.board, this.job.thread, this.pairItems);

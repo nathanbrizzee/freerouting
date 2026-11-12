@@ -68,6 +68,11 @@ Rules that save trouble:
   routed board is still saved; lower `--router.optimizer.max_threads` or
   `--router.optimizer.max_search_steps_per_connection` (default 1000000) or
   `--router.optimizer.max_search_steps_per_candidate` (default 4000000), or use `-mt 0`.
+  A run whose heap limit is more than the physical memory free logs `Memory: the heap limit is X
+  GB but only Y GB of physical memory is free ...` at the start: the machine can page or freeze
+  before Java stops, so lower `-Xmx` or run fewer jobs. Parallel work is sized to what is free:
+  the race runs on fewer threads, and the optimizer logs `Optimizer pass #N: K of M thread(s), as
+  many candidates as the free memory holds.`
 - The log file goes to the platform's log folder (Windows `%LOCALAPPDATA%\freerouting\logs`,
   macOS `~/Library/Logs/freerouting`, Linux `~/.local/state/freerouting/logs`). Capture standard
   output too (`> board.log 2>&1`); it carries the same lines.

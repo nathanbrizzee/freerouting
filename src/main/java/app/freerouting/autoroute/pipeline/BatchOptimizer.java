@@ -775,6 +775,23 @@ public final class BatchOptimizer extends NamedAlgorithm {
     }
 
     int threadPoolSize = Math.max(1, this.settings.getOptimizerMaxThreads());
+    // Each running candidate holds a board copy and its search rooms, about the live heap: no more
+    // run at once than the heap and the free physical memory hold. Which candidate wins does not
+    // depend on the count, only how fast the pass goes.
+    int memoryThreads =
+        app.freerouting.core.MemoryBudget.parallelUnits(
+            threadPoolSize, Math.max(64L << 20, app.freerouting.core.MemoryBudget.liveHeap()));
+    if (memoryThreads < threadPoolSize) {
+      job.logInfo(
+          "Optimizer pass #"
+              + passNo
+              + ": "
+              + memoryThreads
+              + " of "
+              + threadPoolSize
+              + " thread(s), as many candidates as the free memory holds.");
+      threadPoolSize = memoryThreads;
+    }
 
     String optimizationPassId =
         "BatchOptRoute.opt_route_pass #"

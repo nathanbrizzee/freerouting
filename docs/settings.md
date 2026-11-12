@@ -192,7 +192,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
     - **`fallback_threads`**: Threads for the fallback stage. Default `1` runs the attempts one
       after another. A higher value runs the alternative strategies side by side, each on its own
       copy of the board, together with the continuation of a residual board; `0` uses one thread
-      per attempt, up to the number of processors. In parallel each attempt may make the whole
+      per attempt, up to the number of processors and to what the heap and the free physical
+      memory hold (each attempt budgeted at twice the live heap), but never fewer than two, so
+      the free memory never changes the chosen board. In parallel each attempt may make the whole
       `fallback_work_ratio` budget of connection attempts, and the search step budget left under
       `router.max_search_steps` is split equally between the attempts. The results are merged in
       the sequential order with the same rule for replacing the best board. Once an attempt is
@@ -641,7 +643,10 @@ Configures the optional route-optimization stage that runs after autorouting.
   API, and GUI all use this pool (`BatchOptimizer`). Independent of
   `feature_flags.multi_threading` (that GUI flag does **not** disable optimizer workers) and of
   `--router.autorouter.max_threads`. Each in-flight worker `deepCopy()`s the board, so peak heap
-  scales with this value.
+  scales with this value; a pass runs no more workers than the heap and the free physical memory
+  hold (each budgeted at the live heap) and then logs `Optimizer pass #N: K of M thread(s), as
+  many candidates as the free memory holds.` The thread count changes how fast a pass goes, not
+  which candidate wins.
 - **`improvement_threshold`**: Minimum **relative** optimizer-score percentage gain required to
   continue after a pass (default `2.5`, representing 2.5%). `BatchOptimizer` compares
   `((scoreAfter - scoreBefore) / scoreBefore) * 100`. Benchmark calibration across golden fixtures

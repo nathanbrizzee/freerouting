@@ -166,7 +166,8 @@ final class RoutingFallbackRunner {
     if (continuedFrom != null && bestAttempt.board == continuedFrom) {
       if (!bestAttempt.outcome.isCompleteAndClean()) {
         job.logInfo(
-            "Routing fallback: no alternative replaced the board the continuations ran on; not continuing it again.");
+            "Routing fallback: no alternative replaced the board the continuations ran on; not"
+                + " continuing it again.");
       }
     } else {
       after.addAll(automaticContinuations(job.routerSettings));
@@ -435,7 +436,8 @@ final class RoutingFallbackRunner {
       job.logInfo(
           "Routing fallback '"
               + strategy.name
-              + "': its fanout left the board an earlier pass loop started on; stopped after the fanout ("
+              + "': its fanout left the board an earlier pass loop started on; stopped after the"
+              + " fanout ("
               + (repeated != null ? repeated : attempt.outcome)
               + ").");
       return bestAttempt;
@@ -905,12 +907,25 @@ final class RoutingFallbackRunner {
     return job.thread.isStopRequested() || job.state == RoutingJobState.TIMED_OUT;
   }
 
-  /** Threads for the fallback stage; 1 or less runs the attempts in order. */
+  /**
+   * Threads for the fallback stage; 1 or less runs the attempts in order. With {@code
+   * fallback_threads} at 0 or below, one per core, but no more than the free heap holds: each
+   * attempt routes a board of its own, so it is budgeted at twice the heap live after the last
+   * collection (the board in hand and its search rooms), and the heap and the free physical memory
+   * must both hold them ({@link app.freerouting.core.MemoryBudget}). An explicit count is used as
+   * given.
+   */
   private static int fallbackThreads(RouterSettings settings, int streams) {
     Integer configured = settings.autorouter != null ? settings.autorouter.fallbackThreads : null;
     int threads = configured != null ? configured : 1;
     if (threads <= 0) {
-      threads = Runtime.getRuntime().availableProcessors();
+      int cores = Runtime.getRuntime().availableProcessors();
+      threads =
+          app.freerouting.core.MemoryBudget.parallelUnits(
+              cores, Math.max(64L << 20, 2 * app.freerouting.core.MemoryBudget.liveHeap()));
+      // Never fewer than two: the chosen board is the same with any count above one but can differ
+      // with one, and the free memory must not decide the result.
+      threads = Math.max(Math.min(2, cores), threads);
     }
     return Math.min(threads, streams);
   }
