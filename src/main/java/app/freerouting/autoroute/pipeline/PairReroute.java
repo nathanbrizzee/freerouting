@@ -2,6 +2,7 @@ package app.freerouting.autoroute.pipeline;
 
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.drc.AirLine;
@@ -72,7 +73,7 @@ final class PairReroute {
       if (openEnds.isEmpty()) {
         break;
       }
-      DifferentialPair pair = nearestPair(board, pairItems, openEnds, tried);
+      DifferentialPair pair = nearestPair(board, settings, pairItems, openEnds, tried);
       if (pair == null) {
         break;
       }
@@ -97,7 +98,7 @@ final class PairReroute {
       RoutingJob job, DifferentialPair pair, List<Integer> pairItems) {
     RoutingBoard board = job.board;
     RoutingBoard copy = board.deepCopy();
-    List<Integer> ownIds = pairItemIds(copy, pairItems, pair);
+    List<Integer> ownIds = pairItemIds(copy, job.routerSettings, pairItems, pair);
     List<Item> own = new ArrayList<>();
     IntBox area = null;
     for (int id : ownIds) {
@@ -210,16 +211,37 @@ final class PairReroute {
     return total;
   }
 
-  /** The ids in pairItems of the copper on the pair's two nets. */
+  /**
+   * The ids in pairItems of the copper on the pair's two nets, and of its ground return vias: the
+   * vias of other nets in pairItems within the return-via reach of one of the pair's own vias.
+   */
   private static List<Integer> pairItemIds(
-      RoutingBoard board, List<Integer> pairItems, DifferentialPair pair) {
+      RoutingBoard board, RouterSettings settings, List<Integer> pairItems, DifferentialPair pair) {
     List<Integer> result = new ArrayList<>();
+    List<Via> ownVias = new ArrayList<>();
     for (int id : pairItems) {
       Item item = board.getItem(id);
       if (item != null
           && (item.containsNet(pair.positiveNet().netNumber)
               || item.containsNet(pair.negativeNet().netNumber))) {
         result.add(id);
+        if (item instanceof Via via) {
+          ownVias.add(via);
+        }
+      }
+    }
+    int reach = PairRouting.returnViaReach(board, settings);
+    if (reach > 0 && !ownVias.isEmpty()) {
+      for (int id : pairItems) {
+        if (board.getItem(id) instanceof Via via && !result.contains(id)) {
+          FloatPoint at = via.getCenter().toFloat();
+          for (Via own : ownVias) {
+            if (own.getCenter().toFloat().distance(at) <= reach) {
+              result.add(id);
+              break;
+            }
+          }
+        }
       }
     }
     return result;
@@ -230,7 +252,11 @@ final class PairReroute {
    * no such pair is left.
    */
   private static DifferentialPair nearestPair(
-      RoutingBoard board, List<Integer> pairItems, List<FloatPoint> openEnds, Set<String> tried) {
+      RoutingBoard board,
+      RouterSettings settings,
+      List<Integer> pairItems,
+      List<FloatPoint> openEnds,
+      Set<String> tried) {
     List<DifferentialPair> pairs = new ArrayList<>(board.rules.differentialPairs.all());
     pairs.sort(Comparator.comparing(DifferentialPair::baseName, String.CASE_INSENSITIVE_ORDER));
     DifferentialPair best = null;
@@ -240,7 +266,7 @@ final class PairReroute {
         continue;
       }
       double distance = Double.POSITIVE_INFINITY;
-      for (int id : pairItemIds(board, pairItems, pair)) {
+      for (int id : pairItemIds(board, settings, pairItems, pair)) {
         IntBox box = board.getItem(id).boundingBox();
         for (FloatPoint end : openEnds) {
           distance = Math.min(distance, distance(box, end));

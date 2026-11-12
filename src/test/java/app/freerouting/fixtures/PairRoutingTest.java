@@ -346,6 +346,72 @@ class PairRoutingTest extends RoutingFixtureTest {
         "the bumps must not violate a clearance");
   }
 
+  /**
+   * Four layers with a GND plane on In1.Cu; the pair's pads are on opposite sides, so it changes
+   * layer through a via pair. With pair_return_via_mm set (default off), each signal via gets a GND
+   * return via on its outer side, within that distance, none between the two signal vias, and
+   * nothing violates a clearance.
+   */
+  @Test
+  void aViaPairGetsGroundReturnViasBesideIt() {
+    RoutingJob job = getRoutingJob("PairReturnVia.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    job.routerSettings.autorouter.pairReturnViaMm = 1.27;
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>());
+    assertTrue(
+        lines.stream().anyMatch(l -> l.contains("routed on layer") && l.contains("via pair")),
+        "the pair must change layer through a via pair: " + lines);
+    String line =
+        lines.stream().filter(l -> l.startsWith("Return vias:")).findFirst().orElseThrow();
+    assertTrue(line.contains("2 of 2 placed"), "both signal vias need one: " + line);
+
+    int ground = job.board.rules.nets.get("GND", 1).netNumber;
+    int netP = job.board.rules.nets.get("D+", 1).netNumber;
+    int netN = job.board.rules.nets.get("D-", 1).netNumber;
+    List<Via> groundVias = new ArrayList<>();
+    FloatPoint p = null;
+    FloatPoint n = null;
+    for (Item item : job.board.getItems()) {
+      if (item instanceof Via via) {
+        if (via.containsNet(ground)) {
+          groundVias.add(via);
+        } else if (via.containsNet(netP)) {
+          p = via.getCenter().toFloat();
+        } else if (via.containsNet(netN)) {
+          n = via.getCenter().toFloat();
+        }
+      }
+    }
+    assertEquals(2, groundVias.size(), "one GND via per signal via");
+    double reach = 1.27 * 10000; // board units are 0.1 um
+    for (Via via : groundVias) {
+      FloatPoint at = via.getCenter().toFloat();
+      assertTrue(
+          Math.min(at.distance(p), at.distance(n)) <= reach,
+          "a return via must sit within 1.27 mm of its signal via: " + at);
+      // Projected on the line from the P via to the N via, it must lie outside the two.
+      double dx = n.x - p.x;
+      double dy = n.y - p.y;
+      double t = ((at.x - p.x) * dx + (at.y - p.y) * dy) / (dx * dx + dy * dy);
+      assertFalse(t > 0 && t < 1, "a return via must not sit between the signal vias: " + at);
+    }
+    assertTrue(
+        new DesignRulesChecker(job.board, new DesignRulesCheckerSettings())
+            .getAllClearanceViolations()
+            .isEmpty(),
+        "the return vias must not violate a clearance");
+
+    RoutingJob off = getRoutingJob("PairReturnVia.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(off);
+    off.routerSettings.autorouter.pairReturnViaMm = -1.0;
+    List<String> offLines =
+        PairRouting.apply(off.routerSettings, off.board, null, new ArrayList<>());
+    assertFalse(offLines.stream().anyMatch(l -> l.startsWith("Return vias")), offLines.toString());
+    assertTrue(
+        off.board.getItems().stream().noneMatch(i -> i instanceof Via && i.containsNet(ground)),
+        "no return vias when they are off");
+  }
+
   @Test
   void aPairNeverRunsInsideThePadRingOfAQuadPackage() {
     // The pair's pins are on the right side of a four-sided pad ring and its other end is to the

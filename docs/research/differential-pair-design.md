@@ -367,6 +367,9 @@ with two gaps, of which only the pair's direct gap fits a 1 mm trace.
 Item 1 below was built the same day: the tuner works out how far each end's breakout leaves the shorter member
 behind and places the bumps from that end of the middle trace, nearest first (`PairSkewEnd.dsn`,
 `lengthBumpsGoNearTheEndThatCausesTheSkew`).
+Item 2 was built too, as `autorouter.pair_return_via_mm`, but is off by default: placed after every pair is
+routed, the return vias still left 13 connections open on CM5_MINIMA against 9 without (`PairReturnVia.dsn`,
+`aViaPairGetsGroundReturnViasBesideIt`).
 
 Queued, in this order. Each gets a small hand-written fixture in `fixtures/` with a `PairRoutingTest` case, so the
 behaviour is pinned by a test, not only by the benchmark boards:

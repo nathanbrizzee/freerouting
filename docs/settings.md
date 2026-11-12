@@ -402,6 +402,19 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       kept.`). A kept try is followed by the pair router's line for each connection of the pair,
       indented, with its new layer, lengths and skew. Default `4`; zero or below turns it off. CLI:
       `--router.autorouter.pair_reroute=<count>`.
+    - **`pair_return_via_mm`**: Ground return vias at the via pairs of differential pairs: the
+      farthest a ground via may sit from its signal via, centre to centre, in millimetres; 1.27
+      (50 mil) is the common rule. Where a pair changes layer, its return current has to change
+      reference plane too, so after every pair is routed, a via of the ground plane's net (a plane
+      named `GND`, else one whose name contains `GND`, using that net class's through via) goes
+      beside each signal via, as close as the clearances allow: on the outer side in line with the
+      pair first, else on either side across it. Nothing goes between the two signal vias, and a
+      via that does not fit within the distance is left out. The return vias are fixed and
+      released with the pair, and move with it when it is re-routed. The pair stage logs `Return
+      vias: N of M placed beside K via pair(s) ...; R had no room.`. Default off (negative): on
+      CM5_MINIMA at 3 passes they left 13 connections open against 9 without, by taking room the
+      other connections need. Turn them on for links above a few GHz (PCIe, USB 3), where they
+      matter most. CLI: `--router.autorouter.pair_return_via_mm=<mm>`.
     - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
       `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces
       and vias connected to it are lifted while the pair is routed from the pad, when they reach no

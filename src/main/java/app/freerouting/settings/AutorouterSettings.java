@@ -367,6 +367,17 @@ public class AutorouterSettings implements Serializable, Cloneable {
   @Schema(description = "Most pairs re-routed as a unit for open connections (0 or below: off)")
   public Integer pairReroute;
 
+  /**
+   * Ground return vias at the via pairs of differential pairs: the farthest a ground via may sit
+   * from its signal via, centre to centre, in millimetres. Where a pair changes layer, a via of the
+   * ground plane's net is placed on the outer side of each signal via, as close as the clearances
+   * allow; 1.27 is the common rule. Default off (negative): on a crowded board they take room the
+   * other connections need. Needs a plane named GND (or containing GND).
+   */
+  @SerializedName("pair_return_via_mm")
+  @Schema(description = "Farthest ground return via from a pair's signal via, in mm (-1: off)")
+  public Double pairReturnViaMm;
+
   @SerializedName("pair_fanout")
   @Schema(description = "Existing fanout on pair pins: 'replace' (default) or 'keep'")
   public String pairFanout;

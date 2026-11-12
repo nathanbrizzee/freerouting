@@ -123,6 +123,7 @@ public final class PairRouting {
       removeAll(board, rings);
       board.clearTransientAutorouteState();
     }
+    String returnLine = placeReturnVias(board, settings, pairs, itemIds);
     for (String line : lines) {
       if (line.contains("): routed on layer")) {
         connections++;
@@ -141,6 +142,9 @@ public final class PairRouting {
             + " of "
             + attempted
             + " pair connection(s) routed as coupled traces.");
+    if (returnLine != null) {
+      lines.add(returnLine);
+    }
     return lines;
   }
 
@@ -162,6 +166,10 @@ public final class PairRouting {
     } finally {
       removeAll(board, rings);
       board.clearTransientAutorouteState();
+    }
+    String returnLine = placeReturnVias(board, settings, List.of(pair), itemIds);
+    if (returnLine != null) {
+      lines.add(returnLine);
     }
     return lines;
   }
@@ -1424,8 +1432,7 @@ public final class PairRouting {
    * The skew a pair may keep, in board units, or -1 for no tuning: the pair's own rule when the
    * board gives one, else {@code pair_max_skew_um} (negative: off).
    */
-  static int skewTarget(
-      RoutingBoard board, RouterSettings settings, DifferentialPair pair) {
+  static int skewTarget(RoutingBoard board, RouterSettings settings, DifferentialPair pair) {
     if (pair.maxSkew() > 0) {
       return (int) Math.round(pair.maxSkew());
     }
@@ -1563,6 +1570,218 @@ public final class PairRouting {
               (int) Math.round(from.y + d[1] * p[k][0] + ny * p[k][1]));
     }
     return result;
+  }
+
+  /** Default of {@code pair_return_via_mm}: off, as they cost completion on a crowded board. */
+  private static final double DEFAULT_RETURN_VIA_MM = -1;
+
+  /**
+   * The farthest a ground return via may sit from its signal via, centre to centre, in board units,
+   * or -1 when return vias are off ({@code pair_return_via_mm} negative).
+   */
+  static int returnViaReach(RoutingBoard board, RouterSettings settings) {
+    Double mm = settings.autorouter != null ? settings.autorouter.pairReturnViaMm : null;
+    if (mm == null) {
+      mm = DEFAULT_RETURN_VIA_MM;
+    }
+    return mm < 0 ? -1 : umToBoard(board, mm * 1000);
+  }
+
+  /**
+   * The ground net for return vias: the net of a plane (conduction area) named GND, else of a plane
+   * whose name contains GND; 0 when the board has no such plane.
+   */
+  private static int groundNet(RoutingBoard board) {
+    int contains = 0;
+    for (var area : board.getConductionAreas()) {
+      if (area.netCount() == 0) {
+        continue;
+      }
+      Net net = board.rules.nets.get(area.getNetNumber(0));
+      if (net == null) {
+        continue;
+      }
+      String name = net.name.toUpperCase(Locale.ROOT);
+      if (name.equals("GND")) {
+        return net.netNumber;
+      }
+      if (contains == 0 && name.contains("GND")) {
+        contains = net.netNumber;
+      }
+    }
+    return contains;
+  }
+
+  /**
+   * Ground return vias beside the via pairs of the routed pairs, placed after every pair is routed
+   * so they never take the room a later pair needs: where a pair changes layer, its return current
+   * needs a way between the reference planes too. For each signal via of a via pair, one ground via
+   * as close as the clearances allow, tried on the outer side in line with the pair first, then on
+   * either side across the pair; never between the two signal vias, and never farther than {@code
+   * pair_return_via_mm}. The vias are fixed with the pair copper and their ids join {@code
+   * itemIds}. Returns the line to log, or null when no pair has a via pair or return vias are off.
+   */
+  private static String placeReturnVias(
+      RoutingBoard board,
+      RouterSettings settings,
+      List<DifferentialPair> pairs,
+      List<Integer> itemIds) {
+    int reach = returnViaReach(board, settings);
+    if (reach < 0) {
+      return null;
+    }
+    // The via pairs: each P via of the placed copper with the nearest N via of its pair.
+    record ViaPair(Via p, Via n) {}
+    List<ViaPair> viaPairs = new ArrayList<>();
+    for (DifferentialPair pair : pairs) {
+      List<Via> p = new ArrayList<>();
+      List<Via> n = new ArrayList<>();
+      for (int id : itemIds) {
+        if (board.getItem(id) instanceof Via via) {
+          if (via.containsNet(pair.positiveNet().netNumber)) {
+            p.add(via);
+          } else if (via.containsNet(pair.negativeNet().netNumber)) {
+            n.add(via);
+          }
+        }
+      }
+      for (Via pv : p) {
+        Via nearest = null;
+        double best = Double.POSITIVE_INFINITY;
+        for (Via nv : n) {
+          double d = pv.getCenter().toFloat().distance(nv.getCenter().toFloat());
+          if (d < best) {
+            best = d;
+            nearest = nv;
+          }
+        }
+        if (nearest != null) {
+          viaPairs.add(new ViaPair(pv, nearest));
+        }
+      }
+    }
+    if (viaPairs.isEmpty()) {
+      return null;
+    }
+    int ground = groundNet(board);
+    if (ground <= 0) {
+      return "Return vias: none, the board has no ground plane (a plane named GND).";
+    }
+    Net groundNet = board.rules.nets.get(ground);
+    int last = board.getLayerCount() - 1;
+    ViaInfo via = groundNet.getNetClass() != null ? viaFor(groundNet.getNetClass(), 0, last) : null;
+    if (via == null) {
+      return "Return vias: none, the ground net has no through via.";
+    }
+    int groundRadius = viaRadius(via, 0, last);
+    int allowance = ExitStubs.copperAllowance(board, settings);
+    int wanted = 0;
+    int done = 0;
+    int tooFar = 0;
+    double needed = 0;
+    for (ViaPair vp : viaPairs) {
+      for (Via signal : List.of(vp.p(), vp.n())) {
+        wanted++;
+        Via other = signal == vp.p() ? vp.n() : vp.p();
+        int signalRadius = 0;
+        int clearance = 0;
+        for (int layer = signal.firstLayer(); layer <= signal.lastLayer(); layer++) {
+          var shape = signal.getPadstack().getShape(layer);
+          if (shape != null) {
+            signalRadius = Math.max(signalRadius, (int) Math.ceil(shape.maxWidth() / 2));
+          }
+          clearance =
+              Math.max(
+                  clearance,
+                  board.rules.clearanceMatrix.getValue(
+                      via.getClearanceClassIndex(), signal.clearanceClassIndex(), layer, false));
+        }
+        double distance = signalRadius + groundRadius + clearance + allowance + 2;
+        if (distance > reach) {
+          tooFar++;
+          needed = Math.max(needed, distance);
+          continue;
+        }
+        IntPoint centre = (IntPoint) signal.getCenter();
+        double[] out = unit((IntPoint) other.getCenter(), centre);
+        double[][] directions = {out, {-out[1], out[0]}, {out[1], -out[0]}};
+        for (double[] d : directions) {
+          IntPoint at =
+              new IntPoint(
+                  (int) Math.round(centre.x + d[0] * distance),
+                  (int) Math.round(centre.y + d[1] * distance));
+          if (!clearReturnVia(board, via, at, ground, allowance)) {
+            continue;
+          }
+          Via inserted =
+              board.insertVia(
+                  via.getPadstack(),
+                  at,
+                  new int[] {ground},
+                  via.getClearanceClassIndex(),
+                  FixedState.UNFIXED,
+                  true);
+          if (inserted == null) {
+            continue;
+          }
+          if (inserted.clearanceViolations().isEmpty()) {
+            inserted.setFixedState(PLACED_STATE);
+            itemIds.add(inserted.getId());
+            done++;
+            break;
+          }
+          board.removeItem(inserted);
+        }
+      }
+    }
+    board.clearTransientAutorouteState();
+    String line =
+        "Return vias: "
+            + done
+            + " of "
+            + wanted
+            + " placed beside "
+            + viaPairs.size()
+            + " via pair(s) of the differential pairs";
+    if (tooFar > 0) {
+      line +=
+          String.format(
+              Locale.ROOT,
+              "; %d would sit %.2f mm from the signal via, over pair_return_via_mm",
+              tooFar,
+              toMm(board, needed));
+    }
+    if (done + tooFar < wanted) {
+      line += "; " + (wanted - done - tooFar) + " had no room";
+    }
+    return line + ".";
+  }
+
+  /** Whether a via of the ground net fits at {@code at} on every layer it spans. */
+  private static boolean clearReturnVia(
+      RoutingBoard board, ViaInfo via, IntPoint at, int net, int allowance) {
+    Padstack padstack = via.getPadstack();
+    int[] holder = new int[1];
+    for (int layer = padstack.fromLayer(); layer <= padstack.toLayer(); layer++) {
+      var shape = padstack.getShape(layer);
+      if (shape == null) {
+        continue;
+      }
+      if (ExitStubs.slack(
+              board,
+              at,
+              at,
+              layer,
+              (int) Math.ceil(shape.maxWidth() / 2),
+              net,
+              via.getClearanceClassIndex(),
+              allowance,
+              holder)
+          < 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Inserts the breakout traces and via pair of one end. */
