@@ -57,13 +57,60 @@ class ClosedInPinTest {
     assertEquals(before, job.thread.searchSteps(), "the second pass must not search for W2 again");
   }
 
+  /**
+   * The same ring on the top layer of a two-layer board, the pins SMD on top. With vias in pads, a
+   * via of {@code %d} um diameter at W2's centre either fits inside the ring (0.65 mm from the
+   * centre to the keepouts) or does not.
+   */
+  private static final String TWO_LAYER_DSN =
+      """
+      (pcb closed_in_2 (resolution um 10) (unit um)
+        (structure (layer top (type signal)) (layer bottom (type signal))
+          (boundary (rect pcb 0 0 40000 25000))
+          (keepout (rect top 28000 16000 32000 17350))
+          (keepout (rect top 28000 18650 32000 20000))
+          (keepout (rect top 28000 16000 29350 20000))
+          (keepout (rect top 30650 16000 32000 20000))
+          (via V)
+          (rule (width 200) (clearance 200)))
+        (placement (component C
+          (place W0 14000 18000 front 0) (place W1 4000 8000 front 0)
+          (place W2 30000 18000 front 0)))
+        (library (image C (pin P 1 0 0))
+          (padstack P (shape (circle top 800)) (attach off))
+          (padstack V (shape (circle top %1$d)) (shape (circle bottom %1$d)) (attach off)))
+        (network (net WALLED (pins W0-1 W1-1 W2-1))
+          (class c "" WALLED (circuit (use_via V)) (rule (width 200) (clearance 200)))))
+      """;
+
   @Test
-  void withViasInPadsThePinIsNotSkipped() {
+  void withViasInPadsAPinWhereAViaFitsIsNotSkipped() {
+    RoutingJob job = jobFor(TWO_LAYER_DSN.formatted(600), true);
+    BatchAutorouter router =
+        BatchAutorouter.createAttempt(job, job.board, job.routerSettings, false);
+    router.autoroutePass(1);
+    assertTrue(router.closedInPins.isEmpty(), "a via in the pad can still leave it");
+  }
+
+  @Test
+  void withViasInPadsAPinWhereNoViaFitsIsSkipped() {
+    RoutingJob job = jobFor(TWO_LAYER_DSN.formatted(1400), true);
+    BatchAutorouter router =
+        BatchAutorouter.createAttempt(job, job.board, job.routerSettings, false);
+    router.autoroutePass(1);
+    Pin w2 = pin(job.board, "W2");
+    assertTrue(
+        router.closedInPins.contains(w2.getId()), "no via fits in the ring, so W2 is closed");
+  }
+
+  @Test
+  void withViasInPadsAOneLayerPinIsStillSkipped() {
+    // No via can be placed on a one-layer board, so vias in pads change nothing.
     RoutingJob job = jobFor(true);
     BatchAutorouter router =
         BatchAutorouter.createAttempt(job, job.board, job.routerSettings, false);
     router.autoroutePass(1);
-    assertTrue(router.closedInPins.isEmpty(), "a via in the pad could still leave it");
+    assertEquals(1, router.closedInPins.size(), "W2 is closed in");
   }
 
   private static Pin pin(RoutingBoard board, String component) {
@@ -76,9 +123,13 @@ class ClosedInPinTest {
   }
 
   private static RoutingJob jobFor(boolean viaInPad) {
+    return jobFor(DSN, viaInPad);
+  }
+
+  private static RoutingJob jobFor(String dsn, boolean viaInPad) {
     BoardReadResult result =
         DsnReader.readBoard(
-            new ByteArrayInputStream(DSN.getBytes(StandardCharsets.UTF_8)), null, null, "closed");
+            new ByteArrayInputStream(dsn.getBytes(StandardCharsets.UTF_8)), null, null, "closed");
     assertInstanceOf(BoardReadResult.Success.class, result);
     RoutingBoard board = (RoutingBoard) ((BoardReadResult.Success) result).board();
     RouterSettings settings = new DefaultSettings().getSettings();

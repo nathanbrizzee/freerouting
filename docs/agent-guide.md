@@ -185,8 +185,10 @@ reading, in the order they appear:
 - `Pair <name>: the members are on different layers (P on ..., N on ...)` A pair whose members
   are still on different layers after the repair, which breaks impedance matching.
 - `Pin <part>-<pin> is closed in by copper the router does not move (pads, fixed copper, keepouts);
-  its later searches are skipped.` No trace can leave that pin, even with every route ripped; the
-  connection stays open. Move the part or the fixed copper, or fan the pin out by hand.
+  its later searches are skipped.` No trace can leave that pin, even with every route ripped, and
+  with vias in pads (`via_in_pad`, which a board with its own vias in pads turns on) no via of its
+  net fits in the pad either; the connection stays open. Move the part or the fixed copper, or fan
+  the pin out by hand.
 - `Routing fallback ...` lines: when the pass loop stalls, other strategies are tried
   (`fanout-retry`, `short-escape`, `direct-first`, `open-escape`, `no-fanout`, seeds), and
   `Routing fallback chose '<name>'` says which board was kept.

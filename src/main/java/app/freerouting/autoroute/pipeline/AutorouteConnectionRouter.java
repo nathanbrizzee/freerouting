@@ -10,11 +10,15 @@ import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
+import app.freerouting.core.library.Padstack;
 import app.freerouting.datastructures.TimeLimit;
 import app.freerouting.drc.OpenConnections;
+import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.DifferentialPair;
 import app.freerouting.rules.Net;
+import app.freerouting.rules.ViaInfo;
+import app.freerouting.rules.ViaRule;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -338,20 +342,23 @@ final class AutorouteConnectionRouter {
 
   /**
    * After a failed search: an end that is a lone pin no trace can leave even with every route
-   * around it ripped is remembered, and its later searches are skipped. Not with vias in pads,
-   * which can leave a pin the trace stubs cannot, and not in the optimizer.
+   * around it ripped is remembered, and its later searches are skipped. With vias in pads, only
+   * when no via of its net fits in the pad either, since such a via can leave a pin the trace stubs
+   * cannot. Not in the optimizer.
    */
   private void noteClosedIn(Set<Item> end, int netNo) {
     // An optimizer candidate's router lives for one item, so it would only log.
     if (router.isOptimizerAutorouter
         || end.size() != 1
         || !(end.iterator().next() instanceof Pin pin)
-        || router.closedInPins.contains(pin.getId())
-        || (router.settings.autorouter != null
-            && Boolean.TRUE.equals(router.settings.autorouter.viaInPad))) {
+        || router.closedInPins.contains(pin.getId())) {
       return;
     }
-    if (OpenConnections.closedForTheRouter(router.board, pin, netNo)) {
+    boolean viaInPad =
+        router.settings.autorouter != null
+            && Boolean.TRUE.equals(router.settings.autorouter.viaInPad);
+    if (OpenConnections.closedForTheRouter(router.board, pin, netNo)
+        && !(viaInPad && viaFitsInPad(pin, netNo))) {
       router.closedInPins.add(pin.getId());
       String line =
           "Pin "
@@ -366,6 +373,48 @@ final class AutorouteConnectionRouter {
         FRLogger.info(line);
       }
     }
+  }
+
+  /**
+   * Whether a via of the net's class fits at the centre of the pin, clear of everything but its own
+   * net on every layer it spans: with vias in pads, such a via can leave a pin no trace stub can.
+   */
+  private boolean viaFitsInPad(Pin pin, int netNo) {
+    Net net = router.board.rules.nets.get(netNo);
+    if (net == null || net.getNetClass() == null || !(pin.getCenter() instanceof IntPoint at)) {
+      return true;
+    }
+    ViaRule rule = net.getNetClass().getViaRule();
+    int allowance = ExitStubs.copperAllowance(router.board, router.settings);
+    int[] holder = new int[1];
+    for (int i = 0; i < rule.viaCount(); i++) {
+      ViaInfo via = rule.getVia(i);
+      Padstack padstack = via.getPadstack();
+      if (padstack.fromLayer() > pin.lastLayer() || padstack.toLayer() < pin.firstLayer()) {
+        continue;
+      }
+      boolean fits = true;
+      for (int layer = padstack.fromLayer(); fits && layer <= padstack.toLayer(); layer++) {
+        var shape = padstack.getShape(layer);
+        fits =
+            shape == null
+                || ExitStubs.slack(
+                        router.board,
+                        at,
+                        at,
+                        layer,
+                        (int) Math.ceil(shape.maxWidth() / 2),
+                        netNo,
+                        via.getClearanceClassIndex(),
+                        allowance,
+                        holder)
+                    >= 0;
+      }
+      if (fits) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private AutorouteAttemptResult retryConnectionNecked(
