@@ -42,7 +42,7 @@ final class AutorouteConnectionRouter {
 
   /**
    * The search limit for one connection: the step budget when it is set, otherwise the time limit;
-   * both double with each pass.
+   * both double with each pass. In the optimizer, the optimizer's own step cap bounds every search.
    */
   private TimeLimit connectionLimit(int ripupPassNo) {
     double factor = Math.pow(2, ripupPassNo - 1);
@@ -50,6 +50,17 @@ final class AutorouteConnectionRouter {
         router.settings.autorouter != null
             ? router.settings.autorouter.maxSearchStepsPerConnection
             : null;
+    Long optimizerCap =
+        router.isOptimizerAutorouter && router.settings.optimizer != null
+            ? router.settings.optimizer.maxSearchStepsPerConnection
+            : null;
+    if (optimizerCap != null && optimizerCap > 0) {
+      long budget =
+          steps != null && steps > 0
+              ? (long) Math.min(steps * factor, Long.MAX_VALUE)
+              : optimizerCap;
+      return TimeLimit.ofSteps(Math.min(budget, optimizerCap));
+    }
     if (steps != null && steps > 0) {
       return TimeLimit.ofSteps((long) Math.min(steps * factor, Long.MAX_VALUE));
     }

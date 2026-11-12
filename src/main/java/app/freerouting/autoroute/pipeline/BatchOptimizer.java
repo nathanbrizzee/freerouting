@@ -208,7 +208,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
     // Guard 4: All vias mandatory layer transitions
     if (this.board != null && areAllViasMandatoryLayerTransitions(this.board)) {
       return "all vias on the board are mandatory layer transitions between SMD pins that cannot be"
-                 + " eliminated";
+          + " eliminated";
     }
 
     return null;
@@ -802,6 +802,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
               return t;
             });
 
+    // Every candidate of this pass stops at its next check once the pass ends, however it ends,
+    // so none keeps searching on a worker thread after its result can no longer be used.
+    CandidateStop candidateStop = new CandidateStop(this.thread);
     CandidateResult winningCandidate = null;
     int chunkSize = Math.max(threadPoolSize * 4, 8);
     boolean stoppedOrTimedOut = false;
@@ -847,7 +850,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
                       this.minCumulativeTraceLength,
                       withPreferredDirections,
                       this.useIncreasedRipupCosts,
-                      this.thread,
+                      candidateStop,
                       this.deadlineMs,
                       this.workerBoardStates,
                       chunkBaselineMetrics)));
@@ -905,6 +908,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
         }
       }
     } finally {
+      candidateStop.cancel();
       pool.shutdownNow();
     }
 
@@ -1164,6 +1168,45 @@ public final class BatchOptimizer extends NamedAlgorithm {
       }
       this.workerBoard = null;
       this.baselineBoard = null;
+    }
+  }
+
+  /**
+   * The stop signal of the candidates of one optimizer pass: the job's stop, or the end of the
+   * pass. The maze search polls it, so a candidate still running when the pass ends (an early stop,
+   * a timeout, an out-of-memory stop) gives up at its next check instead of searching on. Never
+   * started as a thread; the search steps go to the job's thread as before.
+   */
+  static final class CandidateStop extends StoppableThread {
+    private final StoppableThread job;
+    private volatile boolean cancelled;
+
+    CandidateStop(StoppableThread job) {
+      this.job = job;
+    }
+
+    void cancel() {
+      this.cancelled = true;
+    }
+
+    @Override
+    protected void threadAction() {}
+
+    @Override
+    public boolean isStopRequested() {
+      return this.cancelled || (this.job != null && this.job.isStopRequested());
+    }
+
+    @Override
+    public boolean isStopAutoRouterRequested() {
+      return this.cancelled || (this.job != null && this.job.isStopAutoRouterRequested());
+    }
+
+    @Override
+    public void addSearchSteps(long steps) {
+      if (this.job != null) {
+        this.job.addSearchSteps(steps);
+      }
     }
   }
 

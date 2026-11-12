@@ -81,6 +81,16 @@ public class OptimizerSettings implements Serializable, Cloneable {
   @SerializedName("max_autoroute_passes")
   public Integer maxAutoroutePasses;
 
+  /**
+   * The most maze search steps one connection may use while the optimizer re-routes a ripped item,
+   * in every one of its passes (it does not double per pass as the router's budget does). The
+   * optimizer re-routes connections that are already routed, so a search far longer than the
+   * router's own searches rarely gives a shorter route, and each running candidate holds its search
+   * rooms until it ends. A value of zero or below uses the router's budget.
+   */
+  @SerializedName("max_search_steps_per_connection")
+  public Long maxSearchStepsPerConnection;
+
   // -------------------------------
 
   /**

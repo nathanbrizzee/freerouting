@@ -635,6 +635,13 @@ Configures the optional route-optimization stage that runs after autorouting.
   the optimizer reroutes traces more readily than it moves vias. Default `0.6`.
 - **`max_autoroute_passes`**: Routing passes the optimizer may use to route one ripped item and
   its connected items again. Default `6`.
+- **`max_search_steps_per_connection`**: Maze search steps one connection may use while the
+  optimizer re-routes a ripped item, the same in every one of its passes. Default `1000000`; the
+  router's own budget (`autorouter.max_search_steps_per_connection`, 10 million doubling each pass)
+  let one candidate search for minutes, and six such candidates at once, each holding its search
+  rooms on its own board copy, ran a 356 x 165 mm board out of heap. The longest routed search on
+  the benchmark boards took about 635,000 steps. Zero or below uses the router's budget. CLI:
+  `--router.optimizer.max_search_steps_per_connection=<steps>`.
 - **`board_update_strategy`**: How the optimizer applies its changes. `GLOBAL_OPTIMAL` works out
   the candidate updates and applies the single best one, and is the only strategy left; `-us`
   with any value selects it.

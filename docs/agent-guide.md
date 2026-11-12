@@ -63,7 +63,10 @@ Rules that save trouble:
   `thorough` profile and boards of tens of thousands of connections need 4 to 6 GB each, and
   eight such runs on a 31 GB machine were killed by the system. Four at a time is a safe
   ceiling there. `-Xmx` is a Java flag and goes before `-jar`. If a run ends with
-  `OutOfMemoryError` in the log, raise it, or run fewer boards at once.
+  `OutOfMemoryError` in the log, raise it, or run fewer boards at once. If the optimizer runs out
+  of memory, the log says `The optimizer ran out of memory in pass #N and was stopped` and the
+  routed board is still saved; lower `--router.optimizer.max_threads` or
+  `--router.optimizer.max_search_steps_per_connection` (default 1000000), or use `-mt 0`.
 - The log file goes to the platform's log folder (Windows `%LOCALAPPDATA%\freerouting\logs`,
   macOS `~/Library/Logs/freerouting`, Linux `~/.local/state/freerouting/logs`). Capture standard
   output too (`> board.log 2>&1`); it carries the same lines.
