@@ -42,6 +42,12 @@ final class PairReroute {
   /** The open connections nearest the pair that are routed on the copy however far they are. */
   private static final int NEAREST = 8;
 
+  /**
+   * The most open connections the stage works on: with more, the router has not converged and a
+   * pair is rarely what holds the rest back, and every try would cost routing passes on a copy.
+   */
+  static final int MAX_OPEN = 20;
+
   /** Routing passes for the open connections while the pair is off the board. */
   private static final int PASSES = 4;
 
@@ -61,6 +67,16 @@ final class PairReroute {
       return lines;
     }
     if (stopped(job)) {
+      return lines;
+    }
+    int open = job.board.routingLedger().incompleteCount();
+    if (open > MAX_OPEN) {
+      lines.add(
+          "Pair re-route skipped: "
+              + open
+              + " connections are open, more than "
+              + MAX_OPEN
+              + "; it is meant for the last few a pair blocks.");
       return lines;
     }
     // The pass loop ends with its own stop request set; the passes here and the pair stage would

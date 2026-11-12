@@ -399,7 +399,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       (`pair_max_skew_um` or the pair's rule) or no worse than before, fewer connections are open
       and no clearance violation is new. Each try logs `Pair re-route <pair>: N open before, M after with
       the pair coupled again, K new violation(s); kept.` (or `not better, the board before it is
-      kept.`). A kept try is followed by the pair router's line for each connection of the pair,
+      kept.`). With more than 20 connections open the stage is skipped (`Pair re-route skipped: N
+      connections are open, more than 20`): the router has not converged and a pair is rarely what
+      holds the rest back. A kept try is followed by the pair router's line for each connection of the pair,
       indented, with its new layer, lengths and skew. Default `4`; zero or below turns it off. CLI:
       `--router.autorouter.pair_reroute=<count>`.
     - **`pair_return_via_mm`**: Ground return vias at the via pairs of differential pairs: the
