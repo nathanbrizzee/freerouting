@@ -1419,7 +1419,7 @@ public final class PairRouting {
    * The skew a pair may keep, in board units, or -1 for no tuning: the pair's own rule when the
    * board gives one, else {@code pair_max_skew_um} (negative: off).
    */
-  private static int skewTarget(
+  static int skewTarget(
       RoutingBoard board, RouterSettings settings, DifferentialPair pair) {
     if (pair.maxSkew() > 0) {
       return (int) Math.round(pair.maxSkew());
@@ -1677,7 +1677,7 @@ public final class PairRouting {
     return ok;
   }
 
-  private static double toMm(RoutingBoard board, double boardUnits) {
+  static double toMm(RoutingBoard board, double boardUnits) {
     return Unit.scale(
         boardUnits / Math.max(1, board.communication.resolution),
         board.communication.unit,

@@ -169,7 +169,8 @@ reading, in the order they appear:
 - `Pair re-route <pair>: N open before, M after with the pair coupled again, K new violation(s);
   kept.` After routing, when connections are still open, the pair nearest them was ripped and
   routed again around them; the pair's new route lines follow, indented. `not better, the board
-  before it is kept.` means the try changed nothing.
+  before it is kept.` means the try changed nothing; `coupled again but S mm skew, over the target`
+  means the pair could not be length matched again, so it kept its old route.
 - `Pin <part>-<pin> is closed in by copper the router does not move (pads, fixed copper, keepouts);
   its later searches are skipped.` No trace can leave that pin, even with every route ripped; the
   connection stays open. Move the part or the fixed copper, or fan the pin out by hand.

@@ -395,8 +395,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       off a copy of the board, the open connections are routed on the copy (up to 4 passes, the
       pair's own nets held back), and the pair is routed again around them by the pair router, so
       both members stay on one layer and are length matched as before. The copy replaces the board
-      only when the pair is coupled again on every connection, fewer connections are open and no
-      clearance violation is new. Each try logs `Pair re-route <pair>: N open before, M after with
+      only when the pair is coupled again on every connection, its skew is within the target
+      (`pair_max_skew_um` or the pair's rule) or no worse than before, fewer connections are open
+      and no clearance violation is new. Each try logs `Pair re-route <pair>: N open before, M after with
       the pair coupled again, K new violation(s); kept.` (or `not better, the board before it is
       kept.`). A kept try is followed by the pair router's line for each connection of the pair,
       indented, with its new layer, lengths and skew. Default `4`; zero or below turns it off. CLI:

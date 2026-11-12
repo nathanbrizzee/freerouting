@@ -130,8 +130,17 @@ final class PairReroute {
     boolean coupled = connections > 0 && routed == connections;
     RoutingFallback.Outcome after =
         RoutingFallback.Outcome.of("pair re-route", copy, job.routerSettings, baseline);
+    // The pair must still be length matched: within its skew target, or no worse than before.
+    int target = PairRouting.skewTarget(copy, settings, pair);
+    double skewBefore = skew(board, pair);
+    double skewAfter = skew(copy, pair);
+    boolean matched = target < 0 || skewAfter <= Math.max(target, skewBefore) + 1;
     boolean better =
-        coupled && after.unrouted < before.unrouted && after.newOrChanged == 0 && !stopped(job);
+        coupled
+            && matched
+            && after.unrouted < before.unrouted
+            && after.newOrChanged == 0
+            && !stopped(job);
     String line =
         String.format(
             Locale.US,
@@ -139,7 +148,15 @@ final class PairReroute {
             pair.baseName(),
             before.unrouted,
             after.unrouted,
-            coupled ? "coupled again" : "not coupled again (" + summary(pairLines) + ")",
+            !coupled
+                ? "not coupled again (" + summary(pairLines) + ")"
+                : matched
+                    ? "coupled again"
+                    : String.format(
+                        Locale.US,
+                        "coupled again but %.3f mm skew, over the target and the %.3f mm before",
+                        PairRouting.toMm(copy, skewAfter),
+                        PairRouting.toMm(copy, skewBefore)),
             after.newOrChanged,
             better ? "kept." : "not better, the board before it is kept.");
     List<String> result = new ArrayList<>();
@@ -155,6 +172,22 @@ final class PairReroute {
       }
     }
     return result;
+  }
+
+  /** The difference of the total trace lengths of the pair's two nets, in board units. */
+  private static double skew(RoutingBoard board, DifferentialPair pair) {
+    return Math.abs(
+        length(board, pair.positiveNet().netNumber) - length(board, pair.negativeNet().netNumber));
+  }
+
+  private static double length(RoutingBoard board, int net) {
+    double total = 0;
+    for (Item item : board.getConnectableItems(net)) {
+      if (item instanceof app.freerouting.board.model.items.Trace trace) {
+        total += trace.getLength();
+      }
+    }
+    return total;
   }
 
   /** The ids in pairItems of the copper on the pair's two nets. */
