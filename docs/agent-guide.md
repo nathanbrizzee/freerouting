@@ -149,7 +149,10 @@ reading, in the order they appear:
 
 - `Router profile: <name>.` The profile in effect.
 - `Design Warning: Board has N pre-existing clearance violation(s)` The design's own violations,
-  before routing. Freerouting does not fix them; they stay in the final count.
+  before routing. Freerouting does not fix them; they stay in the final count. A line `fixed
+  traces/vias inside keepouts` counts copper held from the run (fixed) under a keepout: usually a
+  keepout drawn for the nets being routed over vias of held nets. Nothing routes into either, so
+  these do not hold the run back.
 - `Fanout pass #N ... completed ... with A SMD pins fanouted, B not routed` Escape traces and vias
   from SMD pins, before routing.
 - `Auto-routing pass #N on board '...' was completed in T seconds with score S (U unrouted and V

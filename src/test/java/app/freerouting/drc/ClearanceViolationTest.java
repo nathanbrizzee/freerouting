@@ -91,6 +91,20 @@ class ClearanceViolationTest {
   }
 
   @Test
+  void aFixedViaInsideAKeepoutHasItsOwnCategory() {
+    Via fixedVia = mock(Via.class);
+    when(fixedVia.isRoutable()).thenReturn(false);
+    ObstacleArea keepout = mock(ObstacleArea.class);
+    when(keepout.isRoutable()).thenReturn(false);
+
+    ClearanceViolation violation = new ClearanceViolation(fixedVia, keepout, null, 0, 100.0, 50.0);
+    assertTrue(violation.isUnfixable());
+    assertEquals(ClearanceViolation.Category.FIXED_ROUTE_IN_KEEPOUT, violation.getCategory());
+    ClearanceViolation reversed = new ClearanceViolation(keepout, fixedVia, null, 0, 100.0, 50.0);
+    assertEquals(ClearanceViolation.Category.FIXED_ROUTE_IN_KEEPOUT, reversed.getCategory());
+  }
+
+  @Test
   void testRoutableTraceIsPotentiallyFixable() {
     Pin pin = mock(Pin.class);
     when(pin.isRoutable()).thenReturn(false);

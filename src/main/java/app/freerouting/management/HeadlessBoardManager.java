@@ -1437,6 +1437,7 @@ public class HeadlessBoardManager implements BoardManager {
     List<ClearanceViolation> pinToPin = new ArrayList<>();
     List<ClearanceViolation> pinToOutline = new ArrayList<>();
     List<ClearanceViolation> fixedRoute = new ArrayList<>();
+    List<ClearanceViolation> fixedInKeepout = new ArrayList<>();
     List<ClearanceViolation> otherUnfixable = new ArrayList<>();
     List<ClearanceViolation> potentiallyFixable = new ArrayList<>();
 
@@ -1445,6 +1446,7 @@ public class HeadlessBoardManager implements BoardManager {
         case PIN_TO_PIN -> pinToPin.add(v);
         case PIN_TO_OUTLINE_OR_KEEPOUT -> pinToOutline.add(v);
         case FIXED_ROUTE -> fixedRoute.add(v);
+        case FIXED_ROUTE_IN_KEEPOUT -> fixedInKeepout.add(v);
         case OTHER_UNFIXABLE -> otherUnfixable.add(v);
         case POTENTIALLY_FIXABLE -> potentiallyFixable.add(v);
         default -> {}
@@ -1452,7 +1454,11 @@ public class HeadlessBoardManager implements BoardManager {
     }
 
     int totalUnfixable =
-        pinToPin.size() + pinToOutline.size() + fixedRoute.size() + otherUnfixable.size();
+        pinToPin.size()
+            + pinToOutline.size()
+            + fixedRoute.size()
+            + fixedInKeepout.size()
+            + otherUnfixable.size();
 
     StringBuilder sb = new StringBuilder();
     sb.append(
@@ -1470,6 +1476,13 @@ public class HeadlessBoardManager implements BoardManager {
       appendCategoryViolations(
           sb, board, "pin-to-keepout / board-outline clearance violations", pinToOutline);
       appendCategoryViolations(sb, board, "fixed trace/via clearance violations", fixedRoute);
+      appendCategoryViolations(
+          sb,
+          board,
+          "fixed traces/vias inside keepouts (copper held from this run under a keepout drawn"
+              + " for the routed nets; nothing routes into either, so they do not hold the run"
+              + " back)",
+          fixedInKeepout);
       appendCategoryViolations(sb, board, "other unfixable clearance violations", otherUnfixable);
     } else {
       sb.append(String.format("  - 0 unfixable violation(s)%n"));

@@ -7,8 +7,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import app.freerouting.board.facade.RoutingBoard;
+import app.freerouting.board.model.items.ObstacleArea;
 import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.BoardOutline;
 import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.board.model.structure.Layer;
@@ -107,6 +109,27 @@ class PreExistingClearanceViolationsWarningTest {
         warning.contains(
             "Resolving these 9 unfixable violation(s) is the responsibility of the board author"
                 + " in their EDA tool (e.g. KiCad)."));
+  }
+
+  @Test
+  void fixedViasInsideKeepoutsGetTheirOwnLine() {
+    RoutingBoard board = createTestBoard();
+    List<ClearanceViolation> violations = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      Via fixedVia = mock(Via.class);
+      when(fixedVia.isRoutable()).thenReturn(false);
+      when(fixedVia.getId()).thenReturn(500 + i);
+      ObstacleArea keepout = mock(ObstacleArea.class);
+      when(keepout.isRoutable()).thenReturn(false);
+      when(keepout.getId()).thenReturn(600 + i);
+      violations.add(new ClearanceViolation(fixedVia, keepout, null, 0, 100.0, 50.0));
+    }
+
+    String warning =
+        HeadlessBoardManager.formatPreExistingClearanceViolationsWarning(board, violations);
+
+    assertTrue(warning.contains("3 fixed traces/vias inside keepouts"), warning);
+    assertTrue(!warning.contains("fixed trace/via clearance violations"), warning);
   }
 
   @Test

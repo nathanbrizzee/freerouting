@@ -23,6 +23,11 @@ public class ClearanceViolation implements ItemInfoPrinter.Printable {
     PIN_TO_PIN,
     PIN_TO_OUTLINE_OR_KEEPOUT,
     FIXED_ROUTE,
+    /**
+     * A fixed trace or via inside a keepout: copper of nets held from the run under a keepout drawn
+     * for the nets being routed. Nothing routes into either, so it does not hold the run back.
+     */
+    FIXED_ROUTE_IN_KEEPOUT,
     OTHER_UNFIXABLE,
     POTENTIALLY_FIXABLE
   }
@@ -103,6 +108,10 @@ public class ClearanceViolation implements ItemInfoPrinter.Printable {
     }
     boolean firstIsRoute = this.firstItem instanceof Trace || this.firstItem instanceof Via;
     boolean secondIsRoute = this.secondItem instanceof Trace || this.secondItem instanceof Via;
+    if ((firstIsRoute && this.secondItem instanceof ObstacleArea)
+        || (secondIsRoute && this.firstItem instanceof ObstacleArea)) {
+      return Category.FIXED_ROUTE_IN_KEEPOUT;
+    }
     if (firstIsRoute || secondIsRoute) {
       return Category.FIXED_ROUTE;
     }
