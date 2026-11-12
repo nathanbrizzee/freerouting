@@ -232,6 +232,12 @@ public final class RoutingPipeline {
       }
     }
 
+    if (routerEnabled && this.job.board != null) {
+      for (String line : PairRouting.layerSplits(this.job.board)) {
+        this.job.logInfo(line);
+      }
+    }
+
     this.job.board.finishAutoroute();
     for (StageListener listener : this.stageListeners) {
       listener.afterRouting(this.autorouter);

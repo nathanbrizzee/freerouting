@@ -378,6 +378,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
   @Schema(description = "Farthest ground return via from a pair's signal via, in mm (-1: off)")
   public Double pairReturnViaMm;
 
+  /**
+   * Passes in which a member of a differential pair that the pair router left to the ordinary
+   * router keeps to the layers its partner's traces already use, so both members share layers and
+   * reference planes. Later passes may use any layer. Default 2; negative turns the hold off.
+   */
+  @SerializedName("pair_layer_hold_passes")
+  @Schema(description = "Passes an uncoupled pair member keeps to its partner's layers (-1: off)")
+  public Integer pairLayerHoldPasses;
+
   @SerializedName("pair_fanout")
   @Schema(description = "Existing fanout on pair pins: 'replace' (default) or 'keep'")
   public String pairFanout;

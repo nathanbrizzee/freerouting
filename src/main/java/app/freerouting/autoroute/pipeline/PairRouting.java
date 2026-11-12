@@ -303,6 +303,54 @@ public final class PairRouting {
     return keepouts;
   }
 
+  /**
+   * One line per differential pair whose two members' traces ended on different layers (a pair the
+   * pair router left to the ordinary router), naming the layers of each; impedance matching needs
+   * both on the same layers. Empty when every pair shares its layers.
+   */
+  public static List<String> layerSplits(RoutingBoard board) {
+    List<String> lines = new ArrayList<>();
+    List<DifferentialPair> pairs = new ArrayList<>(board.rules.differentialPairs.all());
+    pairs.sort(Comparator.comparing(DifferentialPair::baseName, String.CASE_INSENSITIVE_ORDER));
+    for (DifferentialPair pair : pairs) {
+      Set<Integer> p = traceLayers(board, pair.positiveNet().netNumber);
+      Set<Integer> n = traceLayers(board, pair.negativeNet().netNumber);
+      if (!p.isEmpty() && !n.isEmpty() && !p.equals(n)) {
+        lines.add(
+            "Pair "
+                + pair.baseName()
+                + ": the members are on different layers ("
+                + pair.positiveNet().name
+                + " on "
+                + layerNames(board, p)
+                + ", "
+                + pair.negativeNet().name
+                + " on "
+                + layerNames(board, n)
+                + "); impedance matching needs both on the same layers.");
+      }
+    }
+    return lines;
+  }
+
+  private static Set<Integer> traceLayers(RoutingBoard board, int net) {
+    Set<Integer> layers = new java.util.TreeSet<>();
+    for (Item item : board.getConnectableItems(net)) {
+      if (item instanceof app.freerouting.board.model.items.Trace trace) {
+        layers.add(trace.getLayer());
+      }
+    }
+    return layers;
+  }
+
+  private static String layerNames(RoutingBoard board, Set<Integer> layers) {
+    List<String> names = new ArrayList<>();
+    for (int layer : layers) {
+      names.add(board.layerStructure.layers[layer].name);
+    }
+    return String.join(", ", names);
+  }
+
   /** Lets the rip-up and the optimizer work on the pair copper again. */
   public static String release(RoutingBoard board, Collection<Integer> itemIds) {
     int released = 0;

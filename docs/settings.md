@@ -415,6 +415,14 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       CM5_MINIMA at 3 passes they left 13 connections open against 9 without, by taking room the
       other connections need. Turn them on for links above a few GHz (PCIe, USB 3), where they
       matter most. CLI: `--router.autorouter.pair_return_via_mm=<mm>`.
+    - **`pair_layer_hold_passes`**: Passes in which a member of a differential pair that the pair
+      router left to the ordinary router (a polarity swap, no corridor) searches only on the layers
+      its partner's traces already use, so the two members share layers and reference planes, as
+      impedance matching needs. Later passes may use any layer, so the hold never leaves a
+      connection open for good. After routing, each pair whose members still ended on different
+      layers gets a line `Pair <name>: the members are on different layers (P on ..., N on ...)`.
+      Default `2`; negative turns the hold off (the report stays). CLI:
+      `--router.autorouter.pair_layer_hold_passes=<passes>`.
     - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
       `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces
       and vias connected to it are lifted while the pair is routed from the pad, when they reach no

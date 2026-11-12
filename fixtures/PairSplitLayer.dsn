@@ -1,0 +1,30 @@
+(pcb pair_split_layer
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (layer B.Cu (type signal))
+    (boundary (rect pcb 0 0 50000 30000))
+    (keepout (rect F.Cu 15000 8000 25500 22000))
+    (via "Via[0-1]_600:300_um")
+    (rule (width 150) (clearance 150)))
+  (placement
+    (component Conn
+      (place J1 25000 3000 front 0)
+      (place U1 25000 27000 front 0)))
+  (library
+    (image Conn
+      (pin Th 1 1000 0)
+      (pin Th 2 -1000 0))
+    (padstack Th (shape (circle F.Cu 800)) (shape (circle B.Cu 800)) (attach off))
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off)))
+  (network
+    (net D+ (pins J1-1 U1-1))
+    (net D- (pins J1-2 U1-2))
+    (class kicad_default "" D+ D-
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 150) (clearance 150)))
+    (pair (nets D+ D- (gap 200))))
+  (wiring
+    (wire (path F.Cu 150 26000 3000 26000 27000) (net D+))))

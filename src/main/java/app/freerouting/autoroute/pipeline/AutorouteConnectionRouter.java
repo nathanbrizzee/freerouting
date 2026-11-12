@@ -9,9 +9,11 @@ import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Pin;
+import app.freerouting.board.model.items.Trace;
 import app.freerouting.datastructures.TimeLimit;
 import app.freerouting.drc.OpenConnections;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.rules.DifferentialPair;
 import app.freerouting.rules.Net;
 import java.util.List;
 import java.util.Map;
@@ -92,6 +94,7 @@ final class AutorouteConnectionRouter {
       autorouteControl.netsNotToRip = router.ripupMemory.netsNotToRip(routeNetNo);
       autorouteControl.removeUnconnectedVias = router.isRemoveUnconnectedVias();
       router.applySearchCosts(autorouteControl);
+      holdToPartnerLayers(autorouteControl, routeNetNo, ripupPassNo);
 
       Set<Item> unconnectedSet = item.getUnconnectedSet(routeNetNo);
       if (unconnectedSet.isEmpty()) {
@@ -255,6 +258,49 @@ final class AutorouteConnectionRouter {
     } catch (Exception e) {
       FRLogger.error("Error during routing passes", e);
       return new AutorouteAttemptResult(AutorouteAttemptState.FAILED);
+    }
+  }
+
+  /**
+   * A member of a differential pair the pair router left to this router keeps to the layers its
+   * partner's traces already use, in the first {@code pair_layer_hold_passes} passes, so the two
+   * members stay on the same layers and reference planes, as impedance matching needs. Later passes
+   * search on every layer, so the hold never costs a connection for good.
+   */
+  private void holdToPartnerLayers(AutorouteControl control, int netNo, int passNo) {
+    Integer holdPasses =
+        router.settings.autorouter != null ? router.settings.autorouter.pairLayerHoldPasses : null;
+    if (holdPasses == null || passNo > holdPasses || router.isOptimizerAutorouter) {
+      return;
+    }
+    DifferentialPair pair = router.board.rules.differentialPairs.findForNet(netNo);
+    if (pair == null) {
+      return;
+    }
+    Net partner = pair.getPartner(router.board.rules.nets.get(netNo));
+    if (partner == null) {
+      return;
+    }
+    boolean[] used = new boolean[control.layerCount];
+    boolean any = false;
+    for (Item item : router.board.getConnectableItems(partner.netNumber)) {
+      if (item instanceof Trace trace) {
+        used[trace.getLayer()] = true;
+        any = true;
+      }
+    }
+    if (!any) {
+      return;
+    }
+    boolean left = false;
+    for (int i = 0; i < control.layerCount; i++) {
+      left |= control.layerActive[i] && used[i];
+    }
+    if (!left) {
+      return;
+    }
+    for (int i = 0; i < control.layerCount; i++) {
+      control.layerActive[i] &= used[i];
     }
   }
 

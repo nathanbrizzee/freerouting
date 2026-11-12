@@ -412,6 +412,43 @@ class PairRoutingTest extends RoutingFixtureTest {
         "no return vias when they are off");
   }
 
+  /**
+   * D+ is already wired on F.Cu, so the pair router leaves the pair to the ordinary router. A
+   * keepout on F.Cu lies across the straight way of D-, which makes B.Cu the cheap way; held to its
+   * partner's layers, D- goes round on F.Cu. Without the hold it takes B.Cu and the split is
+   * reported.
+   */
+  @Test
+  void anUncoupledMemberKeepsToItsPartnersLayers() {
+    RoutingJob held = getRoutingJob("PairSplitLayer.dsn", new TestingSettings());
+    held.routerSettings.autorouter.maxPasses = 2;
+    held.routerSettings.optimizer.enabled = false;
+    runRoutingJob(held);
+    int netP = held.board.rules.nets.get("D+", 1).netNumber;
+    int netN = held.board.rules.nets.get("D-", 1).netNumber;
+    DesignRulesChecker drc = new DesignRulesChecker(held.board, new DesignRulesCheckerSettings());
+    drc.calculateAllIncompletes();
+    assertEquals(0, drc.getIncompleteCount(), "D- must be routed");
+    assertTrue(
+        tracesOf(held, netN).stream().allMatch(t -> t.getLayer() == 0),
+        "D- must stay on F.Cu with D+");
+    assertTrue(PairRouting.layerSplits(held.board).isEmpty(), "no split to report");
+
+    RoutingJob free = getRoutingJob("PairSplitLayer.dsn", new TestingSettings());
+    free.routerSettings.autorouter.maxPasses = 2;
+    free.routerSettings.optimizer.enabled = false;
+    free.routerSettings.autorouter.pairLayerHoldPasses = -1;
+    runRoutingJob(free);
+    assertTrue(
+        tracesOf(free, netN).stream().anyMatch(t -> t.getLayer() == 1),
+        "the fixture must make B.Cu the cheap way for D- when it is not held");
+    List<String> splits = PairRouting.layerSplits(free.board);
+    assertEquals(1, splits.size(), "the split must be reported: " + splits);
+    assertTrue(
+        splits.get(0).contains("D+ on F.Cu") && splits.get(0).contains("B.Cu"), splits.get(0));
+    assertTrue(netP > 0);
+  }
+
   @Test
   void aPairNeverRunsInsideThePadRingOfAQuadPackage() {
     // The pair's pins are on the right side of a four-sided pad ring and its other end is to the

@@ -370,6 +370,8 @@ behind and places the bumps from that end of the middle trace, nearest first (`P
 Item 2 was built too, as `autorouter.pair_return_via_mm`, but is off by default: placed after every pair is
 routed, the return vias still left 13 connections open on CM5_MINIMA against 9 without (`PairReturnVia.dsn`,
 `aViaPairGetsGroundReturnViasBesideIt`).
+Item 3 was built as `autorouter.pair_layer_hold_passes` (default 2) with a report of the pairs that still split
+(`PairSplitLayer.dsn`, `anUncoupledMemberKeepsToItsPartnersLayers`).
 
 Queued, in this order. Each gets a small hand-written fixture in `fixtures/` with a `PairRoutingTest` case, so the
 behaviour is pinned by a test, not only by the benchmark boards:
