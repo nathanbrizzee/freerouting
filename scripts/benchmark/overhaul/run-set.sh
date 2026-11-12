@@ -28,9 +28,14 @@ for b in "${boards[@]}"; do
   [ -f "$dsn" ] || dsn=${b}   # allow a full path to a DSN outside fixtures
   name=$(basename "$dsn" .dsn)
   start=$(date +%s.%N)
-  /usr/bin/time -o "$out/$name.time" -f "%U %S" java -Xmx"$heap" -jar "$jar" -de "$dsn" -do "$out/$name.ses" --gui.enabled=false \
-    --router.job_timeout="$timeout" --router.result_json="$out/$name.json" ${EXTRA:-} \
-    > "$out/$name.log" 2>&1 || true
+  cmd=(java -Xmx"$heap" -jar "$jar" -de "$dsn" -do "$out/$name.ses" --gui.enabled=false
+    --router.job_timeout="$timeout" --router.result_json="$out/$name.json" ${EXTRA:-})
+  if [ -x /usr/bin/time ]; then
+    /usr/bin/time -o "$out/$name.time" -f "%U %S" "${cmd[@]}" > "$out/$name.log" 2>&1 || true
+  else
+    # Git Bash on Windows has no /usr/bin/time; bash's own time keyword gives the same two numbers.
+    { TIMEFORMAT='%U %S'; time "${cmd[@]}" > "$out/$name.log" 2>&1 || true; } 2> "$out/$name.time"
+  fi
   end=$(date +%s.%N)
   python3 -I "$here/summarize.py" "$name" "$start" "$end" "$out/$name.json" "$out/$name.ses" "$out/$name.time" >> "$summary"
   tail -1 "$summary"
