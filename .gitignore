@@ -62,3 +62,12 @@ scripts/benchmark/results/.benchmarks.json.*.tmp
 # Python bytecode and cache
 __pycache__/
 *.pyc
+
+# Generated logs: JVM crash reports and replay files, and run logs in the repository root.
+# (Reference logs under fixtures/ are tracked on purpose.)
+hs_err_pid*.log
+replay_pid*.log
+/*.log
+# Benchmark harness output and the downloaded or exported board set.
+/scripts/benchmark/overhaul/runs/
+/scripts/benchmark/overhaul/boards/
