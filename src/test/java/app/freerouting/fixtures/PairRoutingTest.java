@@ -309,6 +309,24 @@ class PairRoutingTest extends RoutingFixtureTest {
   }
 
   /**
+   * The same pair with {@code (skew 2000)} in its rule (2 mm in this file's units): the pair's own
+   * target overrides the 0.1 mm global one, so the skew the bend makes is kept without bumps, and
+   * the line names the target.
+   */
+  @Test
+  void aPairsOwnSkewRuleOverridesTheGlobalTarget() {
+    RoutingJob job = getRoutingJob("PairSkewRule.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    assertEquals(100.0, job.routerSettings.autorouter.pairMaxSkewUm, 1e-9);
+    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>());
+    String line =
+        lines.stream().filter(l -> l.contains("routed on layer")).findFirst().orElseThrow();
+    assertTrue(line.contains("(target 2.000 mm)"), "the pair's own target: " + line);
+    assertFalse(line.contains("tuned"), "within its own target, no bumps: " + line);
+    assertTrue(skewOf(line) > 0.1 && skewOf(line) <= 2.0, "the bend's skew stays: " + line);
+  }
+
+  /**
    * The pads at J1 sit side by side across the route; at U1 the D- pad sits 1.2 mm further along,
    * so D+ comes up short at the U1 end. The bumps that make up for it go near that end (TI
    * SPRACP4A: as close to the mismatched end as possible), not wherever the run starts.

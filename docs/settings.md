@@ -336,7 +336,8 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       meets the design rules, so the search does not close them in. Default `true`.
     - **`differential_pairs`**: Routes differential pairs as two coupled traces before the rest of
       the board: `auto` (default) or `off`. A pair is declared in the DSN with
-      `(pair (nets P N (gap g)))` inside `(network ...)` (KiCad's exporter writes none; run
+      `(pair (nets P N (gap g) (skew s)))` inside `(network ...)`, `gap` and `skew` optional and in
+      the file's units (KiCad's exporter writes none; run
       `scripts/kicad/dsn_pairs.py board.kicad_pcb in.dsn out.dsn` to add them, with each net class's
       differential pair gap and width, before routing) or found by net name (`_P/_N`, `D+/D-`, `_DP/_DM` and the
       like: a `_` or `.` must come before the suffix, so a bare `ETH_RXP`/`ETH_RXN` is not found; the
@@ -363,11 +364,13 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       with a pin of each member is an end, so a pair that runs through a series part (a connector,
       an ESD diode) has one connection per hop; a part with several pins on a member joins at its
       closest positive and negative pin, and the rest are left to the ordinary router. Log lines:
-      `Declared differential pair: <name> (<P>, <N>), gap G (DSN units)` per pair read from the DSN,
+      `Declared differential pair: <name> (<P>, <N>), gap G (DSN units), skew S (DSN units)` (or
+      `, skew from pair_max_skew_um`) per pair read from the DSN,
       `Auto-detected differential pair: ...` per pair found by name, `Pair <name>: no declared gap,
       using the clearance if larger` where the gap comes from `pair_gap_um` or the clearance,
       `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and, per
-      connection, `Pair <name> (...): routed on layer L[ with N via pair(s)], lengths A and B mm, skew S mm`. When it
+      connection, `Pair <name> (...): routed on layer L[ with N via pair(s)], lengths A and B mm, skew S mm
+      (target T mm)` (`(no target)` with tuning off). When it
       helps: boards with USB, Ethernet, MIPI or LVDS pairs that must keep their gap. It costs
       little on a board without pairs. CLI: `--router.autorouter.differential_pairs=off`.
     - **`pair_gap_um`**: The gap in micrometers, edge to edge, between the members of a pair that
@@ -384,8 +387,11 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       when the bends alone cause the skew. Each bump and then the whole trace is checked
       against the board's clearances, and a pair with no room keeps its skew. The routed line ends
       with `, tuned from S mm` or `, not tuned: no room for length bumps beside the shorter member`.
-      A skew rule of the pair in the board file takes precedence. Set it to the skew allowance of
-      the interface (USB 2.0 and 100 Mbit Ethernet allow millimetres, USB 3 and PCIe about 0.1 mm).
+      A pair's own `(skew s)` in its `(pair (nets P N ...))` rule takes precedence, in the DSN's
+      units (with `(unit um)`, micrometres), so one board can keep USB tight and let Ethernet loose;
+      `skew` is a Freerouting extension of the Specctra pair descriptor, which other tools skip.
+      Set it to the skew allowance of the interface (USB 2.0 and 100 Mbit Ethernet allow
+      millimetres, USB 3 and PCIe about 0.1 mm).
       CLI: `--router.autorouter.pair_max_skew_um=<um>`.
     - **`pair_max_detour`**: The longest coupled route a pair connection may take, as a multiple of
       the direct distance (with 45 degree bends) between the middles of its two pad pairs. Default
@@ -411,7 +417,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       only when the pair is coupled again on every connection, its skew is within the target
       (`pair_max_skew_um` or the pair's rule) or no worse than before, fewer connections are open
       and no clearance violation is new. Each try logs `Pair re-route <pair>: N open before, M after with
-      the pair coupled again, K new violation(s); kept.` (or `not better, the board before it is
+      the pair coupled again, target T mm, K new violation(s); kept.` (or `not better, the board before it is
       kept.`). With more than 20 connections open the stage is skipped (`Pair re-route skipped: N
       connections are open, more than 20`): the router has not converged and a pair is rarely what
       holds the rest back. A kept try is followed by the pair router's line for each connection of the pair,

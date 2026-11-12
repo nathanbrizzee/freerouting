@@ -110,8 +110,8 @@ Options worth knowing (all `--router.` on the command line):
 | `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `standard`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
-| `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g)))`) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
-| `autorouter.pair_max_skew_um=<um>` | Largest length difference within a routed pair; the shorter member gets length bumps until it matches. Default 100 um, -1 off. | Set it to the interface's skew allowance. `, tuned from S mm` on a routed line means bumps were added; `not tuned: no room ...` means the skew stayed. |
+| `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g) (skew s)))`, both optional, in the file's units) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
+| `autorouter.pair_max_skew_um=<um>` | Largest length difference within a routed pair; the shorter member gets length bumps until it matches. Default 100 um, -1 off. A pair's own `(skew s)` in the DSN overrides it for that pair. | Set it to the interface's skew allowance; give a looser pair (Ethernet) its own `(skew s)` instead of raising it for all. `, tuned from S mm` on a routed line means bumps were added; `not tuned: no room ...` means the skew stayed. |
 | `autorouter.pair_max_detour=<ratio>` | Longest coupled route of a pair as a multiple of the direct distance between its ends. Default 2.5, below 1 off. A route over 1.5 times is compared with the other layers; the shortest wins, and if it is still over the limit the pair goes to the ordinary router. | A pair whose line says `lengths 45 and 43 mm` for pads 10 mm apart. The line then ends `N times the direct distance, the shortest of the layers tried`, or `left to the router: the shortest coupled route is ...`. |
 | `autorouter.pair_reroute=<count>` | Most pairs ripped and routed again as a unit, nearest the open connections first, when connections are still open after routing. Default 4, -1 off. A try is kept only when the pair stays coupled, fewer connections are open and no violation is new. | Connections left open beside a coupled pair. Each try logs `Pair re-route <pair>: N open before, M after ...; kept.` or `not better, the board before it is kept.` |
 | `autorouter.pair_return_via_mm=<mm>` | Ground return vias beside each via pair of a coupled pair, at most this far from each signal via (1.27 is the common rule). Default off. Needs a plane named GND (or containing GND). | High-speed links (PCIe, USB 3) on a board with room: the pair stage logs `Return vias: N of M placed ...`. They cost completion on a crowded board (CM5: 13 open against 9). |
@@ -172,16 +172,17 @@ reading, in the order they appear:
 - `Auto-routing pass #N: Search work: ...` and `... Rip-up: ...` How much searching the pass did,
   how much failed, and which net pairs rip each other.
 - `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and one `Pair
-  <name> (<pin> to <pin>): routed on layer L, lengths A and B mm, skew S mm` or `... left to the
+  <name> (<pin> to <pin>): routed on layer L, lengths A and B mm, skew S mm (target T mm)` or `... left to the
   router: <reason>` line per pair connection. A routed line ends with `, tuned from S mm` when the shorter
   member got length bumps, and with `, replacing N fanout item(s)` when the pair took the place of
   fanout already on its pins. With `pair_return_via_mm` set, `Return vias: N of M placed beside K
   via pair(s) ...` follows.
-- `Pair re-route <pair>: N open before, M after with the pair coupled again, K new violation(s);
+- `Pair re-route <pair>: N open before, M after with the pair coupled again, target T mm, K new violation(s);
   kept.` After routing, when connections are still open, the pair nearest them was ripped and
   routed again around them; the pair's new route lines follow, indented. `not better, the board
-  before it is kept.` means the try changed nothing; `coupled again but S mm skew, over the target`
-  means the pair could not be length matched again, so it kept its old route.
+  before it is kept.` means the try changed nothing; `coupled again but S mm skew, over the T mm
+  target` means the pair could not be length matched again, so it kept its old route; a kept try
+  says `coupled again, target T mm`.
 - `Pair <name>: <member> moved to the layers of <partner> (<layers>): N open before, M after, now
   on <layers>, K new violation(s); kept.` The members of a pair had ended on different layers and
   one was routed again on the other's layers; `not better, the board before it is kept.` when that

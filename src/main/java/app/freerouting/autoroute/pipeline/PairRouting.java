@@ -1451,12 +1451,13 @@ public final class PairRouting {
     String text =
         String.format(
             Locale.ROOT,
-            "on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm%s",
+            "on layer %d%s, lengths %.3f and %.3f mm, skew %.3f mm (%s)%s",
             layer,
             viaPairs == 0 ? "" : " with " + viaPairs + " via pair(s)",
             toMm(board, lengthP),
             toMm(board, lengthN),
             toMm(board, Math.abs(lengthP - lengthN)),
+            skewTargetText(board, g.skewTarget()),
             tuning);
     double length = Math.max(lengthP, lengthN) + viaPairs * VIA_PAIR_LENGTH_PENALTY * g.spacing();
     if (length > acceptWithin) {
@@ -1489,6 +1490,13 @@ public final class PairRouting {
       um = DEFAULT_MAX_SKEW_UM;
     }
     return um < 0 ? -1 : umToBoard(board, um);
+  }
+
+  /** The skew target for a log line: {@code target 1.270 mm}, or {@code no target} when off. */
+  static String skewTargetText(RoutingBoard board, int target) {
+    return target < 0
+        ? "no target"
+        : String.format(Locale.ROOT, "target %.3f mm", toMm(board, target));
   }
 
   /** Extra length of a 45 degree bump per unit of its height: two legs of sqrt(2) for 2 along. */

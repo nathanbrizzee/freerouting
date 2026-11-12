@@ -1580,12 +1580,17 @@ public class Network extends ScopeKeyword {
     return true;
   }
 
-  /** A {@code (pair (nets P N (gap g)))} rule: the nets and the coupled gap in DSN units. */
-  private record PairRule(String positive, String negative, Double gap) {}
+  /**
+   * A {@code (pair (nets P N (gap g) (skew s)))} rule: the nets, the coupled gap and the length
+   * difference the members may keep, both in DSN units ({@code null} when the rule gives none).
+   */
+  private record PairRule(String positive, String negative, Double gap, Double skew) {}
 
   /**
-   * Reads a {@code (pair ...)} scope. Only the net pair descriptor {@code (nets P N [(gap g)])} is
-   * used; wire pairs and bundles are skipped.
+   * Reads a {@code (pair ...)} scope. Only the net pair descriptor {@code (nets P N [(gap g)]
+   * [(skew s)])} is used; wire pairs and bundles are skipped. {@code skew} is a Freerouting
+   * extension of the descriptor: the largest length difference of the two members, in the file's
+   * units.
    */
   private static void readPairScope(IJFlexScanner scanner, List<PairRule> pairRules) {
     Object previous = null;
@@ -1615,6 +1620,7 @@ public class Network extends ScopeKeyword {
     String positive = scanner.nextString();
     String negative = scanner.nextString();
     Double gap = null;
+    Double skew = null;
     Object previous = null;
     for (; ; ) {
       Object token;
@@ -1657,6 +1663,12 @@ public class Network extends ScopeKeyword {
               skipScope(scanner);
             }
           }
+        } else if (Keyword.matches(token, Keyword.SKEW)) {
+          Double value = scanner.nextDouble();
+          if (value != null && value > 0) {
+            skew = value;
+          }
+          skipScope(scanner);
         } else {
           skipScope(scanner);
         }
@@ -1664,7 +1676,7 @@ public class Network extends ScopeKeyword {
       previous = token;
     }
     if (positive != null && negative != null && !positive.isEmpty() && !negative.isEmpty()) {
-      pairRules.add(new PairRule(positive, negative, gap));
+      pairRules.add(new PairRule(positive, negative, gap, skew));
     }
   }
 
@@ -1686,10 +1698,12 @@ public class Network extends ScopeKeyword {
       }
       double gap =
           rule.gap() != null ? scopeParameter.coordinateTransform.dsnToBoard(rule.gap()) : 0.0;
+      double skew =
+          rule.skew() != null ? scopeParameter.coordinateTransform.dsnToBoard(rule.skew()) : 0.0;
       String baseName = commonBaseName(positive.name, negative.name);
       try {
         board.rules.differentialPairs.add(
-            new app.freerouting.rules.DifferentialPair(positive, negative, baseName, gap, 0.0));
+            new app.freerouting.rules.DifferentialPair(positive, negative, baseName, gap, skew));
         FRLogger.info(
             "Declared differential pair: "
                 + baseName
@@ -1698,7 +1712,10 @@ public class Network extends ScopeKeyword {
                 + ", "
                 + negative.name
                 + ")"
-                + (rule.gap() != null ? ", gap " + rule.gap() + " (DSN units)" : ", no gap"));
+                + (rule.gap() != null ? ", gap " + rule.gap() + " (DSN units)" : ", no gap")
+                + (rule.skew() != null
+                    ? ", skew " + rule.skew() + " (DSN units)"
+                    : ", skew from pair_max_skew_um"));
       } catch (IllegalArgumentException e) {
         FRLogger.warn("Network.insert_differential_pairs: " + e.getMessage());
       }

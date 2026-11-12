@@ -50,6 +50,7 @@ public class Keyword {
   public static final Keyword KEEPOUT = new Keyword("keepout");
   public static final Keyword NETS = new Keyword("nets");
   public static final Keyword PAIR = new Keyword("pair");
+  public static final Keyword SKEW = new Keyword("skew");
   public static final Keyword LAYER = new Keyword("layer");
   public static final Keyword LAYER_RULE = new Keyword("layer_rule");
   public static final Keyword LENGTH = new Keyword("length");

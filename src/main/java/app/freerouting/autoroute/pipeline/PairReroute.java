@@ -188,11 +188,13 @@ final class PairReroute {
             !coupled
                 ? "not coupled again (" + summary(pairLines) + ")"
                 : matched
-                    ? "coupled again"
+                    ? "coupled again, " + PairRouting.skewTargetText(copy, target)
                     : String.format(
                         Locale.US,
-                        "coupled again but %.3f mm skew, over the target and the %.3f mm before",
+                        "coupled again but %.3f mm skew, over the %.3f mm target and the %.3f mm"
+                            + " before",
                         PairRouting.toMm(copy, skewAfter),
+                        PairRouting.toMm(copy, target),
                         PairRouting.toMm(copy, skewBefore)),
             after.newOrChanged,
             better ? "kept." : "not better, the board before it is kept.");
