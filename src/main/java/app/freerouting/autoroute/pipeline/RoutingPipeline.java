@@ -232,6 +232,13 @@ public final class RoutingPipeline {
       }
     }
 
+    // A pair whose members ended on different layers: one member moves to the other's layers.
+    if (routerEnabled && this.job.board != null && !this.job.thread.isStopRequested()) {
+      for (String line : PairLayerRepair.run(this.job)) {
+        this.job.logInfo(line);
+      }
+    }
+
     if (routerEnabled && this.job.board != null) {
       for (String line : PairRouting.layerSplits(this.job.board)) {
         this.job.logInfo(line);

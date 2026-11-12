@@ -272,26 +272,39 @@ final class AutorouteConnectionRouter {
    * A member of a differential pair the pair router left to this router keeps to the layers its
    * partner's traces already use, in the first {@code pair_layer_hold_passes} passes, so the two
    * members stay on the same layers and reference planes, as impedance matching needs. Later passes
-   * search on every layer, so the hold never costs a connection for good.
+   * search on every layer, so the hold never costs a connection for good. The optimizer holds in
+   * every pass: a candidate is kept only when no connection is lost, so the hold costs it none, and
+   * it must not move a member away from its partner.
    */
   private void holdToPartnerLayers(AutorouteControl control, int netNo, int passNo) {
     Integer holdPasses =
         router.settings.autorouter != null ? router.settings.autorouter.pairLayerHoldPasses : null;
-    if (holdPasses == null || passNo > holdPasses || router.isOptimizerAutorouter) {
+    if (holdPasses == null
+        || holdPasses < 0
+        || (passNo > holdPasses && !router.isOptimizerAutorouter)) {
       return;
     }
-    DifferentialPair pair = router.board.rules.differentialPairs.findForNet(netNo);
+    holdToPartnerLayers(router.board, control.layerActive, netNo);
+  }
+
+  /**
+   * When {@code netNo} is a member of a differential pair whose partner has traces, narrows {@code
+   * layerActive} to the partner's trace layers, unless that would leave no layer. Shared by the
+   * maze router and the grid finisher, so neither puts a member on a layer its partner never uses.
+   */
+  static void holdToPartnerLayers(RoutingBoard board, boolean[] layerActive, int netNo) {
+    DifferentialPair pair = board.rules.differentialPairs.findForNet(netNo);
     if (pair == null) {
       return;
     }
-    Net partner = pair.getPartner(router.board.rules.nets.get(netNo));
+    Net partner = pair.getPartner(board.rules.nets.get(netNo));
     if (partner == null) {
       return;
     }
-    boolean[] used = new boolean[control.layerCount];
+    boolean[] used = new boolean[layerActive.length];
     boolean any = false;
-    for (Item item : router.board.getConnectableItems(partner.netNumber)) {
-      if (item instanceof Trace trace) {
+    for (Item item : board.getConnectableItems(partner.netNumber)) {
+      if (item instanceof Trace trace && trace.getLayer() < used.length) {
         used[trace.getLayer()] = true;
         any = true;
       }
@@ -300,14 +313,14 @@ final class AutorouteConnectionRouter {
       return;
     }
     boolean left = false;
-    for (int i = 0; i < control.layerCount; i++) {
-      left |= control.layerActive[i] && used[i];
+    for (int i = 0; i < layerActive.length; i++) {
+      left |= layerActive[i] && used[i];
     }
     if (!left) {
       return;
     }
-    for (int i = 0; i < control.layerCount; i++) {
-      control.layerActive[i] &= used[i];
+    for (int i = 0; i < layerActive.length; i++) {
+      layerActive[i] &= used[i];
     }
   }
 

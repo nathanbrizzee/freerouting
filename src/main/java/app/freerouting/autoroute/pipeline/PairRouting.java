@@ -333,7 +333,7 @@ public final class PairRouting {
     return lines;
   }
 
-  private static Set<Integer> traceLayers(RoutingBoard board, int net) {
+  static Set<Integer> traceLayers(RoutingBoard board, int net) {
     Set<Integer> layers = new java.util.TreeSet<>();
     for (Item item : board.getConnectableItems(net)) {
       if (item instanceof app.freerouting.board.model.items.Trace trace) {
@@ -343,7 +343,7 @@ public final class PairRouting {
     return layers;
   }
 
-  private static String layerNames(RoutingBoard board, Set<Integer> layers) {
+  static String layerNames(RoutingBoard board, Set<Integer> layers) {
     List<String> names = new ArrayList<>();
     for (int layer : layers) {
       names.add(board.layerStructure.layers[layer].name);

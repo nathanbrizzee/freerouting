@@ -421,9 +421,17 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       router left to the ordinary router (a polarity swap, no corridor) searches only on the layers
       its partner's traces already use, so the two members share layers and reference planes, as
       impedance matching needs. Later passes may use any layer, so the hold never leaves a
-      connection open for good. After routing, each pair whose members still ended on different
-      layers gets a line `Pair <name>: the members are on different layers (P on ..., N on ...)`.
-      Default `2`; negative turns the hold off (the report stays). CLI:
+      connection open for good. The optimizer holds in all of its passes, so it never moves a
+      member off its partner's layers. After the routing stage, each pair whose members ended on
+      different layers is repaired: on a copy of the board, the member with layers its partner
+      lacks is lifted and routed again on the partner's layers only, with the connections it rips
+      routed again too. The copy is kept only when the members then share their layers, no more
+      connections are open and no clearance violation is new. Each try logs `Pair <name>: <member>
+      moved to the layers of <partner> (<layers>): N open before, M after, now on <layers>, K new
+      violation(s); kept.` (or `not better, the board before it is kept.`). Each pair whose
+      members are still on different layers then gets a line `Pair <name>: the members are on
+      different layers (P on ..., N on ...)`. Default `2`; `0` holds only in the optimizer and the
+      repair; negative turns the hold and the repair off (the report stays). CLI:
       `--router.autorouter.pair_layer_hold_passes=<passes>`.
     - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
       `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces

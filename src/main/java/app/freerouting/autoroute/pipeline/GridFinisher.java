@@ -416,6 +416,11 @@ final class GridFinisher {
       this.fromCorner = swap ? b : a;
       this.toCorner = swap ? a : b;
       this.ctrl = new AutorouteControl(board, net, settings);
+      // A differential pair member keeps to its partner's layers, as in the maze passes.
+      Integer hold = settings.autorouter != null ? settings.autorouter.pairLayerHoldPasses : null;
+      if (hold != null && hold >= 0) {
+        AutorouteConnectionRouter.holdToPartnerLayers(board, ctrl.layerActive, net);
+      }
       for (int layer = 0; layer < ctrl.layerCount; layer++) {
         if (ctrl.layerActive[layer]) {
           layers.add(layer);

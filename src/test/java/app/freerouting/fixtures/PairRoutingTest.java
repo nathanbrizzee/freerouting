@@ -449,6 +449,27 @@ class PairRoutingTest extends RoutingFixtureTest {
     assertTrue(netP > 0);
   }
 
+  /**
+   * With no hold in the passes D- takes B.Cu as above; the layer repair after the routing stage
+   * then moves it onto D+'s layer, F.Cu, and the board stays complete.
+   */
+  @Test
+  void aSplitPairIsMovedOntoOneMembersLayersAfterRouting() {
+    RoutingJob job = getRoutingJob("PairSplitLayer.dsn", new TestingSettings());
+    job.routerSettings.autorouter.maxPasses = 2;
+    job.routerSettings.optimizer.enabled = false;
+    job.routerSettings.autorouter.pairLayerHoldPasses = 0;
+    runRoutingJob(job);
+    int netN = job.board.rules.nets.get("D-", 1).netNumber;
+    DesignRulesChecker drc = new DesignRulesChecker(job.board, new DesignRulesCheckerSettings());
+    drc.calculateAllIncompletes();
+    assertEquals(0, drc.getIncompleteCount(), "D- must stay routed");
+    assertTrue(
+        tracesOf(job, netN).stream().allMatch(t -> t.getLayer() == 0),
+        "D- must be moved onto F.Cu with D+");
+    assertTrue(PairRouting.layerSplits(job.board).isEmpty(), "no split left to report");
+  }
+
   @Test
   void aPairNeverRunsInsideThePadRingOfAQuadPackage() {
     // The pair's pins are on the right side of a four-sided pad ring and its other end is to the
