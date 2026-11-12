@@ -356,6 +356,17 @@ public class AutorouterSettings implements Serializable, Cloneable {
           "Longest coupled pair route as a multiple of the direct distance (below 1: off)")
   public Double pairMaxDetour;
 
+  /**
+   * Most differential pairs ripped and routed again as a unit when connections are still open after
+   * the routing stage: nearest the open connections first, the pair is taken off a copy of the
+   * board, the open connections are routed, and the pair is routed again around them; the copy is
+   * kept only when the pair is still coupled, fewer connections are open and no clearance violation
+   * is new. Default 4; zero or below turns it off.
+   */
+  @SerializedName("pair_reroute")
+  @Schema(description = "Most pairs re-routed as a unit for open connections (0 or below: off)")
+  public Integer pairReroute;
+
   @SerializedName("pair_fanout")
   @Schema(description = "Existing fanout on pair pins: 'replace' (default) or 'keep'")
   public String pairFanout;

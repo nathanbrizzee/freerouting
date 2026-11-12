@@ -144,6 +144,28 @@ public final class PairRouting {
     return lines;
   }
 
+  /**
+   * Routes the open connections of one pair, as {@link #apply} does on the empty board, for the
+   * re-route of a pair as a unit ({@link PairReroute}). Returns the lines to log; every one starts
+   * with {@code "Pair "} and a routed connection's contains {@code "): routed on layer"}.
+   */
+  static List<String> routeOne(
+      RouterSettings settings,
+      RoutingBoard board,
+      StoppableThread thread,
+      DifferentialPair pair,
+      List<Integer> itemIds) {
+    List<String> lines = new ArrayList<>();
+    List<Item> rings = padRingKeepouts(board);
+    try {
+      routePairs(board, settings, thread, List.of(pair), itemIds, lines);
+    } finally {
+      removeAll(board, rings);
+      board.clearTransientAutorouteState();
+    }
+    return lines;
+  }
+
   /** Routes every connection of every pair; returns the number of connections tried. */
   private static int routePairs(
       RoutingBoard board,

@@ -1,0 +1,34 @@
+(pcb pair_reroute
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (boundary (rect pcb 0 0 40000 30000))
+    (keepout (rect F.Cu 19000 0 21000 14300))
+    (keepout (rect F.Cu 19000 15700 21000 24900))
+    (keepout (rect F.Cu 19000 26050 21000 30000))
+    (rule (width 150) (clearance 150)))
+  (placement
+    (component Conn
+      (place J1 3000 15000 front 0)
+      (place U1 37000 15000 front 0))
+    (component Big
+      (place A1 12000 8000 front 0)
+      (place A2 28000 8000 front 0)))
+  (library
+    (image Conn
+      (pin Pad 1 0 400)
+      (pin Pad 2 0 -400))
+    (image Big
+      (pin BigPad 1 0 0))
+    (padstack Pad (shape (rect F.Cu -500 -200 500 200)) (attach off))
+    (padstack BigPad (shape (circle F.Cu 1400)) (attach off)))
+  (network
+    (net D+ (pins J1-1 U1-1))
+    (net D- (pins J1-2 U1-2))
+    (net WIDE (pins A1-1 A2-1))
+    (class kicad_default "" D+ D-
+      (rule (width 150) (clearance 150)))
+    (class wide WIDE
+      (rule (width 1000) (clearance 150)))
+    (pair (nets D+ D- (gap 200)))))

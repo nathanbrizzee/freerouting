@@ -248,6 +248,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.pairFanout = "replace";
     settings.autorouter.pairMaxSkewUm = 100.0;
     settings.autorouter.pairMaxDetour = 2.5;
+    settings.autorouter.pairReroute = 4;
     settings.maxThreads = null;
     settings.autorouter.maxThreads = null;
     settings.copperToEdgeClearanceUm = DEFAULT_COPPER_TO_EDGE_CLEARANCE_UM;

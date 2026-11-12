@@ -385,6 +385,19 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       direct (pair_max_detour R)`. When it helps: boards where the pads of a pair sit among
       obstacles, so the first layer's corridor winds around them. CLI:
       `--router.autorouter.pair_max_detour=<ratio>`.
+    - **`pair_reroute`**: The most differential pairs ripped and routed again as a unit when
+      connections are still open after the routing stage. The pair stage routes the pairs first, on
+      the empty board, and their copper stays fixed while the router runs, so a direct pair can sit
+      where another connection needs to pass. Nearest the open connections first, a pair is taken
+      off a copy of the board, the open connections are routed on the copy (up to 4 passes, the
+      pair's own nets held back), and the pair is routed again around them by the pair router, so
+      both members stay on one layer and are length matched as before. The copy replaces the board
+      only when the pair is coupled again on every connection, fewer connections are open and no
+      clearance violation is new. Each try logs `Pair re-route <pair>: N open before, M after with
+      the pair coupled again, K new violation(s); kept.` (or `not better, the board before it is
+      kept.`). A kept try is followed by the pair router's line for each connection of the pair,
+      indented, with its new layer, lengths and skew. Default `4`; zero or below turns it off. CLI:
+      `--router.autorouter.pair_reroute=<count>`.
     - **`pair_fanout`**: What the pair router does with fanout copper already on a pair's pins:
       `replace` (default) or `keep`. With `replace`, for each pin of a pair connection the traces
       and vias connected to it are lifted while the pair is routed from the pad, when they reach no

@@ -221,6 +221,17 @@ public final class RoutingPipeline {
       this.autorouter = fallback.continueWithPadNecks(this.job, this.autorouter);
     }
 
+    // A pair that sits where an open connection needs to pass is ripped and routed again.
+    if (routerEnabled
+        && this.job.board != null
+        && !this.pairItems.isEmpty()
+        && !this.job.thread.isStopRequested()
+        && this.job.board.routingLedger().incompleteCount() > 0) {
+      for (String line : PairReroute.run(this.job, this.pairItems)) {
+        this.job.logInfo(line);
+      }
+    }
+
     this.job.board.finishAutoroute();
     for (StageListener listener : this.stageListeners) {
       listener.afterRouting(this.autorouter);

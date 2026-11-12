@@ -356,6 +356,28 @@ KiCad DRC after SES import, and with our own `NetLengthReport`, which must agree
 
 Sizes to expect: phase 1 about 2,000 lines with tests, phase 2 about 3,000, phase 3 about 2,000, phase 4 about 1,000.
 
+### 7.1 Queued work and the test board for each (2026-11-11)
+
+Built on 2026-11-11: the re-route of a pair as a unit (`PairReroute`, `autorouter.pair_reroute`), the simple form
+of phase 4: when connections stay open after the routing stage, the pair nearest them is taken off a copy, the
+open connections are routed, the pair is routed again by the pair router, and the copy is kept only when the pair
+is coupled again, fewer connections are open and no violation is new. Fixture `PairReroute.dsn`: a one-layer wall
+with two gaps, of which only the pair's direct gap fits a 1 mm trace.
+
+Queued, in this order. Each gets a small hand-written fixture in `fixtures/` with a `PairRoutingTest` case, so the
+behaviour is pinned by a test, not only by the benchmark boards:
+
+| # | Work | Rule it follows | Fixture and what the test checks |
+|---|---|---|---|
+| 1 | Skew bumps at the mismatched end: the tuner knows which breakout makes the difference (offset pads, the turn into the gather point) and places bumps nearest that end first, then further along. | TI SPRACP4A: serpentine "as close to the mismatched ends as possible"; section 6.5 step 1. | `PairSkewEnd.dsn`: one end with offset pads, the other aligned. The bumps lie within a set distance of the offset end; the skew is under `pair_max_skew_um`; total member lengths (breakouts included) match. |
+| 2 | Ground return vias at each via pair: when a pair changes layer on a board with a ground plane, a ground via beside the via pair, one on each side when there is room, within a set distance; skipped and logged when there is no room. | Cadence and AtlasPCB via notes: a return via within about 1.27 mm of each signal via; both sides of the pair; nothing between the two signal vias. | `PairReturnVia.dsn`: 4 layers with a GND plane, a pair whose ends sit on opposite layers. Each via pair gets its GND vias within the distance, none between the signal vias, no violation; a variant with no room logs the skip. |
+| 3 | Same layer for pairs the pair router gives up on: the ordinary router routes such members as two nets, which can land on different layers. Hold the partner to the layers its member took, or report the split. | Impedance matching needs both members on the same layer and reference. | `PairSplitLayer.dsn`: a pair the pair router cannot couple (polarity swap). Both members end on the same layers, or the log names the split. |
+
+Already followed, and pinned by existing tests: skew is the difference of the total member lengths, breakouts and
+legs on the pad layer included (`memberLength`); bumps on the shorter member only, at most twice the gap high,
+spaced at least 3 W; via pairs side by side at the same point along the pair, same via, at least the coupled
+spacing apart, with nothing between them.
+
 ## 8. Decisions wanted from the user
 
 1. Phase 0: merge upstream master into the branch before starting (one-time cost, keeps a future pull request small,

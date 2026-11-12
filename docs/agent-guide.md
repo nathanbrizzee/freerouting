@@ -105,6 +105,7 @@ Options worth knowing (all `--router.` on the command line):
 | `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g)))`) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
 | `autorouter.pair_max_skew_um=<um>` | Largest length difference within a routed pair; the shorter member gets length bumps until it matches. Default 100 um, -1 off. | Set it to the interface's skew allowance. `, tuned from S mm` on a routed line means bumps were added; `not tuned: no room ...` means the skew stayed. |
 | `autorouter.pair_max_detour=<ratio>` | Longest coupled route of a pair as a multiple of the direct distance between its ends. Default 2.5, below 1 off. A route over 1.5 times is compared with the other layers; the shortest wins, and if it is still over the limit the pair goes to the ordinary router. | A pair whose line says `lengths 45 and 43 mm` for pads 10 mm apart. The line then ends `N times the direct distance, the shortest of the layers tried`, or `left to the router: the shortest coupled route is ...`. |
+| `autorouter.pair_reroute=<count>` | Most pairs ripped and routed again as a unit, nearest the open connections first, when connections are still open after routing. Default 4, -1 off. A try is kept only when the pair stays coupled, fewer connections are open and no violation is new. | Connections left open beside a coupled pair. Each try logs `Pair re-route <pair>: N open before, M after ...; kept.` or `not better, the board before it is kept.` |
 | `autorouter.pair_fanout=keep` | By default a pair lifts the movable fanout already on its pins and leaves the pads itself; the fanout comes back if the pair fails. | Keep fanout placed by hand on purpose, or lock it in KiCad (locked copper is never lifted). |
 | `autorouter.pair_gap_um=<um>` | Gap between the members of a pair that declares none. Default: the clearance between the two nets. | Set it to the board's differential pair gap (KiCad: net class, Differential pair gap), which a KiCad DSN does not carry. Better: add the pairs, their gap and their width to the DSN first with `python3 scripts/kicad/dsn_pairs.py board.kicad_pcb in.dsn out.dsn`, which reads them from the net classes in the `.kicad_pro` next to the board, and pass the `--router.min_trace_width_um=<um>` it prints. |
 
@@ -165,6 +166,10 @@ reading, in the order they appear:
   router: <reason>` line per pair connection. A routed line ends with `, tuned from S mm` when the shorter
   member got length bumps, and with `, replacing N fanout item(s)` when the pair took the place of
   fanout already on its pins.
+- `Pair re-route <pair>: N open before, M after with the pair coupled again, K new violation(s);
+  kept.` After routing, when connections are still open, the pair nearest them was ripped and
+  routed again around them; the pair's new route lines follow, indented. `not better, the board
+  before it is kept.` means the try changed nothing.
 - `Routing fallback ...` lines: when the pass loop stalls, other strategies are tried
   (`fanout-retry`, `short-escape`, `direct-first`, `open-escape`, `no-fanout`, seeds), and
   `Routing fallback chose '<name>'` says which board was kept.

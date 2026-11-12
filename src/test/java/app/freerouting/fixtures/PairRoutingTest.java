@@ -75,6 +75,43 @@ class PairRoutingTest extends RoutingFixtureTest {
     assertTrue(drc.getAllClearanceViolations().isEmpty(), "the pair must not violate a clearance");
   }
 
+  /**
+   * A one-layer board with a wall that has two gaps: the middle one, on the pair's direct line, is
+   * the only one the 1 mm trace of WIDE fits through; the pair fits through either. The pair stage
+   * takes the middle gap and leaves WIDE open; the re-route as a unit routes WIDE there and moves
+   * the pair, still coupled, to the other gap.
+   */
+  @Test
+  void aPairInTheWayOfAnOpenConnectionIsRoutedAgainAroundIt() {
+    RoutingJob job = getRoutingJob("PairReroute.dsn", new TestingSettings());
+    job.routerSettings.autorouter.maxPasses = 3;
+    job.routerSettings.optimizer.enabled = false;
+    runRoutingJob(job);
+
+    DesignRulesChecker drc = new DesignRulesChecker(job.board, new DesignRulesCheckerSettings());
+    drc.calculateAllIncompletes();
+    assertEquals(0, drc.getIncompleteCount(), "WIDE and both pair members must be complete");
+    assertTrue(drc.getAllClearanceViolations().isEmpty(), "nothing may violate a clearance");
+    int netP = job.board.rules.nets.get("D+", 1).netNumber;
+    for (PolylineTrace trace : tracesOf(job, netP)) {
+      for (int i = 0; i < trace.polyline().cornerCount(); i++) {
+        FloatPoint corner = trace.polyline().cornerApprox(i);
+        assertFalse(
+            corner.x > 19000 * 10 && corner.x < 21000 * 10 && corner.y < 16000 * 10,
+            "the pair must have left the middle gap to WIDE: " + corner);
+      }
+    }
+
+    RoutingJob off = getRoutingJob("PairReroute.dsn", new TestingSettings());
+    off.routerSettings.autorouter.maxPasses = 3;
+    off.routerSettings.optimizer.enabled = false;
+    off.routerSettings.autorouter.pairReroute = -1;
+    runRoutingJob(off);
+    DesignRulesChecker offDrc = new DesignRulesChecker(off.board, new DesignRulesCheckerSettings());
+    offDrc.calculateAllIncompletes();
+    assertEquals(1, offDrc.getIncompleteCount(), "without the re-route WIDE stays open");
+  }
+
   @Test
   void aCoupledRouteLongerThanTheDetourLimitIsLeftToTheOrdinaryRouter() {
     // PairViaBasic needs a via pair, and each via pair counts as extra length: with the limit at
