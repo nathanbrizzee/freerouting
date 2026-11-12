@@ -53,8 +53,13 @@ public class ShapeSearchTree extends MinAreaTree {
 
   private static final int DRILL_HOLE_CLEARANCE_MARGIN = 10;
 
-  /** Reusable traversal stack for complete-shape queries, isolated per caller thread. */
-  protected final ThreadLocal<ArrayStack<TreeNode>> completeShapeStack =
+  /**
+   * Reusable traversal stack for complete-shape queries, one per thread for all trees. Static: a
+   * stack left with nodes by a traversal that ended early references its tree, so a per-tree
+   * ThreadLocal kept its own key reachable and every board copy a thread had searched stayed in the
+   * heap while the thread lived (an optimizer worker held one per candidate).
+   */
+  protected static final ThreadLocal<ArrayStack<TreeNode>> completeShapeStack =
       ThreadLocal.withInitial(() -> new ArrayStack<>(10000));
 
   /** Reusable result list for spatial overlap queries, isolated per caller thread. */

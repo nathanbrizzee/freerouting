@@ -18,8 +18,12 @@ import java.util.concurrent.locks.Lock;
  */
 public class MinAreaTree extends ShapeTree {
 
-  /** Reusable traversal stack for overlap queries, isolated per caller thread. */
-  protected final ThreadLocal<ArrayStack<TreeNode>> nodeStack =
+  /**
+   * Reusable traversal stack for overlap queries, one per thread for all trees. Static, as a stack
+   * left with nodes references its tree: a per-tree ThreadLocal kept every tree a thread had
+   * searched, and its board, in the heap while the thread lived.
+   */
+  protected static final ThreadLocal<ArrayStack<TreeNode>> nodeStack =
       ThreadLocal.withInitial(() -> new ArrayStack<>(10000));
 
   /** Constructor with a fixed set of directions defining the keys and the surrounding shapes. */
@@ -135,7 +139,8 @@ public class MinAreaTree extends ShapeTree {
   private LayerLeafIndex otherLayers;
   private boolean layerIndexChecked;
 
-  private final ThreadLocal<ArrayStack<LayerLeafIndex.Node>> layerNodeStack =
+  /** Reusable traversal stack for the per-layer index, one per thread for all trees, as above. */
+  private static final ThreadLocal<ArrayStack<LayerLeafIndex.Node>> layerNodeStack =
       ThreadLocal.withInitial(() -> new ArrayStack<>(10000));
 
   /** Whether this tree keeps layer masks and a per-layer index; decided at the first insert. */
