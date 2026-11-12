@@ -166,6 +166,11 @@ public final class PairRouting {
     return lines;
   }
 
+  /** Whether the pair has a connection whose two members are both still open. */
+  static boolean hasOpenConnection(RoutingBoard board, DifferentialPair pair) {
+    return !plan(board, pair, new ArrayList<>()).isEmpty();
+  }
+
   /** Routes every connection of every pair; returns the number of connections tried. */
   private static int routePairs(
       RoutingBoard board,
@@ -786,7 +791,7 @@ public final class PairRouting {
     return p.isOnLayer(layer) && n.isOnLayer(layer);
   }
 
-  private static int umToBoard(RoutingBoard board, double um) {
+  static int umToBoard(RoutingBoard board, double um) {
     int resolution = Math.max(1, board.communication.resolution);
     return (int) Math.round(Unit.scale(um * resolution, Unit.UM, board.communication.unit));
   }

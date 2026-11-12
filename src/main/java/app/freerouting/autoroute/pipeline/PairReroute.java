@@ -35,6 +35,12 @@ final class PairReroute {
   /** Default of {@code pair_reroute}: the most pairs tried. */
   static final int DEFAULT_TRIES = 4;
 
+  /** How near the pair's copper an open connection must come to be routed on the copy, in um. */
+  private static final double NEAR_UM = 3000;
+
+  /** The open connections nearest the pair that are routed on the copy however far they are. */
+  private static final int NEAREST = 8;
+
   /** Routing passes for the open connections while the pair is off the board. */
   private static final int PASSES = 4;
 
@@ -90,25 +96,39 @@ final class PairReroute {
   private static List<String> tryPair(
       RoutingJob job, DifferentialPair pair, List<Integer> pairItems) {
     RoutingBoard board = job.board;
-    RoutingFallback.Outcome before =
-        RoutingFallback.Outcome.of("pair re-route", board, job.routerSettings);
-    var baseline = RoutingFallback.captureClearance(board, before.violations);
-
     RoutingBoard copy = board.deepCopy();
     List<Integer> ownIds = pairItemIds(copy, pairItems, pair);
     List<Item> own = new ArrayList<>();
+    IntBox area = null;
     for (int id : ownIds) {
       Item item = copy.getItem(id);
       item.setFixedState(FixedState.UNFIXED);
       own.add(item);
+      area = area == null ? item.boundingBox() : area.union(item.boundingBox());
     }
     copy.removeItems(own);
     copy.clearTransientAutorouteState();
+    // Its nets can stay connected without the pair's copper (other copper of a net with more pins):
+    // then there is nothing to route again, and no routing passes are spent on it.
+    if (area == null || !PairRouting.hasOpenConnection(copy, pair)) {
+      return List.of(
+          "Pair re-route "
+              + pair.baseName()
+              + ": skipped, its nets stay connected without the pair's copper.");
+    }
+    RoutingFallback.Outcome before =
+        RoutingFallback.Outcome.of("pair re-route", board, job.routerSettings);
+    var baseline = RoutingFallback.captureClearance(board, before.violations);
 
     RouterSettings settings = job.routerSettings.clone();
     settings.setFanoutEnabled(false);
     BatchAutorouter router = BatchAutorouter.createAttempt(job, copy, settings, false);
-    router.netsLeftUnrouted = Set.of(pair.positiveNet().netNumber, pair.negativeNet().netNumber);
+    // Only the open connections that come near the pair are routed on the copy: the others gain
+    // nothing from its space, and routing every open connection of a board far from complete
+    // would cost minutes per pair. The pair's own nets wait for the pair router.
+    router.netsLeftUnrouted = netsAwayFrom(copy, area, PairRouting.umToBoard(copy, NEAR_UM));
+    router.netsLeftUnrouted.add(pair.positiveNet().netNumber);
+    router.netsLeftUnrouted.add(pair.negativeNet().netNumber);
     for (int pass = 1; pass <= PASSES && !stopped(job); pass++) {
       if (!router.autoroutePass(pass)) {
         break;
@@ -238,6 +258,36 @@ final class PairReroute {
     double dx = Math.max(Math.max(box.ll.x - p.x, 0), p.x - box.ur.x);
     double dy = Math.max(Math.max(box.ll.y - p.y, 0), p.y - box.ur.y);
     return Math.hypot(dx, dy);
+  }
+
+  /**
+   * The nets with open connections, except the ones routed on the copy: those with an open
+   * connection whose bounding box comes within {@code near} of the pair's copper, and the nets of
+   * the {@link #NEAREST} open connections nearest it, however far (a connection's only way can run
+   * through the pair's space although its straight line does not). Ties by net number.
+   */
+  private static Set<Integer> netsAwayFrom(RoutingBoard board, IntBox pairArea, int near) {
+    Set<Integer> away = new TreeSet<>(board.routingLedger().incompleteNetNumbers());
+    record Open(int net, double distance) {}
+    List<Open> open = new ArrayList<>();
+    for (AirLine airline : new DesignRulesChecker(board, null).getAllAirlines()) {
+      IntBox box =
+          new IntBox(
+              (int) Math.floor(Math.min(airline.fromCorner.x, airline.toCorner.x)),
+              (int) Math.floor(Math.min(airline.fromCorner.y, airline.toCorner.y)),
+              (int) Math.ceil(Math.max(airline.fromCorner.x, airline.toCorner.x)),
+              (int) Math.ceil(Math.max(airline.fromCorner.y, airline.toCorner.y)));
+      double dx = Math.max(0, Math.max(box.ll.x - pairArea.ur.x, pairArea.ll.x - box.ur.x));
+      double dy = Math.max(0, Math.max(box.ll.y - pairArea.ur.y, pairArea.ll.y - box.ur.y));
+      open.add(new Open(airline.net.netNumber, Math.hypot(dx, dy)));
+    }
+    open.sort(Comparator.comparingDouble(Open::distance).thenComparingInt(Open::net));
+    for (int i = 0; i < open.size(); i++) {
+      if (i < NEAREST || open.get(i).distance() <= near) {
+        away.remove(open.get(i).net());
+      }
+    }
+    return away;
   }
 
   /** Both ends of every open connection. */
