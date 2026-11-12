@@ -199,9 +199,10 @@ if it made the board less complete or dirtier:
 1. More incomplete connections than the incumbent → reject (`CONNECTIVITY_REGRESSION`).
 2. Else more clearance-violation **count** than the incumbent → reject (`DRC_COUNT_REGRESSION`).
    Violation **depth** is ignored here.
-3. Else if optimizer score is **strictly higher** → keep the candidate.
-4. Else keep the incumbent (ties included). A more-complete but uglier board is
-   **not** an automatic win.
+3. Else fewer incomplete connections than the incumbent → keep the candidate, whatever
+   its optimizer score: finishing the board comes first.
+4. Else (as many open) if optimizer score is **strictly higher** → keep the candidate.
+5. Else keep the incumbent (ties included).
 
 ### When the optimizer stops
 

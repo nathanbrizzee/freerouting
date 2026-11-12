@@ -636,8 +636,11 @@ public final class BatchOptimizer extends NamedAlgorithm {
   /**
    * Returns the explicit reason a candidate must be rejected, or {@code null} when it is accepted.
    *
-   * <p>Completeness and DRC count are vetoes; optimizer score ranks candidates that pass both
-   * vetoes. In particular, a more-complete but uglier candidate is not an automatic win.
+   * <p>Completeness and DRC count are vetoes. A candidate that passes both and leaves fewer
+   * connections open is accepted whatever its optimizer score: finishing the board comes first, and
+   * the score (length, vias, bends) only ranks candidates with the same number open. A candidate
+   * that closed two connections on a dense board scored 0.1% lower for the trace it added and was
+   * thrown away under the earlier rule.
    */
   static String optimizerCandidateRejectionReason(
       int incumbentIncompleteCount,
@@ -650,6 +653,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
     }
     if (candidate.clearanceViolations.totalCount > incumbentClearanceViolationCount) {
       return "DRC_COUNT_REGRESSION";
+    }
+    if (candidate.connections.incompleteCount < incumbentIncompleteCount) {
+      return null;
     }
     if (!(candidateOptimizerScore > incumbentOptimizerScore)) {
       return "OPTIMIZER_SCORE_NOT_IMPROVED";
@@ -686,8 +692,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
   /**
    * Checks whether the final board at the end of the optimizer regressed compared to the best
-   * accepted incumbent board. Replaced if score is lower, or if incomplete connections or clearance
-   * violations increased (FR-077).
+   * accepted incumbent board. Replaced if incomplete connections or clearance violations increased
+   * (FR-077), or if the score is lower with the same number of connections open; a board with fewer
+   * open is not replaced for its score, as {@link #optimizerCandidateRejectionReason} ranks.
    */
   public static boolean finalBoardRegressed(
       float bestScore,
@@ -696,9 +703,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
       float finalScore,
       int finalIncomplete,
       int finalViolations) {
-    return finalScore < bestScore
-        || finalIncomplete > bestIncomplete
-        || finalViolations > bestViolations;
+    return finalIncomplete > bestIncomplete
+        || finalViolations > bestViolations
+        || (finalIncomplete == bestIncomplete && finalScore < bestScore);
   }
 
   private List<Integer> prepareCandidateItems() {
