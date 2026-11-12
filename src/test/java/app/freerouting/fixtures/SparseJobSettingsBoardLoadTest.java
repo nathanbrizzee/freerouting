@@ -21,10 +21,13 @@ class SparseJobSettingsBoardLoadTest extends RoutingFixtureTest {
 
   private static final String BOARD = "Issue508-DAC2020_bm01.dsn";
 
-  /** Same settings as an API client that only sets the pass limits. */
+  /**
+   * Same settings as an API client that only sets the pass limits. The grid finisher is off in both
+   * jobs: only the board rules are compared, and it would add seconds after the pass.
+   */
   private static final String SPARSE_SETTINGS_JSON =
-      "{\"job_timeout\":\"00:01:00\",\"autorouter\":{\"max_passes\":1},"
-          + "\"optimizer\":{\"enabled\":false}}";
+      "{\"job_timeout\":\"00:01:00\",\"autorouter\":{\"max_passes\":1,"
+          + "\"grid_finisher\":false},\"optimizer\":{\"enabled\":false}}";
 
   private RoutingJob runWithSparseSettings() {
     RoutingJob job = getRoutingJob(BOARD);
@@ -40,6 +43,7 @@ class SparseJobSettingsBoardLoadTest extends RoutingFixtureTest {
     RoutingJob job = getRoutingJob(BOARD, testingSettings);
     job.routerSettings.autorouter.maxPasses = 1;
     job.routerSettings.optimizer.enabled = false;
+    job.routerSettings.autorouter.gridFinisher = false;
     return runRoutingJob(job);
   }
 

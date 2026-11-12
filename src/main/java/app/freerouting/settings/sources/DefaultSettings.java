@@ -240,6 +240,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.fallbackRaceStrategies = DEFAULT_FALLBACK_RACE_STRATEGIES;
     settings.autorouter.springOverOverlaps = false;
     settings.autorouter.maxSearchStepsPerConnection = DEFAULT_MAX_SEARCH_STEPS_PER_CONNECTION;
+    settings.autorouter.maxSearchStepsAfterFailure = -1L;
     settings.autorouter.explorePatience = 0;
     settings.autorouter.fanoutViaPadGap = 0.0;
     settings.autorouter.ballEscapeOrder = "auto";

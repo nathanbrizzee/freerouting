@@ -190,6 +190,19 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Long maxSearchStepsPerConnection;
 
   /**
+   * Maze search steps for a connection that has failed in an earlier pass, the same in every pass
+   * instead of doubling. A search that failed once at the full budget rarely succeeds with twice as
+   * much; the connections still open after the passes go to the grid finisher. Zero or below keeps
+   * the doubling budget.
+   */
+  @SerializedName("max_search_steps_after_failure")
+  @Schema(
+      description =
+          "Maze search steps for a connection that failed in an earlier pass, not doubling; zero or"
+              + " below keeps the doubling budget")
+  public Long maxSearchStepsAfterFailure;
+
+  /**
    * The fallback stage may make at most this many times as many connection attempts as the default
    * run made, summed over its attempts; an attempt that reaches the limit stops and keeps its best
    * board. Counting attempts, not time, keeps the result deterministic. {@code 0} means no limit.

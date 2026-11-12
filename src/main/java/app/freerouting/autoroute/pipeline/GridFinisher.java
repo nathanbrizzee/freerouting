@@ -108,7 +108,11 @@ final class GridFinisher {
     final long started = System.currentTimeMillis();
     List<AirLine> sorted = new ArrayList<>();
     for (AirLine airline : new DesignRulesChecker(board, null).getAllAirlines()) {
-      if (airline != null && airline.net != null) {
+      // Nets whose class the autorouter ignores stay as they are, as in the maze passes.
+      if (airline != null
+          && airline.net != null
+          && (airline.net.getNetClass() == null
+              || !airline.net.getNetClass().isIgnoredByAutorouter)) {
         sorted.add(airline);
       }
     }
@@ -508,7 +512,8 @@ final class GridFinisher {
           && item.netCount() > 0
           && !item.containsNet(net)
           && !item.isUserFixed()
-          && !item.isDeletionForbidden();
+          && !item.isDeletionForbidden()
+          && !item.hasIgnoredNets();
     }
 
     private double unitsPerMm() {

@@ -130,9 +130,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 #### **`router` Section**
 
 - **`profile`**: The run profile (CLI `--router.profile=<name>`). A profile is a set of defaults; any setting given in a file, environment variable, the CLI, the GUI or the API still overrides it, and the log names the profile at the start of each job. Profiles set passes, budgets and strategies, never time limits, so runs stay repeatable.
-    - `"standard"` (default): the most complete board in the least time. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`. On the 19-board benchmark set this left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU.
-    - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage (`fallback_strategies=none`) and without the optimizer. Use it to see how far a board gets and where it is stuck.
-    - `"thorough"`: for finishing a hard board, at more CPU: `standard` plus the fallback race on all cores without an attempt budget (`fallback_race=true`, `fallback_threads=0`, `fallback_work_ratio=0`) and the grid finisher with lifting (`grid_finisher=true`, `grid_finisher_ripup=true`). To continue from an earlier result, pass both files: `-de board.dsn earlier.ses`.
+    - `"standard"` (default): the most complete board in one run, trying every finishing method instead of leaving a second run to try more. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`; the maze passes fail fast (`autorouter.max_search_steps_per_connection=2000000`, `autorouter.max_search_steps_after_failure=2000000`); the alternative strategies race beside the default run (`fallback_race=true`, `fallback_threads=0`: one thread per core, no more than the heap and the free physical memory hold), each within its share of the step budget; then the grid finisher with lifting (`grid_finisher=true`, `grid_finisher_ripup=true`) takes the connections still open, and the optimizer stage reworks its routes and vias like any others. Before the finishing methods were added, on the 19-board benchmark set it left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU. With them, on the rebuilt 17-board set (fast boards 2 min, hard boards 6 min, optimizer off), it left 1757 open against 1781 without them, no board worse, in about the same time.
+    - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage or race (`fallback_strategies=none`, `fallback_race=false`), without the grid finisher and without the optimizer. Use it to see how far a board gets and where it is stuck.
+    - `"thorough"`: no longer a profile of its own. It is accepted and runs `standard`, which now includes what it added (the race and the grid finisher with lifting), with the attempt budget kept; the log says `Router profile 'thorough' is now part of 'standard'`.
     - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default, and `autorouter.differential_pairs=off`.
 - **`session_routes_movable`**: When `true`, the traces and vias of a session file loaded to continue routing (`-de board.dsn earlier.ses`) come in unfixed, so the router may rip them up and route them again, like its own routes. Those the file marks `(type protect)` or `(type fix)` stay fixed; Freerouting writes those types for routes that were fixed before. When `false`, every loaded route is user-fixed and the router can only add to them, which was the original behaviour. Default `false`; `true` in every profile but `classic`. It does not change how the GUI or `DrcRunner` loads a session.
 - **`default_preferred_direction_trace_cost`**: Cost factor for routing traces in the preferred direction.
@@ -156,7 +156,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       default run. `seed-N` (N a positive integer) routes the input board again with the item order
       of every pass shuffled by `item_order_seed` N; a different order gives a different board.
       `history` routes it again with `rip_history_cost=1` and `pin-access` with
-      `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the `thorough` race
+      `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the race
       (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
       (clean, 1 -> 0 open) and reworkctf (6 -> 3), but the 19-board set went from 1126 to 1196
       open at 24% more CPU, because a fourth attempt slows the others (lpa96 lost its clean
@@ -194,7 +194,8 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       copy of the board, together with the continuation of a residual board; `0` uses one thread
       per attempt, up to the number of processors and to what the heap and the free physical
       memory hold (each attempt budgeted at twice the live heap), but never fewer than two, so
-      the free memory never changes the chosen board. In parallel each attempt may make the whole
+      the free memory never changes the chosen board. `0` in the `standard` profile. In parallel
+      each attempt may make the whole
       `fallback_work_ratio` budget of connection attempts, and the search step budget left under
       `router.max_search_steps` is split equally between the attempts. The results are merged in
       the sequential order with the same rule for replacing the best board. Once an attempt is
@@ -233,7 +234,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       fallbacks gets one A* search on a fine grid (about half a trace pitch per cell) in a window
       around its gap, crossing layers by the vias of the net's rule. The path is kept only if it
       joins the two pieces and adds no clearance violation; otherwise the board is restored.
-      Default `false`; on in the `thorough` profile. Log line: `Grid finisher: N open
+      Default `false`; on in the `standard` profile. Nets whose class the autorouter ignores are
+      left alone, and a differential pair member keeps to its partner's trace layers (with
+      `pair_layer_hold_passes` not negative). Log line: `Grid finisher: N open
       connection(s), T tried, C closed, S grid states expanded of B, in X s.`
     - **`grid_finisher_max_steps`**: Grid states the finisher may expand in total, default
       `50000000`; one connection gets at most 2,000,000. The finisher tries each connection once
@@ -246,7 +249,8 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       can. Each connection it crosses (at most four) is removed whole, the open connection is
       routed, then the lifted ones are routed again on the grid. The change is kept only if the
       nets involved end with fewer open connections and no new clearance violation; otherwise the
-      board is restored. Lifting uses the same step budget. Default `false`; on in the `thorough`
+      board is restored. Lifting uses the same step budget; it never lifts fixed copper (the coupled
+      pair copper is fixed while it runs) or nets the autorouter ignores. Default `false`; on in the `standard`
       profile. The log line adds `(L by lifting other copper)`. When it helps: a continued board
       (with `session_routes_movable`) whose last connections are walled in by other nets' routes;
       on 11 boards after one maze pass it closed 4 more (L6 2, TX5823 1, Unifying 1) in seconds.
@@ -298,8 +302,9 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       lpa96 (6-minute cap) 3 -> 2 open. On other boards it changes which connections fit and can
       leave more open (TX5823 0 -> 1, mppt-1210 0 -> 2), so it is opt-in.
     - **`max_search_steps_per_connection`**: Maze search steps one connection may use in pass 1,
-      doubling each pass. Default `10000000`, about the 100 s the older time limit allowed; the
-      longest routed search on the benchmark boards took about 635,000 steps. The step budget stops
+      doubling each pass. Default `10000000`, about the 100 s the older time limit allowed;
+      `2000000` in the `standard` profile. The longest routed search on the benchmark boards took
+      about 635,000 steps, on a 356 x 165 mm board about 800,000. The step budget stops
       a connection at the same point on every run and machine, which a time limit does not under
       load. A negative value restores the time limit (100 s in pass 1, doubling each pass). Each
       pass logs `Auto-routing pass #N: Search work: ...` with the searches, the steps, how many
@@ -308,6 +313,12 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       which shows what budget a board needs and how much of a pass goes into searches that fail. A second line, `Auto-routing pass #N: Rip-up: ...`, counts the
       other nets' items the pass ripped and the net pairs that have ripped each other back and
       forth so far. CLI: `--router.autorouter.max_search_steps_per_connection=<steps>`.
+    - **`max_search_steps_after_failure`**: Maze search steps for a connection that has failed in
+      an earlier pass, the same in every pass instead of doubling (never more than the doubling
+      budget). A search that failed once at the full budget rarely succeeds with twice as much,
+      and on a large board each such search took about 16 s per pass; the connections still open
+      after the passes go to the grid finisher. Default `-1` (keep doubling); `2000000` in the
+      `standard` profile. CLI: `--router.autorouter.max_search_steps_after_failure=<steps>`.
     - **`via_in_pad`**: Allows the router to place vias directly in SMD pads of their own net, as
       if the via padstack attached to SMD pads. Default off. A board whose own vias already sit in
       pads of their net turns it on at load, with a log line (`The board's own vias decide`). Not
@@ -561,7 +572,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
   design rule. Default `false`, in no profile. When it helps: pins in a row whose pad gap is
   just under the clearance, such as supply pins of a fine-pitch QFP with a wider supply class. On
   S6 from an unrouted board it planned 0.27 mm necks for the supply pins of a QFP with 0.30 mm
-  pads; with `thorough` the board went from 17 to 16 open (two pins connected, at 0.225 mm, the
+  pads; with the former `thorough` profile the board went from 17 to 16 open (two pins connected, at 0.225 mm, the
   insert's own neck near the pin), with `standard` the step did not improve the board and the
   earlier board was kept (18 open). Applying the necks from the start instead made S6 worse (18 ->
   25), which is why it runs last. Not measured on the whole set yet. CLI:

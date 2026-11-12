@@ -23,9 +23,16 @@ class RouterProfilesTest {
     assertTrue(settings.fanout.protectEscapesGridOnly);
     assertFalse(settings.autorouter.forceViaInPad, "a profile can switch a setting off");
     assertTrue(settings.optimizer.enabled);
-    assertFalse(settings.autorouter.gridFinisher, "not before it is measured");
     assertTrue(settings.sessionRoutesMovable, "a continued board's routes may be ripped up");
-    assertFalse(settings.autorouter.gridFinisherRipup);
+    // Every finishing method in one run: fail fast in the maze passes, race the alternatives,
+    // then the grid finisher with lifting.
+    assertEquals(2_000_000L, settings.autorouter.maxSearchStepsPerConnection);
+    assertEquals(2_000_000L, settings.autorouter.maxSearchStepsAfterFailure);
+    assertTrue(settings.autorouter.fallbackRace);
+    assertEquals(0, settings.autorouter.fallbackThreads, "cores, bounded by the heap");
+    assertEquals(1.0, settings.autorouter.fallbackWorkRatio, "the attempts keep their budget");
+    assertTrue(settings.autorouter.gridFinisher);
+    assertTrue(settings.autorouter.gridFinisherRipup);
   }
 
   @Test
@@ -47,16 +54,17 @@ class RouterProfilesTest {
     assertEquals("none", settings.autorouter.fallbackStrategies);
     assertFalse(settings.optimizer.enabled);
     assertEquals("bga", settings.fanout.strategy);
+    assertFalse(settings.autorouter.fallbackRace, "the race uses its own strategy list");
+    assertFalse(settings.autorouter.gridFinisher);
   }
 
   @Test
-  void thoroughRacesTheFallbacks() {
+  void thoroughIsNowStandard() {
     RouterSettings settings = merged("--router.profile=thorough");
+    assertEquals("standard", settings.profile);
     assertTrue(settings.autorouter.fallbackRace);
-    assertEquals(0, settings.autorouter.fallbackThreads);
-    assertEquals(0.0, settings.autorouter.fallbackWorkRatio);
     assertTrue(settings.autorouter.gridFinisher);
-    assertTrue(settings.autorouter.gridFinisherRipup);
+    assertEquals(1.0, settings.autorouter.fallbackWorkRatio, "no unbudgeted attempts any more");
   }
 
   @Test

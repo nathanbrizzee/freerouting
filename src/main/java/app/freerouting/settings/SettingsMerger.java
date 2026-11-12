@@ -225,6 +225,12 @@ public class SettingsMerger implements Cloneable {
     if (requested == null) {
       return RouterProfiles.DEFAULT;
     }
+    if (RouterProfiles.THOROUGH.equalsIgnoreCase(requested.trim())) {
+      FRLogger.info(
+          "Router profile 'thorough' is now part of 'standard', which tries every finishing method"
+              + " in one run; using 'standard'.");
+      return RouterProfiles.STANDARD;
+    }
     String profile = RouterProfiles.normalize(requested);
     if (profile == null) {
       FRLogger.warn(

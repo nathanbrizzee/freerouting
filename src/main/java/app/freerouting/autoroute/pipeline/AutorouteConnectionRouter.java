@@ -39,7 +39,7 @@ final class AutorouteConnectionRouter {
       SortedSet<Item> rippedItemList,
       Map<Item, Integer> ripupCosts,
       int ripupPassNo) {
-    TimeLimit timeLimit = connectionLimit(ripupPassNo);
+    TimeLimit timeLimit = connectionLimit(item, ripupPassNo);
     AutorouteAttemptResult result =
         routeWithin(item, routeNetNo, rippedItemList, ripupCosts, ripupPassNo, timeLimit);
     router.passSearchWork.record(timeLimit, result.state, router.thread);
@@ -51,9 +51,11 @@ final class AutorouteConnectionRouter {
 
   /**
    * The search limit for one connection: the step budget when it is set, otherwise the time limit;
-   * both double with each pass. In the optimizer, the optimizer's own step cap bounds every search.
+   * both double with each pass, except that a connection that failed in an earlier pass gets {@code
+   * max_search_steps_after_failure}. In the optimizer, the optimizer's own step cap bounds every
+   * search.
    */
-  private TimeLimit connectionLimit(int ripupPassNo) {
+  private TimeLimit connectionLimit(Item item, int ripupPassNo) {
     double factor = Math.pow(2, ripupPassNo - 1);
     Long steps =
         router.settings.autorouter != null
@@ -75,6 +77,19 @@ final class AutorouteConnectionRouter {
       return TimeLimit.ofSteps(budget);
     }
     if (steps != null && steps > 0) {
+      // A connection that already failed gets a flat budget: it rarely succeeds with twice as much,
+      // and the grid finisher takes what is still open after the passes.
+      Long afterFailure =
+          router.settings.autorouter != null
+              ? router.settings.autorouter.maxSearchStepsAfterFailure
+              : null;
+      if (afterFailure != null
+          && afterFailure > 0
+          && item != null
+          && router.board.failureLog.getFailureCount(item) > 0) {
+        return TimeLimit.ofSteps(
+            Math.min(afterFailure, (long) Math.min(steps * factor, Long.MAX_VALUE)));
+      }
       return TimeLimit.ofSteps((long) Math.min(steps * factor, Long.MAX_VALUE));
     }
     double maxMilliseconds = Math.min(100000 * factor, Integer.MAX_VALUE);

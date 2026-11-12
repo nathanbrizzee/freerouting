@@ -31,6 +31,10 @@ class FallbackWorkBudgetTest extends RoutingFixtureTest {
     testSettingsSource.setFallbackWorkRatio(0.01);
 
     RoutingJob job = getRoutingJob("Issue313-FastTest.dsn", testSettingsSource);
+    // The sequential fallback stage is what is measured here, not the race beside the default run
+    // or attempts in parallel.
+    job.routerSettings.autorouter.fallbackRace = false;
+    job.routerSettings.autorouter.fallbackThreads = 1;
     runRoutingJob(job);
 
     RoutingResultManifest.FallbackDetail fallback = job.resultPhaseMetrics.fallback;

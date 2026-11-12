@@ -60,7 +60,7 @@ Rules that save trouble:
 - Memory: a plain `java -jar` run is fine for one board at a time; Java then allows a heap of about
   a quarter of the machine's RAM. When you run several boards at once, give each its own limit
   (`java -Xmx6g -jar freerouting.jar ...`) so the total stays below the machine's RAM: the
-  `thorough` profile and boards of tens of thousands of connections need 4 to 6 GB each, and
+  `standard` profile on boards of tens of thousands of connections needs 4 to 6 GB each, and
   eight such runs on a 31 GB machine were killed by the system. Four at a time is a safe
   ceiling there. `-Xmx` is a Java flag and goes before `-jar`. If a run ends with
   `OutOfMemoryError` in the log, raise it, or run fewer boards at once. If the optimizer runs out
@@ -84,8 +84,7 @@ overrides it. Profiles never set time limits, so a run is repeatable.
 
 | Profile | Use it for | Notes |
 |---|---|---|
-| `standard` (default) | Every first run | Most complete board in the least time. |
-| `thorough` | A board `standard` leaves open | Adds parallel alternative strategies on all cores and a fine-grid finisher that may lift other routes. More CPU; keep a time limit. |
+| `standard` (default) | Every run | Most complete board in one run: fails fast in the maze passes, races alternative strategies on the cores the memory allows, then a fine-grid finisher that may lift other routes, then the optimizer. `thorough` is accepted and runs this. |
 | `quick` | A first look at where a board is stuck | No fallback stage, no optimizer. |
 | `classic` | Comparing with the original router | Every newer option off. |
 
@@ -95,8 +94,8 @@ Recommended escalation:
 2. If the result is complete and clean, run again with the optimizer on (drop `-mt 0`), or keep
    the board as it is.
 3. If connections stay open, read the verdict (section 6). When it says connections are held by
-   crowded space, continue from the result with `thorough` and a 45- to 60-minute limit:
-   `-de board.dsn board.ses --router.profile=thorough --router.job_timeout=01:00:00 -mt 0`.
+   crowded space, continue from the result with a 45- to 60-minute limit:
+   `-de board.dsn board.ses --router.job_timeout=01:00:00 -mt 0`.
 4. If connections are still open, stop and report to the person (section 7). Running longer rarely
    helps once two runs end with the same open connections.
 
@@ -108,7 +107,7 @@ Options worth knowing (all `--router.` on the command line):
 | `min_trace_width_um=<um>` | Narrowest trace the router may create. The DSN does not carry it. | Set it to the board's minimum track width (KiCad: Board Setup, Constraints) whenever necking is possible. |
 | `autorouter.force_via_in_pad=true` | Allows vias inside SMD pads even when the DSN forbids them (`attach off`). | Only if the board house builds filled and capped vias. Some boards finish only with it. |
 | `autorouter.rip_history_cost=1` | Makes connections that keep ripping each other look for other paths. | The pass lines show the open count swinging between the same values late in the run. It hurts boards that are still converging. |
-| `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `thorough`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
+| `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `standard`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
 | `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g)))`) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
@@ -215,8 +214,8 @@ What the verdict's three numbers mean, and what to do:
 | Part of the verdict | Meaning | What helps |
 |---|---|---|
 | At a pin the design closes in | The pin's own pads, fixed copper, a keepout or the board edge leave no exit. No routing run will reach it. | A design change: pad or clearance rule, a narrower neck (`pad_neck`, `min_trace_width_um`), via-in-pad if allowed, or routing it by hand. Name the pin and what closes it (`closed_by`). |
-| At a pin routes or nearby parts close in | Other copper or parts block the exit. | `thorough`, `pad_neck`, moving the named parts, or fanning the part out by hand. |
-| Ends can be left, held by the space between them | The pins are reachable but the area between them is full. | `thorough` first; then moving parts out of the crowded regions, or another layer. |
+| At a pin routes or nearby parts close in | Other copper or parts block the exit. | Continuing from the result, `pad_neck`, moving the named parts, or fanning the part out by hand. |
+| Ends can be left, held by the space between them | The pins are reachable but the area between them is full. | Continuing from the result first; then moving parts out of the crowded regions, or another layer. |
 
 ## 7. Reporting to the person
 

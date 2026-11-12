@@ -12,11 +12,12 @@ import java.util.Locale;
  * <ul>
  *   <li>{@code quick}: a first look in the least wall-clock time; {@code standard} routing without
  *       fallbacks or optimizer.
- *   <li>{@code standard}: the most complete board in the least time; the best measured set.
- *   <li>{@code thorough}: {@code standard} plus everything that may close the last connections, at
- *       more CPU; meant to continue from an earlier result.
+ *   <li>{@code standard}: the most complete board in one run: every finishing method, each within a
+ *       step budget, with parallel work bounded by the cores and the heap.
  *   <li>{@code classic}: the original router's behaviour, every overhaul gate off.
  * </ul>
+ *
+ * <p>{@code thorough} is accepted and runs {@code standard}, which now includes what it added.
  *
  * <p>Profiles set passes, budgets and strategies, never time limits, so a run stays deterministic.
  * Their contents change only with a board-set measurement (router-overhaul-roadmap.md, 5.4).
@@ -25,13 +26,16 @@ public final class RouterProfiles {
 
   public static final String QUICK = "quick";
   public static final String STANDARD = "standard";
+
+  /** The former finishing profile, now an alias of {@link #STANDARD} (see SettingsMerger). */
   public static final String THOROUGH = "thorough";
+
   public static final String CLASSIC = "classic";
 
   /** The profile of a run that names none. */
   public static final String DEFAULT = STANDARD;
 
-  public static final List<String> NAMES = List.of(QUICK, STANDARD, THOROUGH, CLASSIC);
+  public static final List<String> NAMES = List.of(QUICK, STANDARD, CLASSIC);
 
   private RouterProfiles() {}
 
@@ -57,19 +61,11 @@ public final class RouterProfiles {
         applyStandard(defaults);
         defaults.autorouter.fallbackStrategies = "none";
         defaults.optimizer.enabled = false;
+        defaults.autorouter.gridFinisher = false;
+        defaults.autorouter.fallbackRace = false;
+        defaults.autorouter.fallbackThreads = 1;
       }
-      case STANDARD -> applyStandard(defaults);
-      case THOROUGH -> {
-        applyStandard(defaults);
-        // Alternatives race beside the default run on all cores, without an attempt budget.
-        defaults.autorouter.fallbackRace = true;
-        defaults.autorouter.fallbackThreads = 0;
-        defaults.autorouter.fallbackWorkRatio = 0.0;
-        // The connections still open then get one fine-grid search each, within a step budget.
-        defaults.autorouter.gridFinisher = true;
-        // and may lift other connections in the way, kept only when fewer stay open.
-        defaults.autorouter.gridFinisherRipup = true;
-      }
+      case STANDARD, THOROUGH -> applyStandard(defaults);
       case CLASSIC -> defaults.autorouter.differentialPairs = "off";
       default -> throw new IllegalArgumentException("Unknown profile: " + name);
     }
@@ -90,5 +86,22 @@ public final class RouterProfiles {
     defaults.autorouter.forceViaInPad = false;
     // A continued board (-de board.dsn earlier.ses) keeps its earlier routes movable.
     defaults.sessionRoutesMovable = true;
+    // Fail fast, then finish on the grid: the longest routed maze search measured took about
+    // 0.8 million steps, so a search past 2 million is almost always one that fails, and a
+    // connection that failed once keeps that budget instead of doubling it. What is still open
+    // after the passes gets the grid finisher, which may lift other nets' movable copper; the
+    // optimizer stage then reworks its routes like any others.
+    defaults.autorouter.maxSearchStepsPerConnection = STANDARD_SEARCH_STEPS;
+    defaults.autorouter.maxSearchStepsAfterFailure = STANDARD_SEARCH_STEPS;
+    defaults.autorouter.gridFinisher = true;
+    defaults.autorouter.gridFinisherRipup = true;
+    // The alternative strategies race beside the default run, each within its share of the step
+    // budget, on up to one thread per core and no more than the heap holds (each attempt has a
+    // board of its own; see RoutingFallbackRunner.fallbackThreads).
+    defaults.autorouter.fallbackRace = true;
+    defaults.autorouter.fallbackThreads = 0;
   }
+
+  /** Maze search steps per connection in pass 1 of {@code standard}, and after a failure. */
+  static final long STANDARD_SEARCH_STEPS = 2_000_000L;
 }
