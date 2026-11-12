@@ -137,6 +137,13 @@ public final class BatchAutorouter extends NamedAlgorithm {
   /** Nets whose open connections this router does not try to route. */
   Set<Integer> netsLeftUnrouted = Set.of();
 
+  /**
+   * Pins a search failed to leave or reach that no trace can leave even when every route around
+   * them is ripped (own and other pads, fixed copper, keepouts, the board edge close them in).
+   * Nothing this router does changes that, so later searches from or to such a pin are skipped.
+   */
+  final Set<Integer> closedInPins = new TreeSet<>();
+
   long profileItemSelectionNanos;
   long profileIntermediateStatisticsNanos;
   long profileBoardStatisticsNanos;

@@ -170,6 +170,9 @@ reading, in the order they appear:
   kept.` After routing, when connections are still open, the pair nearest them was ripped and
   routed again around them; the pair's new route lines follow, indented. `not better, the board
   before it is kept.` means the try changed nothing.
+- `Pin <part>-<pin> is closed in by copper the router does not move (pads, fixed copper, keepouts);
+  its later searches are skipped.` No trace can leave that pin, even with every route ripped; the
+  connection stays open. Move the part or the fixed copper, or fan the pin out by hand.
 - `Routing fallback ...` lines: when the pass loop stalls, other strategies are tried
   (`fanout-retry`, `short-escape`, `direct-first`, `open-escape`, `no-fanout`, seeds), and
   `Routing fallback chose '<name>'` says which board was kept.

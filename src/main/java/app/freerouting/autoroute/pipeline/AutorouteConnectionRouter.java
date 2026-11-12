@@ -8,9 +8,12 @@ import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Pin;
 import app.freerouting.datastructures.TimeLimit;
+import app.freerouting.drc.OpenConnections;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.Net;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -101,6 +104,13 @@ final class AutorouteConnectionRouter {
       }
 
       router.setAirLine(AutorouteAirlineCalculator.calculateAirline(routeStartSet, routeDestSet));
+
+      Pin closedIn = closedInEnd(routeStartSet, routeDestSet);
+      if (closedIn != null) {
+        return new AutorouteAttemptResult(
+            AutorouteAttemptState.FAILED,
+            "pin " + closedIn.componentName() + "-" + closedIn.name() + " is closed in");
+      }
 
       boolean isStrictPass = router.settings.isStrictDrc();
 
@@ -226,10 +236,58 @@ final class AutorouteConnectionRouter {
         }
       }
 
+      if (autorouteResult.state == AutorouteAttemptState.FAILED) {
+        noteClosedIn(routeStartSet, routeNetNo);
+        noteClosedIn(routeDestSet, routeNetNo);
+      }
       return autorouteResult;
     } catch (Exception e) {
       FRLogger.error("Error during routing passes", e);
       return new AutorouteAttemptResult(AutorouteAttemptState.FAILED);
+    }
+  }
+
+  /** The single pin of an end set that was found closed in, or null. */
+  private Pin closedInEnd(Set<Item> start, Set<Item> dest) {
+    for (Set<Item> end : List.of(start, dest)) {
+      if (end.size() == 1
+          && end.iterator().next() instanceof Pin pin
+          && router.closedInPins.contains(pin.getId())) {
+        return pin;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * After a failed search: an end that is a lone pin no trace can leave even with every route
+   * around it ripped is remembered, and its later searches are skipped. Not with vias in pads,
+   * which can leave a pin the trace stubs cannot, and not in the optimizer.
+   */
+  private void noteClosedIn(Set<Item> end, int netNo) {
+    // An optimizer candidate's router lives for one item, so it would only log.
+    if (router.isOptimizerAutorouter
+        || end.size() != 1
+        || !(end.iterator().next() instanceof Pin pin)
+        || router.closedInPins.contains(pin.getId())
+        || (router.settings.autorouter != null
+            && Boolean.TRUE.equals(router.settings.autorouter.viaInPad))) {
+      return;
+    }
+    if (OpenConnections.closedForTheRouter(router.board, pin, netNo)) {
+      router.closedInPins.add(pin.getId());
+      String line =
+          "Pin "
+              + pin.componentName()
+              + "-"
+              + pin.name()
+              + " is closed in by copper the router does not move (pads, fixed copper, keepouts);"
+              + " its later searches are skipped.";
+      if (router.job != null) {
+        router.job.logInfo(line);
+      } else {
+        FRLogger.info(line);
+      }
     }
   }
 

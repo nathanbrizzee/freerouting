@@ -99,6 +99,12 @@ public final class OpenConnections {
 
     @SerializedName("closed_by")
     public List<String> closedBy;
+
+    /**
+     * Whether ripping routes alone would open a direction: some direction is blocked only by routes
+     * (unfixed traces and vias), or by nothing the check could name. Not written to the result.
+     */
+    public transient boolean ripOpens;
   }
 
   /** What the open ends on one component's pins say about its placement. */
@@ -315,6 +321,7 @@ public final class OpenConnections {
     int[] nets = {netNumber};
     boolean tried = false;
     boolean necked = false;
+    boolean ripOpens = false;
     Set<String> movable = new TreeSet<>();
     Set<String> design = new TreeSet<>();
     for (int layer = pin.firstLayer(); layer <= pin.lastLayer(); layer++) {
@@ -343,6 +350,9 @@ public final class OpenConnections {
         }
         Set<String> inTheWay = new TreeSet<>();
         blockers(board, pin, neckStub, layer, neck, nets, clearanceClass, inTheWay);
+        if (inTheWay.stream().allMatch(what -> what.startsWith("routes"))) {
+          ripOpens = true;
+        }
         if (inTheWay.stream().anyMatch(OpenConnections::isDesign)) {
           design.addAll(inTheWay);
         } else {
@@ -357,7 +367,19 @@ public final class OpenConnections {
     result.exit = necked ? "necked" : "closed";
     result.byDesign = movable.isEmpty();
     result.closedBy = new ArrayList<>(result.byDesign ? design : movable);
+    result.ripOpens = ripOpens;
     return result;
+  }
+
+  /**
+   * Whether no trace of netNumber can leave pin even when the router rips every route around it:
+   * every direction, at the neck width too, is blocked by something the router does not move (own
+   * or other pads, fixed copper, copper areas, keepouts, the board edge). The router uses it to
+   * skip searches from or to such a pin after the first one failed.
+   */
+  public static boolean closedForTheRouter(BasicBoard board, Pin pin, int netNumber) {
+    Exit exit = exit(board, pin, netNumber);
+    return closed(exit) && !exit.ripOpens;
   }
 
   /** Whether a blocker is part of the design rather than something routing or placement moves. */
