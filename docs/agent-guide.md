@@ -66,7 +66,8 @@ Rules that save trouble:
   `OutOfMemoryError` in the log, raise it, or run fewer boards at once. If the optimizer runs out
   of memory, the log says `The optimizer ran out of memory in pass #N and was stopped` and the
   routed board is still saved; lower `--router.optimizer.max_threads` or
-  `--router.optimizer.max_search_steps_per_connection` (default 1000000), or use `-mt 0`.
+  `--router.optimizer.max_search_steps_per_connection` (default 1000000) or
+  `--router.optimizer.max_search_steps_per_candidate` (default 4000000), or use `-mt 0`.
 - The log file goes to the platform's log folder (Windows `%LOCALAPPDATA%\freerouting\logs`,
   macOS `~/Library/Logs/freerouting`, Linux `~/.local/state/freerouting/logs`). Capture standard
   output too (`> board.log 2>&1`); it carries the same lines.

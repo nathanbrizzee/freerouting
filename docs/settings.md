@@ -665,6 +665,11 @@ Configures the optional route-optimization stage that runs after autorouting.
   rooms on its own board copy, ran a 356 x 165 mm board out of heap. The longest routed search on
   the benchmark boards took about 635,000 steps. Zero or below uses the router's budget. CLI:
   `--router.optimizer.max_search_steps_per_connection=<steps>`.
+- **`max_search_steps_per_candidate`**: Maze search steps one optimizer candidate may use in all:
+  every connection it routes in all of its passes, including the connections its searches rip.
+  When it runs out the candidate stops routing and is judged as it stands, so it is kept only if
+  it is still better. Default `4000000`; zero or below means no total budget. CLI:
+  `--router.optimizer.max_search_steps_per_candidate=<steps>`.
 - **`board_update_strategy`**: How the optimizer applies its changes. `GLOBAL_OPTIMAL` works out
   the candidate updates and applies the single best one, and is the only strategy left; `-us`
   with any value selects it.

@@ -125,12 +125,12 @@ final class AutoroutePassRunner {
       int skipped = 0;
       Set<Integer> keptAwayNetsAttemptedInPass = new TreeSet<>();
       for (Item currentItem : autorouteItemList) {
-        if (router.thread.isStopAutoRouterRequested()) {
+        if (router.thread.isStopAutoRouterRequested() || router.searchStepsLeft == 0) {
           break;
         }
 
         for (int i = 0; i < currentItem.netCount(); i++) {
-          if (router.thread.isStopAutoRouterRequested()) {
+          if (router.thread.isStopAutoRouterRequested() || router.searchStepsLeft == 0) {
             break;
           }
 

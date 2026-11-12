@@ -91,6 +91,16 @@ public class OptimizerSettings implements Serializable, Cloneable {
   @SerializedName("max_search_steps_per_connection")
   public Long maxSearchStepsPerConnection;
 
+  /**
+   * The most maze search steps one candidate may use in all: every connection it routes, in all of
+   * its passes, including the connections its searches rip. A candidate that rips a crowded area
+   * can otherwise route many connections at the per-connection cap. When the budget runs out the
+   * candidate stops routing and is judged as it stands, so it is kept only if it is still better. A
+   * value of zero or below means no total budget.
+   */
+  @SerializedName("max_search_steps_per_candidate")
+  public Long maxSearchStepsPerCandidate;
+
   // -------------------------------
 
   /**

@@ -39,6 +39,9 @@ final class AutorouteConnectionRouter {
     AutorouteAttemptResult result =
         routeWithin(item, routeNetNo, rippedItemList, ripupCosts, ripupPassNo, timeLimit);
     router.passSearchWork.record(timeLimit, result.state, router.thread);
+    if (router.searchStepsLeft > 0) {
+      router.searchStepsLeft = Math.max(0, router.searchStepsLeft - timeLimit.steps());
+    }
     return result;
   }
 
@@ -61,7 +64,11 @@ final class AutorouteConnectionRouter {
           steps != null && steps > 0
               ? (long) Math.min(steps * factor, Long.MAX_VALUE)
               : optimizerCap;
-      return TimeLimit.ofSteps(Math.min(budget, optimizerCap));
+      budget = Math.min(budget, optimizerCap);
+      if (router.searchStepsLeft > 0) {
+        budget = Math.min(budget, router.searchStepsLeft);
+      }
+      return TimeLimit.ofSteps(budget);
     }
     if (steps != null && steps > 0) {
       return TimeLimit.ofSteps((long) Math.min(steps * factor, Long.MAX_VALUE));

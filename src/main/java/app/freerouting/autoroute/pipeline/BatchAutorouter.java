@@ -117,6 +117,12 @@ public final class BatchAutorouter extends NamedAlgorithm {
    */
   int workBudget = -1;
 
+  /**
+   * Maze search steps this router may still use in all, or -1 for no total budget. Set for an
+   * optimizer candidate; at 0 its pass loop stops routing connections.
+   */
+  long searchStepsLeft = -1;
+
   boolean fanoutTimedOut;
 
   /** Time when the routing session started. */
@@ -409,11 +415,19 @@ public final class BatchAutorouter extends NamedAlgorithm {
     routerInstance.isOptimizerAutorouter = true;
     routerInstance.startNecked = false;
     routerInstance.netsLeftUnrouted = netsLeftUnrouted;
+    Long candidateSteps =
+        routerSettings.optimizer != null
+            ? routerSettings.optimizer.maxSearchStepsPerCandidate
+            : null;
+    if (candidateSteps != null && candidateSteps > 0) {
+      routerInstance.searchStepsLeft = candidateSteps;
+    }
 
     boolean stillUnroutedItems = true;
     int currentPassNo = 1;
     while (stillUnroutedItems
         && !job.thread.isStopAutoRouterRequested()
+        && routerInstance.searchStepsLeft != 0
         && currentPassNo <= maxPassCount) {
       stillUnroutedItems = routerInstance.autoroutePass(currentPassNo);
       if (stillUnroutedItems

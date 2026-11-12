@@ -844,16 +844,17 @@ public final class BatchOptimizer extends NamedAlgorithm {
           futures.add(
               pool.submit(
                   new OptimizeCandidateTask(
-                      job,
-                      this.board,
-                      itemId,
-                      this.minCumulativeTraceLength,
-                      withPreferredDirections,
-                      this.useIncreasedRipupCosts,
-                      candidateStop,
-                      this.deadlineMs,
-                      this.workerBoardStates,
-                      chunkBaselineMetrics)));
+                          job,
+                          this.board,
+                          itemId,
+                          this.minCumulativeTraceLength,
+                          withPreferredDirections,
+                          this.useIncreasedRipupCosts,
+                          candidateStop,
+                          this.deadlineMs,
+                          this.workerBoardStates,
+                          chunkBaselineMetrics)
+                      .withoutBoard()));
         }
 
         for (Future<CandidateResult> future : futures) {
@@ -914,7 +915,41 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
     float routeImproved = 0.0f;
 
+    // The candidates returned no boards: the winner is routed again on a fresh copy of the same
+    // board with the same settings, which gives the same result, and its board is kept.
     if (!stoppedOrTimedOut && winningCandidate != null && winningCandidate.result.improved()) {
+      CandidateStop replayStop = new CandidateStop(this.thread);
+      try {
+        winningCandidate =
+            new OptimizeCandidateTask(
+                    job,
+                    this.board,
+                    winningCandidate.result.itemId(),
+                    this.minCumulativeTraceLength,
+                    withPreferredDirections,
+                    this.useIncreasedRipupCosts,
+                    replayStop,
+                    this.deadlineMs,
+                    this.workerBoardStates,
+                    BoardStatistics.OptimizerMetrics.of(this.board))
+                .call();
+      } finally {
+        replayStop.cancel();
+      }
+      if (winningCandidate.board == null
+          && (this.thread == null || !this.thread.isStopRequested())) {
+        job.logWarning(
+            "Optimizer pass #"
+                + passNo
+                + ": the winning candidate did not improve the board when routed again; the board"
+                + " is kept as it was.");
+      }
+    }
+
+    if (!stoppedOrTimedOut
+        && winningCandidate != null
+        && winningCandidate.board != null
+        && winningCandidate.result.improved()) {
       this.board = winningCandidate.board;
       this.job.board = this.board;
       this.minCumulativeTraceLength = this.board.getStatistics().traces.totalWeightedLength;
@@ -1222,6 +1257,19 @@ public final class BatchOptimizer extends NamedAlgorithm {
     private final ThreadLocal<WorkerBoardState> workerBoardStates;
     private final BoardStatistics.OptimizerMetrics baselineMetrics;
 
+    /**
+     * Whether an improved candidate returns its board. The pass's candidates return only their
+     * result: a finished result waits until the ones submitted before it are read, and a board copy
+     * held by each such result ran a large board out of heap. The winner is routed again with its
+     * board kept.
+     */
+    private boolean keepBoard = true;
+
+    OptimizeCandidateTask withoutBoard() {
+      this.keepBoard = false;
+      return this;
+    }
+
     OptimizeCandidateTask(
         RoutingJob job,
         RoutingBoard baselineBoard,
@@ -1334,7 +1382,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
           }
         }
 
-        boolean improved = result.improved();
+        boolean improved = result.improved() && keepBoard;
         workerBoardState.finish(improved);
         snapshotFinished = true;
         if (improved) {
