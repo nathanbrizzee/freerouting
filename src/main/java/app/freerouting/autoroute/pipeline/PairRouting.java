@@ -595,7 +595,8 @@ public final class PairRouting {
       int classP,
       int classN,
       NetClass netClassP,
-      int skewTarget) {}
+      int skewTarget,
+      int tuneTarget) {}
 
   private static String routeConnection(
       RoutingBoard board,
@@ -653,7 +654,8 @@ public final class PairRouting {
               classP.getTraceClearanceClass(),
               classN.getTraceClearanceClass(),
               classP,
-              skewTarget(board, settings, pair));
+              skewTarget(board, settings, pair),
+              tuneTarget(board, settings, pair));
       List<End> endsA =
           endCandidates(board, plan.firstP(), plan.firstN(), plan.secondP(), plan.secondN(), g);
       List<End> endsB =
@@ -1415,7 +1417,7 @@ public final class PairRouting {
     double lengthP = memberLength(a.positive(), b.positive(), positiveMiddle);
     double lengthN = memberLength(a.negative(), b.negative(), negativeMiddle);
     String tuning = "";
-    if (g.skewTarget() >= 0 && Math.abs(lengthP - lengthN) > g.skewTarget()) {
+    if (g.tuneTarget() >= 0 && Math.abs(lengthP - lengthN) > g.tuneTarget()) {
       boolean shorterP = lengthP < lengthN;
       double skewBefore = Math.abs(lengthP - lengthN);
       // How far each end's breakout leaves the shorter member behind; the bumps go nearest the end
@@ -1490,6 +1492,27 @@ public final class PairRouting {
       um = DEFAULT_MAX_SKEW_UM;
     }
     return um < 0 ? -1 : umToBoard(board, um);
+  }
+
+  /**
+   * The skew above which the pair router adds length bumps, in board units, or -1 for none: the
+   * tighter of the pair's own rule and {@code pair_max_skew_um}. A pair's rule looser than the
+   * global target is a limit, not a goal: where there is room the members are still matched as
+   * closely as the other pairs, and the looser rule only decides what is accepted (the pair
+   * re-route's skew check). Leaving the bumps out changed the copper the rest of the board routes
+   * around: on a private board with four Ethernet pairs, a 1.27 mm rule left two pairs untuned and
+   * the board ended at 3 open where the same board with the bumps reached 0.
+   */
+  static int tuneTarget(RoutingBoard board, RouterSettings settings, DifferentialPair pair) {
+    int own = skewTarget(board, settings, pair);
+    Double um = settings.autorouter != null ? settings.autorouter.pairMaxSkewUm : null;
+    if (um == null) {
+      um = DEFAULT_MAX_SKEW_UM;
+    }
+    if (um < 0 || own < 0) {
+      return own;
+    }
+    return Math.min(own, umToBoard(board, um));
   }
 
   /** The skew target for a log line: {@code target 1.270 mm}, or {@code no target} when off. */

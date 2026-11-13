@@ -387,8 +387,12 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       when the bends alone cause the skew. Each bump and then the whole trace is checked
       against the board's clearances, and a pair with no room keeps its skew. The routed line ends
       with `, tuned from S mm` or `, not tuned: no room for length bumps beside the shorter member`.
-      A pair's own `(skew s)` in its `(pair (nets P N ...))` rule takes precedence, in the DSN's
-      units (with `(unit um)`, micrometres), so one board can keep USB tight and let Ethernet loose;
+      A pair's own `(skew s)` in its `(pair (nets P N ...))` rule, in the DSN's units (with
+      `(unit um)`, micrometres), is that pair's limit: a tighter rule tightens the tuning, and a
+      looser one does not stop it (where there is room the pair is still bumped to this setting, as
+      without the rule, because leaving the bumps out changes the copper the rest of the board
+      routes around) but decides what the pair re-route may accept. So one board can keep USB tight
+      and let Ethernet loose;
       `skew` is a Freerouting extension of the Specctra pair descriptor, which other tools skip.
       Set it to the skew allowance of the interface (USB 2.0 and 100 Mbit Ethernet allow
       millimetres, USB 3 and PCIe about 0.1 mm).

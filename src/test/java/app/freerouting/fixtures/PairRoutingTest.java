@@ -309,20 +309,49 @@ class PairRoutingTest extends RoutingFixtureTest {
   }
 
   /**
-   * The same pair with {@code (skew 2000)} in its rule (2 mm in this file's units): the pair's own
-   * target overrides the 0.1 mm global one, so the skew the bend makes is kept without bumps, and
-   * the line names the target.
+   * The same pair with {@code (skew 2000)} in its rule (2 mm in this file's units). The rule is a
+   * limit, not a goal: with the 0.1 mm global target the pair is still tuned exactly as without the
+   * rule (leaving the bumps out changes the copper the rest of the board routes around), and the
+   * line names the pair's own target, which the pair re-route accepts against.
    */
   @Test
-  void aPairsOwnSkewRuleOverridesTheGlobalTarget() {
+  void aLooserPairSkewRuleStillTunesToTheGlobalTarget() {
+    RoutingJob plain = getRoutingJob("PairSkew.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(plain);
+    String plainLine =
+        PairRouting.apply(plain.routerSettings, plain.board, null, new ArrayList<>()).stream()
+            .filter(l -> l.contains("routed on layer"))
+            .findFirst()
+            .orElseThrow();
+
     RoutingJob job = getRoutingJob("PairSkewRule.dsn", new TestingSettings());
     BoardLoader.loadBoardIfNeeded(job);
     assertEquals(100.0, job.routerSettings.autorouter.pairMaxSkewUm, 1e-9);
-    List<String> lines = PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>());
     String line =
-        lines.stream().filter(l -> l.contains("routed on layer")).findFirst().orElseThrow();
+        PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>()).stream()
+            .filter(l -> l.contains("routed on layer"))
+            .findFirst()
+            .orElseThrow();
     assertTrue(line.contains("(target 2.000 mm)"), "the pair's own target: " + line);
-    assertFalse(line.contains("tuned"), "within its own target, no bumps: " + line);
+    assertTrue(line.contains("tuned from"), "still tuned to the global target: " + line);
+    assertEquals(
+        plainLine.replace("(target 0.100 mm)", "(target 2.000 mm)"),
+        line,
+        "the rule must not change the routed pair");
+  }
+
+  /** With a global target looser than the pair's rule, the rule is the tighter one and governs. */
+  @Test
+  void aTighterPairSkewRuleGovernsTheTuning() {
+    RoutingJob job = getRoutingJob("PairSkewRule.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    job.routerSettings.autorouter.pairMaxSkewUm = 5000.0;
+    String line =
+        PairRouting.apply(job.routerSettings, job.board, null, new ArrayList<>()).stream()
+            .filter(l -> l.contains("routed on layer"))
+            .findFirst()
+            .orElseThrow();
+    assertFalse(line.contains("tuned"), "within the 2 mm rule, no bumps: " + line);
     assertTrue(skewOf(line) > 0.1 && skewOf(line) <= 2.0, "the bend's skew stays: " + line);
   }
 
