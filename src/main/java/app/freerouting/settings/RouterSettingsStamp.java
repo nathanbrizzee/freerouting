@@ -46,6 +46,9 @@ public final class RouterSettingsStamp {
   /** The JSON field the stamp is stored in. */
   public static final String FIELD = "router_settings_stamp";
 
+  /** The name of the user settings file the guard applies to. */
+  public static final String SETTINGS_FILE = "freerouting.json";
+
   /** The suffix of the copy kept of a file whose router values were reset. */
   public static final String BACKUP_SUFFIX = ".router-backup";
 

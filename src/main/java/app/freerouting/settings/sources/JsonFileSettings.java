@@ -3,6 +3,7 @@ package app.freerouting.settings.sources;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.GlobalSettings;
 import app.freerouting.settings.RouterSettings;
+import app.freerouting.settings.RouterSettingsStamp;
 import app.freerouting.settings.SettingsSource;
 import app.freerouting.util.gson.GsonProvider;
 import com.google.gson.JsonElement;
@@ -47,9 +48,12 @@ public class JsonFileSettings implements SettingsSource {
       // Read and close first: the stamp guard may rewrite the file, which Windows refuses while
       // it is open.
       String text = Files.readString(jsonFilePath);
-      JsonObject root =
-          app.freerouting.settings.RouterSettingsStamp.apply(
-              JsonParser.parseString(text).getAsJsonObject(), jsonFilePath);
+      JsonObject root = JsonParser.parseString(text).getAsJsonObject();
+      // Only the user settings file, which the GUI writes, is guarded; a settings file named
+      // explicitly is taken as written.
+      if (RouterSettingsStamp.SETTINGS_FILE.equals(String.valueOf(jsonFilePath.getFileName()))) {
+        root = RouterSettingsStamp.apply(root, jsonFilePath);
+      }
       JsonElement routerElement = root.get("router");
       if (routerElement != null && routerElement.isJsonObject()) {
         RouterSettings loaded = GsonProvider.GSON.fromJson(routerElement, RouterSettings.class);
