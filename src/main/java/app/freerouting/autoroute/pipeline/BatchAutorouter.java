@@ -25,6 +25,7 @@ import app.freerouting.rules.Net;
 import app.freerouting.settings.RouterSettings;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -546,6 +547,34 @@ public final class BatchAutorouter extends NamedAlgorithm {
     return false;
   }
 
+  /**
+   * Whether an item of a plane net, with {@code connectedSet} its connected set, needs no route of
+   * its own: it reaches a plane of the net (one not split into islands), and no other such plane of
+   * the net is left out of {@code connectedSet}. A net can have several separate conduction areas,
+   * for example KiCad teardrops kept as planes, or two planes not yet joined by a via; reaching one
+   * of them does not connect the others, so the item still routes.
+   *
+   * @param others the items of the net outside {@code connectedSet}, or all of them
+   */
+  static boolean connectedToItsPlanes(Set<Item> connectedSet, Collection<Item> others) {
+    boolean reachesPlane = false;
+    for (Item item : connectedSet) {
+      if (item instanceof ConductionArea ca && !ca.isFractured()) {
+        reachesPlane = true;
+        break;
+      }
+    }
+    if (!reachesPlane) {
+      return false;
+    }
+    for (Item item : others) {
+      if (item instanceof ConductionArea ca && !ca.isFractured() && !connectedSet.contains(ca)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   List<Item> getAutorouteItems(RoutingBoard board) {
     // Reuse instance collections to reduce memory allocation
     reusableAutorouteItemList.clear();
@@ -591,10 +620,8 @@ public final class BatchAutorouter extends NamedAlgorithm {
                 Net net = board.rules.nets.get(currentNetNumber);
                 boolean isPlane = net != null && net.containsPlane();
                 if (isPlane) {
-                  boolean alreadyConnectedToPlane =
-                      connectedSet.stream()
-                          .anyMatch(item -> item instanceof ConductionArea ca && !ca.isFractured());
-                  if (alreadyConnectedToPlane) {
+                  if (connectedToItsPlanes(
+                      connectedSet, board.getConnectableItems(currentNetNumber))) {
                     continue;
                   }
                   hasPlaneNet = true;

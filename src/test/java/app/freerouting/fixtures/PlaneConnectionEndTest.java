@@ -32,4 +32,28 @@ class PlaneConnectionEndTest extends RoutingFixtureTest {
     drc.calculateAllIncompletes();
     assertEquals(0, drc.getIncompleteCount(pgood), "PGOOD must be routed");
   }
+
+  /**
+   * Each PGOOD pin reaches a teardrop of its own, and the two teardrops are separate planes of the
+   * net: reaching one plane does not make a pin connected, so the autorouter still routes PGOOD
+   * when no fanout joined the teardrops first.
+   */
+  @Test
+  void pinsOnSeparateTeardropsOfANetAreStillRouted() {
+    TestingSettings ts = new TestingSettings();
+    ts.setMaxPasses(20);
+    ts.setJobTimeoutString("00:01:00");
+    ts.setFanoutEnabled(false);
+    ts.setOptimizerEnabled(false);
+    ts.setFallbackStrategies("none");
+
+    RoutingJob job = getRoutingJob("Issue367-Charger.dsn", ts);
+    runRoutingJob(job);
+
+    assertNotNull(job.board);
+    int pgood = job.board.rules.nets.get("PGOOD").iterator().next().netNumber;
+    DesignRulesChecker drc = new DesignRulesChecker(job.board, null);
+    drc.calculateAllIncompletes();
+    assertEquals(0, drc.getIncompleteCount(pgood), "PGOOD must be routed without a fanout");
+  }
 }
