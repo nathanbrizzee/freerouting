@@ -151,6 +151,21 @@ public final class RoutingPipeline {
     }
   }
 
+  /** Logs the capacity estimate of the board before routing; a report, so a failure only warns. */
+  private void logCapacity() {
+    if (this.job.board == null) {
+      return;
+    }
+    try {
+      CapacityReport capacity = CapacityReport.measure(this.job.board, this.job.routerSettings);
+      if (capacity != null) {
+        this.job.logInfo(capacity.describe());
+      }
+    } catch (RuntimeException e) {
+      this.job.logWarning("Capacity before routing could not be estimated: " + e.getMessage());
+    }
+  }
+
   private void runRoutingStage() {
     boolean routerEnabled =
         this.job.routerSettings.getRunRouter()
@@ -182,6 +197,7 @@ public final class RoutingPipeline {
               "Routing fallback disabled; the input board could not be saved: " + e.getMessage());
         }
       }
+      logCapacity();
       RoutingFallbackRunner.Race race =
           RoutingFallbackRunner.startRace(this.job, strategies, input);
       try {

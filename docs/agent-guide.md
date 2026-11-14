@@ -168,6 +168,13 @@ reading, in the order they appear:
   these do not hold the run back.
 - `Fanout pass #N ... completed ... with A SMD pins fanouted, B not routed` Escape traces and vias
   from SMD pins, before routing.
+- `Capacity before routing: N open connection(s) need about P% of the free routing area on L signal
+  layer(s) ...; X of Y tiles of T mm are over capacity, Z above 70%.` Logged once before the passes,
+  followed by `Over-full cuts: x = ... mm, C connection(s) must cross where about F track(s) fit
+  (Q%)` (or `Fullest cut:` when none is over-full) and `Over capacity: around (x, y) mm, ... (parts)`
+  regions. An estimate from straight-line lengths, before detours and vias: above about 70% overall,
+  or a cut over 100%, connections are likely to stay open whatever the settings; the cure is more
+  area, more layers or moving the parts named, not more passes.
 - `Auto-routing pass #N on board '...' was completed in T seconds with score S (U unrouted and V
   violations)` One line per routing pass. `U` falling pass after pass is progress; `U` swinging
   between the same values means connections are ripping each other.

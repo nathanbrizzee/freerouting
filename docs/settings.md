@@ -142,6 +142,21 @@ The GUI saves its settings to this file, router values included, and every later
 - **`autorouter`**: Batch autorouter stage knobs. Canonical CLI is
   `--router.autorouter.max_passes`. Flat keys (`--router.max_passes`, `-mp`,
   `FREEROUTING__ROUTER__MAX_PASSES`) still apply and warn until they are removed.
+  Before the passes every run logs a capacity estimate (no setting; it changes no routing):
+  `Capacity before routing: N open connection(s) need about P% of the free routing area on L
+  signal layer(s) (M mm of track at W mm mean pitch, before detours and vias); X of Y tiles of T
+  mm are over capacity, Z above 70%.` Each open connection needs its straight-line (octilinear)
+  length times its net's pitch (trace width plus clearance), spread over its bounding box; a
+  tile's capacity is the area on the signal layers that pads, keepouts, planes and input-fixed
+  copper leave free. Then the fullest cuts: `Over-full cuts: x = D mm, C connection(s) must cross
+  where about F track(s) fit (Q%)` (`Fullest cut: ...` when none is over 100%), where a cut is a
+  line across the whole board at a tile boundary, the connections with ends on both sides must
+  cross it, and the free length along it on all signal layers is what fits; this catches a wall
+  with a gap, which density alone misses. Last, the over-full regions: `Over capacity: around (x,
+  y) mm, K tile(s), up to Q% (parts there)`. Maze routers rarely use more than about 70% of the
+  free area, so a board above that overall, or a cut above 100%, will likely keep open
+  connections whatever the settings: it needs more area, more layers or other placement. On the
+  public benchmark boards every cut is under 30%.
     - **`enabled`**: Whether the autorouter stage runs after fanout.
     - **`algorithm`**: Algorithm identifier (`freerouting-router` by default; legacy identifiers such as `freerouting-router-v19` safely normalize to `freerouting-router`, and an unknown name falls back to it with a warning that lists the known names). Known algorithms:
       - `freerouting-router`: the original router (fanout, rip-up passes, fallbacks, optimizer).
