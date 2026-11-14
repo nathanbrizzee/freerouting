@@ -417,7 +417,15 @@ final class UnreachableGroups {
       rows = grid.rows;
       originX = grid.originX;
       originY = grid.originY;
-      return flood(scratch);
+      try {
+        return flood(scratch);
+      } finally {
+        // The candidate list keeps every check until the last net is done: holding the grid here
+        // would keep the grid of every kind alive, not one at a time.
+        grid = null;
+        label = null;
+        queue = null;
+      }
     }
 
     /**
