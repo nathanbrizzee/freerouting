@@ -30,7 +30,7 @@ process's CPU there, so read CPU from the job's own log line.
   run's best, and the pass time kept.
 - `dsn_blind.py`: adds blind and buried vias to a DSN's via rule, for the BGA tests.
 
-Every run also reads the user settings file (`%APPDATA%reeroutingreerouting.json` on Windows,
+Every run also reads the user settings file (`%APPDATA%\freerouting\freerouting.json` on Windows,
 written by the GUI); router values there override the defaults for every board. Check that its
 `router` sections are empty, or read `settings_snapshot` in a run's `.json`, before a benchmark
 round. Run external Python with `python3 -I`. At most about four JVMs of 4-6 GB fit on a 31 GB machine. Compare jars
