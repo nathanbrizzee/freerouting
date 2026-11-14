@@ -300,6 +300,12 @@ The GUI saves its settings to this file, router values included, and every later
       first in any case. Unset by default. Log line: `Auto-routing pass #1: routing the K item(s)
       of the N net(s) in first_nets first.` The `failed-first` fallback strategy sets it. CLI:
       `--router.autorouter.first_nets="NET1,NET2"`.
+    - **`skip_failed_pairs_in_pass`**: When `true`, a pass skips a connection whose two ends
+      already failed in the same pass without ripping anything (the reverse attempt from the other
+      end), until a rip-up nearby frees space; the skipped attempt counts as failed. Saves searches.
+      Default `false`: on kitspace_lpa96 it cost the clean finish in each of three runs (2 or 3
+      open against 0 in two runs without it), and no other board gained from it beyond run-to-run
+      noise. CLI: `--router.autorouter.skip_failed_pairs_in_pass=true`.
     - **`grid_finisher_max_steps`**: Grid states the finisher may expand in total, default
       `50000000`; one connection gets at most 2,000,000. The finisher tries each connection once
       and stops at this budget, at a stop request or at `job_timeout`, so a board that cannot be

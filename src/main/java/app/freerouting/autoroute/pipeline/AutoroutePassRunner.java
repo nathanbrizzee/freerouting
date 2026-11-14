@@ -195,7 +195,10 @@ final class AutoroutePassRunner {
           int currentNetNo = currentItem.getNetNumber(i);
           Net currentRouteNet = router.board.rules.nets.get(currentNetNo);
           FailedConnectionPair failedPairKey = null;
-          if (currentRouteNet != null && !currentRouteNet.containsPlane()) {
+          // skip_failed_pairs_in_pass (opt-in): no key, so nothing is skipped or remembered.
+          if (currentRouteNet != null
+              && !currentRouteNet.containsPlane()
+              && Boolean.TRUE.equals(router.settings.autorouter.skipFailedPairsInPass)) {
             failedPairKey = FailedConnectionPair.of(currentItem, currentNetNo);
           }
           final AutorouteAttemptResult autorouterResult;

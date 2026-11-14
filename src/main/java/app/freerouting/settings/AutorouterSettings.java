@@ -195,6 +195,17 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public String firstNets;
 
   /**
+   * Whether a pass skips the attempt of a connection whose pair of ends already failed in the same
+   * pass without ripping anything, until a rip-up nearby frees space. Saves searches; off by
+   * default because on kitspace_lpa96 it cost the clean finish in every run measured.
+   */
+  @SerializedName("skip_failed_pairs_in_pass")
+  @Schema(
+      description =
+          "Skip a connection whose ends already failed in the same pass without rip-up (opt-in)")
+  public Boolean skipFailedPairsInPass;
+
+  /**
    * When true, the routing stage ends with one more step for the connections still open: a pin at
    * one of them that the design closes in at its pad width (no trace that wide leaves it clear of
    * pads, fixed copper and keepouts) gets the widest narrower neck that does, never below the
