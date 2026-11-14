@@ -182,6 +182,12 @@ The GUI saves its settings to this file, router values included, and every later
       Most of these route the board again from the start, so each one costs about as much as the
       default run. `seed-N` (N a positive integer) routes the input board again with the item order
       of every pass shuffled by `item_order_seed` N; a different order gives a different board.
+      `failed-first` routes the input board again with the nets the best board so far left open
+      routed first from the first pass on (`first_nets`); it needs that board, so it runs after the
+      other alternatives and after the race, before the continuations. Log line: `Routing fallback
+      'failed-first': routing the input board again with the N net(s) the best board so far
+      (<strategy>) left open routed first.` It is not in the default lists; with the race on (`standard`)
+      name it in `fallback_race_strategies`, which then decides the strategies.
       `history` routes it again with `rip_history_cost=1` and `pin-access` with
       `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the race
       (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
@@ -281,6 +287,11 @@ The GUI saves its settings to this file, router values included, and every later
       router cannot move (...); the passes skip them. K net(s) checked, C cells.` followed by one
       pin of each walled-off group (`U1-1 (A)`). CLI: `--router.autorouter.skip_unreachable=false`
       to search them anyway.
+    - **`first_nets`**: Comma-separated net names the passes route first from the first pass on,
+      every other item keeping its place; later passes put the nets the pass before left open
+      first in any case. Unset by default. Log line: `Auto-routing pass #1: routing the K item(s)
+      of the N net(s) in first_nets first.` The `failed-first` fallback strategy sets it. CLI:
+      `--router.autorouter.first_nets="NET1,NET2"`.
     - **`grid_finisher_max_steps`**: Grid states the finisher may expand in total, default
       `50000000`; one connection gets at most 2,000,000. The finisher tries each connection once
       and stops at this budget, at a stop request or at `job_timeout`, so a board that cannot be

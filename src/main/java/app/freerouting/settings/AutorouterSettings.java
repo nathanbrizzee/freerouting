@@ -170,6 +170,15 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Boolean skipUnreachable;
 
   /**
+   * Comma-separated net names the passes route first from the first pass on, as if the pass before
+   * had left them open. The {@code failed-first} fallback strategy sets it to the nets the best
+   * board so far left open.
+   */
+  @SerializedName("first_nets")
+  @Schema(description = "Comma-separated net names routed first from the first pass on")
+  public String firstNets;
+
+  /**
    * When true, the routing stage ends with one more step for the connections still open: a pin at
    * one of them that the design closes in at its pad width (no trace that wide leaves it clear of
    * pads, fixed copper and keepouts) gets the widest narrower neck that does, never below the

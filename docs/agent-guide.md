@@ -110,6 +110,7 @@ Options worth knowing (all `--router.` on the command line):
 | `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `standard`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
 | `autorouter.skip_unreachable=false` | On in `standard`: after pass 1, connections that pads, keepouts, planes, the board edge or locked tracks wall off are logged (`Unreachable connections: N ...`, one pin per group) and not searched again. | The listed pins are design problems no router fixes: move a part, open a keepout, add a layer. Turn it off only to compare. |
 | `autorouter.stagnation_work_ratio=<r>` | Stops the passes when the fewest open has not fallen for `r` times the search work that reached it (from pass 8, at least two passes after the best). `1` in `standard` and `quick`; `-1` turns it off. | Long boards whose late passes gain nothing; the finishing stages still run. |
+| `autorouter.first_nets=NET1,NET2` | Routes the named nets first from the first pass on. | Nets that keep losing their space to others; adding `failed-first` to `autorouter.fallback_race_strategies` (`standard`, which races) or `autorouter.fallback_strategies` (no race) does it for the nets the best board left open. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
 | `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g) (skew s)))`, both optional, in the file's units) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
@@ -188,6 +189,8 @@ reading, in the order they appear:
   cannot move ...` After pass 1 (`skip_unreachable`): the pins listed sit in groups that pads,
   keepouts, planes, the board edge or locked tracks wall off. No setting routes them; report them
   as design problems. They stay in the open count.
+- `Routing fallback 'failed-first': ...` The input board is routed again with the nets the best
+  board left open routed first (opt-in: add `failed-first` to `autorouter.fallback_race_strategies`, or to `autorouter.fallback_strategies` without the race).
 - `Stopping the passes after pass #N: no fewer open connections than U ...` The work-based stop
   (`stagnation_work_ratio`) ended the passes; the finishing stages follow.
 - `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and one `Pair

@@ -73,6 +73,8 @@ final class AutoroutePassRunner {
 
       if (passNo > 1) {
         reorderSingleThreadItems(autorouteItemList, passNo);
+      } else {
+        firstNetsFirst(autorouteItemList);
       }
 
       // freerouting.net: the balls of ball grid parts first in the first pass, ring by ring
@@ -318,6 +320,69 @@ final class AutoroutePassRunner {
       router.airLine = null;
       return false;
     }
+  }
+
+  /**
+   * The nets {@code autorouter.first_nets} names, by number: the first pass routes them first, as
+   * later passes do the nets the pass before left open.
+   */
+  private Set<Integer> firstNets() {
+    String names = router.settings.autorouter != null ? router.settings.autorouter.firstNets : null;
+    if (names == null || names.isBlank()) {
+      return Collections.emptySet();
+    }
+    Set<String> wanted = new TreeSet<>();
+    for (String name : names.split(",")) {
+      if (!name.isBlank()) {
+        wanted.add(name.trim());
+      }
+    }
+    Set<Integer> result = new TreeSet<>();
+    for (int net = 1; net <= router.board.rules.nets.maxNetNumber(); net++) {
+      app.freerouting.rules.Net rulesNet = router.board.rules.nets.get(net);
+      if (rulesNet != null && wanted.contains(rulesNet.name)) {
+        result.add(net);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * The first pass: the items of the {@code first_nets} nets go first, every other item keeps its
+   * place. Plane items stay ahead, as in later passes.
+   */
+  private void firstNetsFirst(List<Item> autorouteItemList) {
+    Set<Integer> first = firstNets();
+    if (first.isEmpty()) {
+      return;
+    }
+    List<Item> planeItems = new ArrayList<>();
+    List<Item> firstItems = new ArrayList<>();
+    List<Item> otherItems = new ArrayList<>();
+    for (Item item : autorouteItemList) {
+      if (router.isPlaneItem(item, router.board)) {
+        planeItems.add(item);
+        continue;
+      }
+      boolean isFirst = false;
+      for (int i = 0; i < item.netCount(); i++) {
+        if (first.contains(item.getNetNumber(i))) {
+          isFirst = true;
+          break;
+        }
+      }
+      (isFirst ? firstItems : otherItems).add(item);
+    }
+    autorouteItemList.clear();
+    autorouteItemList.addAll(planeItems);
+    autorouteItemList.addAll(firstItems);
+    autorouteItemList.addAll(otherItems);
+    router.job.logInfo(
+        "Auto-routing pass #1: routing the "
+            + firstItems.size()
+            + " item(s) of the "
+            + first.size()
+            + " net(s) in first_nets first.");
   }
 
   private void reorderSingleThreadItems(List<Item> autorouteItemList, int passNo) {

@@ -84,8 +84,11 @@ final class RoutingFallbackRunner {
         RoutingFallback.applicable(strategies, job.routerSettings, fanoutRuns);
     List<RoutingFallback.Strategy> continuations = new ArrayList<>();
     List<RoutingFallback.Strategy> alternatives = new ArrayList<>();
+    boolean failedFirst = false;
     for (RoutingFallback.Strategy strategy : applicable) {
-      if (strategy.continueBest) {
+      if (RoutingFallback.FAILED_FIRST.equals(strategy.name)) {
+        failedFirst = true;
+      } else if (strategy.continueBest) {
         continuations.add(strategy);
       } else {
         alternatives.add(strategy);
@@ -95,10 +98,15 @@ final class RoutingFallbackRunner {
       alternatives.clear();
     }
     boolean residual = RoutingSupervisor.residual(job.routerSettings, best.unrouted);
-    if (race == null && alternatives.isEmpty() && continuations.isEmpty() && !residual) {
+    if (race == null
+        && alternatives.isEmpty()
+        && continuations.isEmpty()
+        && !residual
+        && !failedFirst) {
       return defaultRouter;
     }
-    int alternativeCount = race != null ? race.streams.size() : alternatives.size();
+    int alternativeCount =
+        (race != null ? race.streams.size() : alternatives.size()) + (failedFirst ? 1 : 0);
     job.status().fallbackPlanned(alternativeCount + continuations.size());
     recordAttempt(job, best, reason, 0);
     job.logInfo(
@@ -162,6 +170,9 @@ final class RoutingFallbackRunner {
         }
       }
     }
+    if (failedFirst) {
+      bestAttempt = runFailedFirst(job, input, inputBaseline, bestAttempt);
+    }
     List<RoutingFallback.Strategy> after = new ArrayList<>(continuations);
     if (continuedFrom != null && bestAttempt.board == continuedFrom) {
       if (!bestAttempt.outcome.isCompleteAndClean()) {
@@ -186,6 +197,42 @@ final class RoutingFallbackRunner {
             + bestAttempt.outcome
             + ".");
     return bestAttempt.router;
+  }
+
+  /**
+   * The {@code failed-first} attempt: the input board routed again with the nets the best board so
+   * far left open routed first from the first pass on, merged like any alternative.
+   */
+  private Attempt runFailedFirst(
+      RoutingJob job, byte[] input, ClearanceBaseline inputBaseline, Attempt bestAttempt) {
+    if (bestAttempt.outcome.isCompleteAndClean() || stopped(job) || budgetSpent(job)) {
+      return bestAttempt;
+    }
+    java.util.TreeSet<String> open = new java.util.TreeSet<>();
+    for (AirLine airline : new DesignRulesChecker(bestAttempt.board, null).getAllAirlines()) {
+      open.add(airline.net.name);
+    }
+    if (open.isEmpty()) {
+      return bestAttempt;
+    }
+    String names = String.join(",", open);
+    RoutingFallback.Strategy strategy =
+        new RoutingFallback.Strategy(
+            RoutingFallback.FAILED_FIRST,
+            false,
+            settings -> settings.autorouter.firstNets = names,
+            false,
+            false);
+    job.logInfo(
+        "Routing fallback '"
+            + RoutingFallback.FAILED_FIRST
+            + "': routing the input board again with the "
+            + open.size()
+            + " net(s) the best board so far ("
+            + bestAttempt.outcome.strategy
+            + ") left open routed first.");
+    Attempt attempt = runAttempt(job, input, strategy, false, inputBaseline);
+    return attempt == null ? bestAttempt : merge(job, strategy, attempt, bestAttempt);
   }
 
   /** Alternatives started beside the default run ({@code fallback_race}), merged after it. */
@@ -215,7 +262,7 @@ final class RoutingFallbackRunner {
     List<RoutingFallback.Strategy> alternatives = new ArrayList<>();
     for (RoutingFallback.Strategy strategy :
         RoutingFallback.applicable(strategies, job.routerSettings, fanoutRuns)) {
-      if (!strategy.continueBest) {
+      if (!strategy.continueBest && !RoutingFallback.FAILED_FIRST.equals(strategy.name)) {
         alternatives.add(strategy);
       }
     }

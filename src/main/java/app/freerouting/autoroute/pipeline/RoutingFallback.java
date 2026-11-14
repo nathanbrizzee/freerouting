@@ -54,6 +54,13 @@ public final class RoutingFallback {
     }
   }
 
+  /**
+   * The input board routed again with the nets the best board so far left open routed first, from
+   * the first pass on ({@code autorouter.first_nets}). It runs after the other alternatives (and
+   * after the race), as it needs their result.
+   */
+  public static final String FAILED_FIRST = "failed-first";
+
   /** The strategies a settings value may name, in catalog order. */
   public static final List<Strategy> KNOWN =
       List.of(
@@ -102,6 +109,7 @@ public final class RoutingFallback {
               settings -> settings.autorouter.pinAccessCost = 1.0,
               false,
               false),
+          new Strategy(FAILED_FIRST, false, settings -> {}, false, false),
           new Strategy("continue", false, settings -> {}, false, false),
           new Strategy(
               "continue-no-neck", false, settings -> settings.setNeckWidthUm(0), false, false));
