@@ -13,7 +13,6 @@ import app.freerouting.util.gson.GsonProvider;
 import com.google.gson.JsonElement;
 import com.google.gson.annotations.SerializedName;
 import java.io.IOException;
-import java.io.Reader;
 import java.io.Serializable;
 import java.io.Writer;
 import java.nio.file.AccessDeniedException;
@@ -142,6 +141,13 @@ public class GlobalSettings implements Serializable {
 
   @SerializedName("version")
   public String version;
+
+  /**
+   * The build and default router settings the file's router values were saved against ({@link
+   * RouterSettingsStamp}); router values saved under another stamp, or none, are reset on load.
+   */
+  @SerializedName(RouterSettingsStamp.FIELD)
+  public String routerSettingsStamp;
 
   public transient boolean showHelpOption;
   public transient String compareFile1;
@@ -348,9 +354,19 @@ public class GlobalSettings implements Serializable {
       AppPaths.migrateLegacyDirectory(AppPaths.getLegacyTempDirectory(), userDataPath);
     }
     GlobalSettings loadedSettings = null;
-    try (Reader reader = Files.newBufferedReader(configurationFilePath)) {
-      loadedSettings = GsonProvider.GSON.fromJson(reader, GlobalSettings.class);
-    } catch (com.google.gson.JsonSyntaxException | com.google.gson.JsonIOException e) {
+    try {
+      // Read and close first: the stamp guard may rewrite the file, which Windows refuses while
+      // it is open.
+      String text = Files.readString(configurationFilePath);
+      com.google.gson.JsonElement tree = com.google.gson.JsonParser.parseString(text);
+      if (tree != null && tree.isJsonObject()) {
+        // Router values saved against other defaults are reset before anything reads them.
+        tree = RouterSettingsStamp.apply(tree.getAsJsonObject(), configurationFilePath);
+      }
+      loadedSettings = GsonProvider.GSON.fromJson(tree, GlobalSettings.class);
+    } catch (com.google.gson.JsonSyntaxException
+        | com.google.gson.JsonIOException
+        | IllegalStateException e) {
       // The file exists but is corrupt or cannot be parsed — log an actionable WARN
       // and fall through with loadedSettings == null so the caller starts fresh.
       FRLogger.warn(
@@ -485,6 +501,7 @@ public class GlobalSettings implements Serializable {
     // Always stamp the file with the release-safe version, regardless of what the
     // caller had set on the object (safety net for all call sites).
     globalSettings.version = getReleaseSafeVersion();
+    globalSettings.routerSettingsStamp = RouterSettingsStamp.current();
 
     // Write the settings to the file, without the values only this launch's command line or
     // environment set

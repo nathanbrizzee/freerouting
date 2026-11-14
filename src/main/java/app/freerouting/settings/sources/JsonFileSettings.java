@@ -9,7 +9,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
-import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -44,8 +43,13 @@ public class JsonFileSettings implements SettingsSource {
       return new RouterSettings();
     }
 
-    try (Reader reader = Files.newBufferedReader(jsonFilePath)) {
-      JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+    try {
+      // Read and close first: the stamp guard may rewrite the file, which Windows refuses while
+      // it is open.
+      String text = Files.readString(jsonFilePath);
+      JsonObject root =
+          app.freerouting.settings.RouterSettingsStamp.apply(
+              JsonParser.parseString(text).getAsJsonObject(), jsonFilePath);
       JsonElement routerElement = root.get("router");
       if (routerElement != null && routerElement.isJsonObject()) {
         RouterSettings loaded = GsonProvider.GSON.fromJson(routerElement, RouterSettings.class);

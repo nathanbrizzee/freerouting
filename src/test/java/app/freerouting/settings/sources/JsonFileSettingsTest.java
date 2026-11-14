@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import app.freerouting.settings.RouterSettings;
+import app.freerouting.settings.RouterSettingsStamp;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,7 +38,14 @@ class JsonFileSettingsTest {
                 "max_passes": 42
               }
             }
-            """);
+            """
+                .replace(
+                    "\"router\":",
+                    "\""
+                        + RouterSettingsStamp.FIELD
+                        + "\": \""
+                        + RouterSettingsStamp.current()
+                        + "\", \"router\":"));
 
     JsonFileSettings sut = new JsonFileSettings(file);
     RouterSettings settings = sut.getSettings();
@@ -62,7 +70,14 @@ class JsonFileSettingsTest {
                 }
               }
             }
-            """);
+            """
+                .replace(
+                    "\"router\":",
+                    "\""
+                        + RouterSettingsStamp.FIELD
+                        + "\": \""
+                        + RouterSettingsStamp.current()
+                        + "\", \"router\":"));
 
     JsonFileSettings sut = new JsonFileSettings(file);
     RouterSettings settings = sut.getSettings();

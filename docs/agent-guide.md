@@ -173,6 +173,10 @@ reading, in the order they appear:
   between the same values means connections are ripping each other.
 - `Auto-routing pass #N: Search work: ...` and `... Rip-up: ...` How much searching the pass did,
   how much failed, and which net pairs rip each other.
+- `freerouting.json at '...' sets router values that override the defaults on every run: ...` The
+  user settings file (written by the GUI) changes router settings for every run on the machine;
+  results then differ from the documented defaults. `... held router values saved ... They were
+  reset` means a file from another build was reset once, with a `.router-backup` copy.
 - `Unreachable connections: N connection(s) on M net(s) can never be made past copper the router
   cannot move ...` After pass 1 (`skip_unreachable`): the pins listed sit in groups that pads,
   keepouts, planes, the board edge or locked tracks wall off. No setting routes them; report them

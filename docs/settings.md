@@ -4,7 +4,9 @@ Freerouting uses a flexible settings system that allows users to customize vario
 
 ### Settings File (JSON)
 
-The primary way to configure Freerouting is through a JSON settings file. This file contains key-value pairs for different settings and is usually located in the `%temp%\freerouting` directory (`%temp%` refers to your system's temporary folder). The file is created during Freerouting's first run if it doesn't already exist. The `"version"` field is set automatically to match your installed build.
+The primary way to configure Freerouting is through a JSON settings file, `freerouting.json`, in the user configuration folder: `%APPDATA%reerouting` on Windows, `~/Library/Application Support/freerouting` on macOS, `$XDG_CONFIG_HOME/freerouting` (default `~/.config/freerouting`) elsewhere. The file is created during Freerouting's first run if it doesn't already exist. The `"version"` field is set automatically to match your installed build.
+
+The GUI saves its settings to this file, router values included, and every later run on the machine, headless ones too, takes those router values over the defaults. So the file also carries `"router_settings_stamp"`: the build's version and a fingerprint of the default router settings of every profile, written on every save. On load, router values saved under another stamp, or under none (files written before the stamp existed), are reset: the file is copied to `freerouting.json.router-backup`, its `router` section is emptied, and a warning names each value reset (`freerouting.json at '...' held router values saved ...: autorouter.max_passes=3, ... They were reset so this build's defaults apply; the old file is kept as '...'`). Router values saved under the current stamp are kept, and each run logs one warning naming them (`... sets router values that override the defaults on every run: ...`). The fingerprint follows the defaults, so the reset happens whenever a default router setting changes, even between builds that report the same version.
 
 ```json
 {
