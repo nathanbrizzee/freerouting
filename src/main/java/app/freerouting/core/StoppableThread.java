@@ -13,8 +13,19 @@ public abstract class StoppableThread extends Thread implements Stoppable {
   private long searchSteps;
   private boolean searchStepBudgetReached;
 
-  /** Creates a new stoppable thread. */
-  protected StoppableThread() {}
+  /**
+   * The priority of routing work: one step below normal, so the desktop and the GUI's own event
+   * thread (left at normal) are served first while the router still gets every cycle nobody else
+   * wants. Threads take the priority of the thread that creates them, so the race, fallback and
+   * optimizer workers a job starts run at it too. Priority changes only timing, never the result:
+   * the routing depends on step budgets and a fixed merge order, not on which thread runs when.
+   */
+  public static final int WORKER_PRIORITY = Thread.NORM_PRIORITY - 1;
+
+  /** Creates a new stoppable thread at {@link #WORKER_PRIORITY}. */
+  protected StoppableThread() {
+    setPriority(WORKER_PRIORITY);
+  }
 
   /** Performs the thread's action. */
   protected abstract void threadAction();

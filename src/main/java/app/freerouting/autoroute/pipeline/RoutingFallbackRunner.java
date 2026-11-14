@@ -142,7 +142,7 @@ final class RoutingFallbackRunner {
     RoutingBoard continuedFrom = null;
     boolean continueFirst = residual && !alternatives.isEmpty();
     int threads =
-        fallbackThreads(job.routerSettings, alternatives.size() + (continueFirst ? 1 : 0));
+        fallbackThreads(job.routerSettings, alternatives.size() + (continueFirst ? 1 : 0), false);
     if (race != null) {
       bestAttempt = mergeRace(job, race, bestAttempt);
     } else if (threads > 1) {
@@ -266,7 +266,7 @@ final class RoutingFallbackRunner {
         alternatives.add(strategy);
       }
     }
-    int threads = fallbackThreads(job.routerSettings, alternatives.size());
+    int threads = fallbackThreads(job.routerSettings, alternatives.size(), true);
     if (alternatives.isEmpty() || threads <= 1) {
       return null;
     }
@@ -956,20 +956,21 @@ final class RoutingFallbackRunner {
 
   /**
    * Threads for the fallback stage; 1 or less runs the attempts in order. With {@code
-   * fallback_threads} at 0 or below, one per core, but no more than the free heap holds: each
-   * attempt routes a board of its own, so it is budgeted at twice the heap live after the last
-   * collection (the board in hand and its search rooms), and the heap and the free physical memory
-   * must both hold them ({@link app.freerouting.core.MemoryBudget}). An explicit count is used as
-   * given.
+   * fallback_threads} at 0 or below, one per core with one core left free (two beside the default
+   * run of a race, which keeps one busy itself), but no more than the free heap holds: each attempt
+   * routes a board of its own, so it is budgeted at twice the heap live after the last collection
+   * (the board in hand and its search rooms), and the heap and the free physical memory must both
+   * hold them ({@link app.freerouting.core.MemoryBudget}). An explicit count is used as given.
    */
-  private static int fallbackThreads(RouterSettings settings, int streams) {
+  private static int fallbackThreads(RouterSettings settings, int streams, boolean race) {
     Integer configured = settings.autorouter != null ? settings.autorouter.fallbackThreads : null;
     int threads = configured != null ? configured : 1;
     if (threads <= 0) {
       int cores = Runtime.getRuntime().availableProcessors();
+      int free = Math.max(1, cores - (race ? 2 : 1));
       threads =
           app.freerouting.core.MemoryBudget.parallelUnits(
-              cores, Math.max(64L << 20, 2 * app.freerouting.core.MemoryBudget.liveHeap()));
+              free, Math.max(64L << 20, 2 * app.freerouting.core.MemoryBudget.liveHeap()));
       // Never fewer than two: the chosen board is the same with any count above one but can differ
       // with one, and the free memory must not decide the result.
       threads = Math.max(Math.min(2, cores), threads);
