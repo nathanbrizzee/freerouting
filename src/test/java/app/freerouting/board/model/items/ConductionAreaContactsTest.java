@@ -80,6 +80,8 @@ class ConductionAreaContactsTest extends RoutingFixtureTest {
     testSettingsSource.setFallbackStrategies("none");
     RoutingJob job = getRoutingJob(fixture, testSettingsSource);
     job.routerSettings.autorouter.maxPasses = 2;
+    // Two passes of bm01 take about 30 s alone; the parallel forks of the full suite can double it.
+    job.routerSettings.jobTimeoutString = "00:03:00";
     job = runRoutingJob(job);
     assertNotNull(job.board, "the board loads");
     int areas = 0;
