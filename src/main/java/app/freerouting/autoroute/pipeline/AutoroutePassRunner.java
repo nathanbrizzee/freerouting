@@ -758,6 +758,20 @@ final class AutoroutePassRunner {
               + (before - items.size())
               + " item(s) whose open connections the design blocks (pins on foreign copper).");
     }
+    UnreachableGroups unreachable = router.unreachableGroups;
+    if (unreachable != null && !unreachable.isEmpty()) {
+      int beforeUnreachable = items.size();
+      items.removeIf(
+          item ->
+              item.netCount() == 1
+                  && !unreachable.canStillConnect(router.board, item, item.getNetNumber(0)));
+      if (items.size() < beforeUnreachable && router.job != null) {
+        router.job.logDebug(
+            "Not searching "
+                + (beforeUnreachable - items.size())
+                + " item(s) whose open connections copper the router cannot move walls off.");
+      }
+    }
   }
 
   /** The routing neck half width in board units, or 0 when no neck is set. */

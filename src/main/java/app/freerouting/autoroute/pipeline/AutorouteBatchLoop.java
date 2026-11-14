@@ -512,6 +512,15 @@ final class AutorouteBatchLoop {
           job.logInfo(
               "Auto-routing pass #" + currentPass + ": " + router.pinAccess.describe() + ".");
         }
+        if (currentPass == 1
+            && router.unreachableGroups == null
+            && Boolean.TRUE.equals(router.settings.autorouter.skipUnreachable)
+            && boardStatisticsAfter.connections.incompleteCount > 0) {
+          router.unreachableGroups =
+              UnreachableGroups.check(
+                  router.board, router.settings, UnreachableGroups.DEFAULT_CELL_BUDGET);
+          job.logInfo(router.unreachableGroups.describe(router.board));
+        }
       }
 
       DesignRulesChecker tempDrc = new DesignRulesChecker(router.board, null);

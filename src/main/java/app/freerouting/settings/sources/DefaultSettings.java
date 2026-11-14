@@ -232,6 +232,7 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.gridFinisher = false;
     settings.autorouter.gridFinisherMaxSteps = 50_000_000L;
     settings.autorouter.gridFinisherRipup = false;
+    settings.autorouter.skipUnreachable = false;
     settings.autorouter.ripHistoryCost = 0.0;
     settings.autorouter.pinAccessCost = 0.0;
     settings.autorouter.padNeck = false;

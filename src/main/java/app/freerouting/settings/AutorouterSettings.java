@@ -158,6 +158,18 @@ public class AutorouterSettings implements Serializable, Cloneable {
   public Boolean gridFinisherRipup;
 
   /**
+   * When true, after the first pass the router checks which copper groups of each net can never be
+   * joined past copper it cannot move (pads, keepouts, planes, the board edge, input-fixed copper),
+   * and the passes skip the searches that could only end at such a group.
+   */
+  @SerializedName("skip_unreachable")
+  @Schema(
+      description =
+          "Skip connections that copper the router cannot move walls off, found after the first"
+              + " pass")
+  public Boolean skipUnreachable;
+
+  /**
    * When true, the routing stage ends with one more step for the connections still open: a pin at
    * one of them that the design closes in at its pad width (no trace that wide leaves it clear of
    * pads, fixed copper and keepouts) gets the widest narrower neck that does, never below the

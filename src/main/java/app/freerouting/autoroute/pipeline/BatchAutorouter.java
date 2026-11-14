@@ -179,6 +179,13 @@ public final class BatchAutorouter extends NamedAlgorithm {
   public int startNeckedFailed;
 
   private BallEscapeOrder ballEscapeOrder;
+
+  /**
+   * The copper groups found after the first pass that can never be joined past copper the router
+   * cannot move ({@code autorouter.skip_unreachable}); null before the check or with it off.
+   */
+  UnreachableGroups unreachableGroups;
+
   private boolean ballEscapeOrderFound;
 
   public BallEscapeOrder getBallEscapeOrder() {

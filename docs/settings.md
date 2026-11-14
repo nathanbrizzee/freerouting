@@ -130,7 +130,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 #### **`router` Section**
 
 - **`profile`**: The run profile (CLI `--router.profile=<name>`). A profile is a set of defaults; any setting given in a file, environment variable, the CLI, the GUI or the API still overrides it, and the log names the profile at the start of each job. Profiles set passes, budgets and strategies, never time limits, so runs stay repeatable.
-    - `"standard"` (default): the most complete board in one run, trying every finishing method instead of leaving a second run to try more. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`; the maze passes fail fast (`autorouter.max_search_steps_per_connection=2000000`, `autorouter.max_search_steps_after_failure=2000000`); the alternative strategies race beside the default run (`fallback_race=true`, `fallback_threads=0`: one thread per core, no more than the heap and the free physical memory hold), each within its share of the step budget; then the grid finisher with lifting (`grid_finisher=true`, `grid_finisher_ripup=true`) takes the connections still open, and the optimizer stage reworks its routes and vias like any others. Before the finishing methods were added, on the 19-board benchmark set it left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU. With them, on the rebuilt 17-board set (fast boards 2 min, hard boards 6 min, optimizer off), it left 1757 open against 1781 without them, no board worse, in about the same time.
+    - `"standard"` (default): the most complete board in one run, trying every finishing method instead of leaving a second run to try more. Today: `fanout.strategy=bga`, `min_escape_by_pitch` and `protect_escapes` with both `_grid_only` switches, `autorouter.via_span_cost_factor=0.5`, `autorouter.force_via_in_pad=false`; the maze passes fail fast (`autorouter.max_search_steps_per_connection=2000000`, `autorouter.max_search_steps_after_failure=2000000`); the alternative strategies race beside the default run (`fallback_race=true`, `fallback_threads=0`: one thread per core, no more than the heap and the free physical memory hold), each within its share of the step budget; then the grid finisher with lifting (`grid_finisher=true`, `grid_finisher_ripup=true`) takes the connections still open, and connections that copper the router cannot move walls off are found after the first pass and not searched again (`skip_unreachable=true`), and the optimizer stage reworks its routes and vias like any others. Before the finishing methods were added, on the 19-board benchmark set it left 854 open connections against 1239 with `classic`, finished 4 boards against 1, and used less CPU. With them, on the rebuilt 17-board set (fast boards 2 min, hard boards 6 min, optimizer off), it left 1757 open against 1781 without them, no board worse, in about the same time.
     - `"quick"`: a first look in the least wall-clock time: `standard` routing without the fallback stage or race (`fallback_strategies=none`, `fallback_race=false`), without the grid finisher and without the optimizer. Use it to see how far a board gets and where it is stuck.
     - `"thorough"`: no longer a profile of its own. It is accepted and runs `standard`, which now includes what it added (the race and the grid finisher with lifting), with the attempt budget kept; the log says `Router profile 'thorough' is now part of 'standard'`.
     - `"classic"`: the original router's behaviour, with every option of the router overhaul at its hardcoded default, and `autorouter.differential_pairs=off`.
@@ -247,6 +247,20 @@ The primary way to configure Freerouting is through a JSON settings file. This f
       left alone, and a differential pair member keeps to its partner's trace layers (with
       `pair_layer_hold_passes` not negative). Log line: `Grid finisher: N open
       connection(s), T tried, C closed, S grid states expanded of B, in X s.`
+    - **`skip_unreachable`**: After the first pass, checks each net with open connections for copper
+      groups that can never be joined past copper the router cannot move: other nets' pads,
+      keepouts, other nets' planes, the board edge and copper fixed by the input file (locked
+      tracks). The passes then skip the searches that could only end at such a group; each one
+      cost a full search budget in every pass. The check errs only towards "reachable": it covers
+      the whole board on a grid, takes a trace at the narrowest width the router may give it (a
+      pin neck: `min_trace_width_um`, else half the net class width), shrinks every obstacle by
+      half a cell so a real path always shows as free cells, changes layers wherever one of the
+      net's vias clears every layer of its span, and treats copper the router or the pair stage
+      may move as absent. Default `false`; on in the `standard` and `quick` profiles. Log line:
+      `Unreachable connections: N connection(s) on M net(s) can never be made past copper the
+      router cannot move (...); the passes skip them. K net(s) checked, C cells.` followed by one
+      pin of each walled-off group (`U1-1 (A)`). CLI: `--router.autorouter.skip_unreachable=false`
+      to search them anyway.
     - **`grid_finisher_max_steps`**: Grid states the finisher may expand in total, default
       `50000000`; one connection gets at most 2,000,000. The finisher tries each connection once
       and stops at this budget, at a stop request or at `job_timeout`, so a board that cannot be
