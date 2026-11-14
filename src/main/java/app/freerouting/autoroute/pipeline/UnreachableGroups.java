@@ -61,6 +61,13 @@ final class UnreachableGroups {
   /** Cells per layer at most; a larger board gets coarser cells, which only weakens the check. */
   static final int MAX_CELLS_PER_LAYER = 1_000_000;
 
+  /**
+   * Bytes the grid and flood of one kind of net may take; boards with many layers or via types get
+   * coarser cells. A fixed amount, not the free heap, so the result does not depend on the machine;
+   * every race lane runs the check at once.
+   */
+  static final long MAX_BYTES = 40L << 20;
+
   /** Cells painted and flooded in all nets together, at most. */
   static final long DEFAULT_CELL_BUDGET = 400_000_000L;
 
@@ -83,13 +90,17 @@ final class UnreachableGroups {
 
   private UnreachableGroups() {}
 
+  /** A net to check: its copper groups and which group each pin is in. */
+  private record Candidate(NetCheck check, Map<Integer, Integer> groupOfPin) {}
+
   /**
-   * Checks every net with open connections (planes and nets the autorouter ignores aside), in net
-   * order, within {@code cellBudget} cells.
+   * Checks every net with open connections (planes and nets the autorouter ignores aside), within
+   * {@code cellBudget} cells. Nets are checked kind by kind (net order within a kind), so only one
+   * painted grid is held at a time; the flood arrays are shared.
    */
   static UnreachableGroups check(RoutingBoard board, RouterSettings settings, long cellBudget) {
     UnreachableGroups result = new UnreachableGroups();
-    Map<String, Grid> grids = new HashMap<>();
+    List<Candidate> candidates = new ArrayList<>();
     Map<Integer, List<Pin>> pinsByNet = new TreeMap<>();
     for (Pin pin : board.getPins()) {
       if (pin.netCount() == 1) {
@@ -124,12 +135,31 @@ final class UnreachableGroups {
       if (groups.size() < 2) {
         continue;
       }
+      candidates.add(new Candidate(new NetCheck(board, settings, net, groups), groupOfPin));
+    }
+    candidates.sort(
+        Comparator.comparing((Candidate c) -> c.check().key).thenComparingInt(c -> c.check().net));
+    Grid grid = null;
+    String gridKey = null;
+    Flood flood = new Flood();
+    for (Candidate candidate : candidates) {
       if (result.cellsUsed >= cellBudget) {
         result.skippedNets++;
         continue;
       }
-      NetCheck netCheck = new NetCheck(board, settings, net, groups, grids);
-      int[] root = netCheck.run();
+      NetCheck netCheck = candidate.check();
+      int net = netCheck.net;
+      List<Set<Item>> groups = netCheck.groups;
+      Map<Integer, Integer> groupOfPin = candidate.groupOfPin();
+      if (!netCheck.key.equals(gridKey)) {
+        grid = null; // the previous kind's grid is no longer needed
+        gridKey = netCheck.key;
+        grid = netCheck.paintGrid();
+        if (grid != null) {
+          result.cellsUsed += grid.cellsUsed;
+        }
+      }
+      int[] root = grid == null ? null : netCheck.run(grid, flood);
       result.cellsUsed += netCheck.cellsUsed;
       result.checkedNets++;
       if (root == null) {
@@ -308,13 +338,27 @@ final class UnreachableGroups {
     }
   }
 
+  /** The flood's label and queue arrays, shared by the nets and grown when needed. */
+  private static final class Flood {
+    int[] label = new int[0];
+    int[] queue = new int[0];
+
+    void ensure(int states) {
+      if (label.length < states) {
+        label = new int[states];
+        queue = new int[states];
+      }
+    }
+  }
+
   /** The grid and flood for one net. */
   private static final class NetCheck {
     private final RoutingBoard board;
     private final int net;
     private final List<Set<Item>> groups;
     private final AutorouteControl ctrl;
-    private final Map<String, Grid> grids;
+    private final String key;
+    private final boolean vias;
     private final List<Integer> layers = new ArrayList<>();
     private final int[] layerIndex;
     private Grid grid;
@@ -324,7 +368,7 @@ final class UnreachableGroups {
     private int rows;
     private double originX;
     private double originY;
-    private int checkHalfWidth;
+    private final int checkHalfWidth;
     private int[] label;
     private int[] parent;
     private int[] queue;
@@ -332,16 +376,10 @@ final class UnreachableGroups {
     private int sets;
     long cellsUsed;
 
-    NetCheck(
-        RoutingBoard board,
-        RouterSettings settings,
-        int net,
-        List<Set<Item>> groups,
-        Map<String, Grid> grids) {
+    NetCheck(RoutingBoard board, RouterSettings settings, int net, List<Set<Item>> groups) {
       this.board = board;
       this.net = net;
       this.groups = groups;
-      this.grids = grids;
       this.ctrl = new AutorouteControl(board, net, settings);
       this.layerIndex = new int[ctrl.layerCount];
       java.util.Arrays.fill(layerIndex, -1);
@@ -351,25 +389,14 @@ final class UnreachableGroups {
           layers.add(layer);
         }
       }
-    }
-
-    /**
-     * Returns each group's cluster root (the smallest group index joined to it), or null. Paints
-     * the grid of the net's kind first when no earlier net of that kind did.
-     */
-    int[] run() {
-      IntBox box = board.getBoundingBox();
-      if (layers.isEmpty() || box == null || box.isEmpty()) {
-        return null;
-      }
       int classHalf = Integer.MAX_VALUE;
       for (int layer : layers) {
         classHalf = Math.min(classHalf, ctrl.traceHalfWidth[layer]);
       }
       int minHalf = board.rules.getMinAllowedTraceHalfWidth();
       checkHalfWidth = Math.max(1, minHalf > 0 ? Math.min(classHalf, minHalf) : classHalf / 2);
-      boolean vias = ctrl.viasAllowed && ctrl.viaRule != null && layers.size() > 1;
-      String key =
+      vias = ctrl.viasAllowed && ctrl.viaRule != null && layers.size() > 1;
+      key =
           ctrl.traceClearanceClassIndex
               + "/"
               + checkHalfWidth
@@ -377,22 +404,31 @@ final class UnreachableGroups {
               + layers
               + "/"
               + (vias ? ctrl.viaRule.name : "-");
-      grid = grids.get(key);
-      if (grid == null) {
-        grid = paintGrid(box, vias);
-        cellsUsed += grid.cellsUsed;
-        grids.put(key, grid);
-      }
+    }
+
+    /**
+     * Returns each group's cluster root (the smallest group index joined to it) on the grid of the
+     * net's kind.
+     */
+    int[] run(Grid kindGrid, Flood scratch) {
+      grid = kindGrid;
       cell = grid.cell;
       cols = grid.cols;
       rows = grid.rows;
       originX = grid.originX;
       originY = grid.originY;
-      return flood();
+      return flood(scratch);
     }
 
-    /** Paints the immovable copper for every net of this kind. */
-    private Grid paintGrid(IntBox box, boolean vias) {
+    /**
+     * Paints the immovable copper for every net of this kind; null when the net has no active layer
+     * or the board no area.
+     */
+    Grid paintGrid() {
+      IntBox box = board.getBoundingBox();
+      if (layers.isEmpty() || box == null || box.isEmpty()) {
+        return null;
+      }
       Grid g = new Grid();
       int smallestNeed = Integer.MAX_VALUE;
       for (int layer : layers) {
@@ -406,7 +442,12 @@ final class UnreachableGroups {
       double width = box.ur.x - box.ll.x;
       double height = box.ur.y - box.ll.y;
       cell = Math.max(1.0, smallestNeed / 3.0);
-      cell = Math.max(cell, Math.sqrt(width * height / MAX_CELLS_PER_LAYER));
+      // Ints per cell of a layer: a code per active layer and per via span, and the flood's
+      // label and queue per active layer.
+      int viaCount = vias ? ctrl.viaRule.viaCount() : 0;
+      long perCell = 4L * (3L * layers.size() + viaCount);
+      double cellsPerLayer = Math.min(MAX_CELLS_PER_LAYER, MAX_BYTES / (double) perCell);
+      cell = Math.max(cell, Math.sqrt(width * height / cellsPerLayer));
       halfDiagonal = cell * Math.sqrt(0.5);
       cols = (int) Math.ceil(width / cell) + 1;
       rows = (int) Math.ceil(height / cell) + 1;
@@ -515,18 +556,19 @@ final class UnreachableGroups {
      * labelled is always entered, so the groups' own cells, which the shared grid may mark as
      * blocked, still join the floods that reach them.
      */
-    private int[] flood() {
+    private int[] flood(Flood scratch) {
       int cells = cols * rows;
       int n = layers.size();
       int[][] traces = grid.traces;
-      label = new int[n * cells];
-      java.util.Arrays.fill(label, -1);
+      scratch.ensure(n * cells);
+      label = scratch.label;
+      java.util.Arrays.fill(label, 0, n * cells, -1);
       parent = new int[groups.size()];
       for (int g = 0; g < parent.length; g++) {
         parent[g] = g;
       }
       sets = parent.length;
-      queue = new int[n * cells];
+      queue = scratch.queue;
       int head = 0;
       tail = 0;
       for (int g = 0; g < groups.size(); g++) {
