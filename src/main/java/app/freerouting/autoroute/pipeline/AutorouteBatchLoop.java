@@ -892,11 +892,18 @@ final class AutorouteBatchLoop {
   static final int WORK_STAGNATION_MIN_PASSES = 2;
 
   /**
+   * The first pass the work-based stop may end. A best reached in the first passes cost little
+   * work, so a multiple of it would stop boards that still improve: replayed over the benchmark
+   * logs, lanes stopped at passes 3 to 7 that later reached fewer open connections.
+   */
+  static final int WORK_STAGNATION_FIRST_PASS = 8;
+
+  /**
    * Whether the passes should stop for lack of progress measured in search work: connections are
-   * still open, the fewest open has not fallen for at least {@link #WORK_STAGNATION_MIN_PASSES}
-   * passes, and the steps searched since it was reached exceed {@code ratio} times the steps it
-   * took to reach it. Search steps, unlike time, are the same on every machine. Off with a ratio of
-   * zero or less.
+   * still open, this is pass {@link #WORK_STAGNATION_FIRST_PASS} or later, the fewest open has not
+   * fallen for at least {@link #WORK_STAGNATION_MIN_PASSES} passes, and the steps searched since it
+   * was reached exceed {@code ratio} times the steps it took to reach it. Search steps, unlike
+   * time, are the same on every machine. Off with a ratio of zero or less.
    */
   static boolean workStagnated(
       double ratio,
@@ -909,6 +916,7 @@ final class AutorouteBatchLoop {
     return ratio > 0
         && continueAutorouting
         && openNow > 0
+        && currentPass >= WORK_STAGNATION_FIRST_PASS
         && currentPass - passOfFewestOpen >= WORK_STAGNATION_MIN_PASSES
         && cumulativeSteps - stepsAtFewestOpen > ratio * stepsAtFewestOpen;
   }

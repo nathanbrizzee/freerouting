@@ -98,6 +98,9 @@ public final class RouterProfiles {
     // A connection that copper the router cannot move walls off is found after the first pass and
     // not searched again: each such search spent its whole budget in every pass.
     defaults.autorouter.skipUnreachable = true;
+    // The passes stop once the search work since the fewest open connections exceeds the work that
+    // reached it (from pass 8): replayed over the benchmark logs, no board lost a connection.
+    defaults.autorouter.stagnationWorkRatio = 1.0;
     // The alternative strategies race beside the default run, each within its share of the step
     // budget, on up to one thread per core and no more than the heap holds (each attempt has a
     // board of its own; see RoutingFallbackRunner.fallbackThreads).
