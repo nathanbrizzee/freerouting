@@ -52,7 +52,8 @@ class RoutingFallbackTest {
         stageNames(settings),
         "one fallback thread: no race");
     settings.autorouter.fallbackThreads = 0;
-    assertEquals(List.of("direct-first", "no-fanout", "seed-1"), stageNames(settings));
+    assertEquals(
+        List.of("direct-first", "no-fanout", "seed-1", "failed-first"), stageNames(settings));
     settings.autorouter.fallbackStrategies = "none";
     assertTrue(stageNames(settings).isEmpty(), "none turns the race off too");
   }

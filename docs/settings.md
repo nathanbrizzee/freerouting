@@ -186,8 +186,8 @@ The GUI saves its settings to this file, router values included, and every later
       routed first from the first pass on (`first_nets`); it needs that board, so it runs after the
       other alternatives and after the race, before the continuations. Log line: `Routing fallback
       'failed-first': routing the input board again with the N net(s) the best board so far
-      (<strategy>) left open routed first.` It is not in the default lists; with the race on (`standard`)
-      name it in `fallback_race_strategies`, which then decides the strategies.
+      (<strategy>) left open routed first.` It is in the default race list (`standard`); without the
+      race, add it to `fallback_strategies`.
       `history` routes it again with `rip_history_cost=1` and `pin-access` with
       `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the race
       (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
@@ -342,8 +342,11 @@ The GUI saves its settings to this file, router values included, and every later
       either way but no longer finished early). CLI: `--router.autorouter.pin_access_cost=1`.
     - **`fallback_race_strategies`**: The strategies a race starts, used in place of
       `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
-      Default `direct-first,no-fanout,seed-1`. `none` in `fallback_strategies` turns the race off
-      too. A short list does as well as a long one for less CPU time: on the eight hard PCBench
+      Default `direct-first,no-fanout,seed-1,failed-first` (`failed-first` does not race: it runs
+      after the race, only while connections are open). `none` in `fallback_strategies` turns the
+      race off too. With `failed-first` added, six boards that end with open connections (20-minute
+      cap, optimizer off) went Unifying 27 -> 22 and EncoderBoard 1 -> 0 (clean), the other four
+      unchanged, at up to half again the wall time where it ran and found nothing. A short list does as well as a long one for less CPU time: on the eight hard PCBench
       boards above (8-minute cap, optimizer off, `fallback_threads=0`, `fallback_work_ratio=0`) the
       default list and the eight attempts both left 6 open connections, but the default list took
       5,476 CPU s instead of 15,237 and 1,551 s instead of 2,066 in all, and Unifying, lpa96 and

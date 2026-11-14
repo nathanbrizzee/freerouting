@@ -190,7 +190,7 @@ reading, in the order they appear:
   keepouts, planes, the board edge or locked tracks wall off. No setting routes them; report them
   as design problems. They stay in the open count.
 - `Routing fallback 'failed-first': ...` The input board is routed again with the nets the best
-  board left open routed first (opt-in: add `failed-first` to `autorouter.fallback_race_strategies`, or to `autorouter.fallback_strategies` without the race).
+  board left open routed first (in the default race list; without the race, add `failed-first` to `autorouter.fallback_strategies`).
 - `Stopping the passes after pass #N: no fewer open connections than U ...` The work-based stop
   (`stagnation_work_ratio`) ended the passes; the finishing stages follow.
 - `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and one `Pair

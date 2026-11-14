@@ -137,7 +137,8 @@ public class DefaultSettings implements SettingsSource {
       "fanout-retry,short-escape,direct-first,open-escape,no-fanout";
   // A race of three gave the same boards as a race of eight on eight hard PCBench boards, for a
   // third of the CPU time, and more on L6, where eight attempts slowed the default run.
-  public static final String DEFAULT_FALLBACK_RACE_STRATEGIES = "direct-first,no-fanout,seed-1";
+  public static final String DEFAULT_FALLBACK_RACE_STRATEGIES =
+      "direct-first,no-fanout,seed-1,failed-first";
   public static final double DEFAULT_FALLBACK_WORK_RATIO = 1.0;
   public static final int DEFAULT_FALLBACK_THREADS = 1;
 
