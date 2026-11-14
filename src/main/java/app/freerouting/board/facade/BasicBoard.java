@@ -46,8 +46,10 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
@@ -100,6 +102,11 @@ public class BasicBoard implements Serializable {
   public transient SearchTreeManager searchTreeManager;
 
   private transient NetRoutingLedger routingLedger;
+
+  /** Normal contacts by item, valid while the content version of the item list is unchanged. */
+  private transient Map<Item, Set<Item>> normalContactCache;
+
+  private transient long normalContactCacheVersion;
 
   private transient Set<Integer> normalizeSuppressedNetNos = new HashSet<>();
   private transient int revision;
@@ -172,6 +179,27 @@ public class BasicBoard implements Serializable {
    * Incomplete-connection counts maintained across inserts and removals. The counts match {@link
    * app.freerouting.drc.DesignRulesChecker#calculateAllIncompletes()}.
    */
+  /**
+   * Returns the normal contacts of {@code item}, computed once until an item of the board changes
+   * (the content version of the item list moves). The walks over connected items ask for the
+   * contacts of the same items again and again; the set returned must not be modified.
+   */
+  public Set<Item> cachedNormalContacts(Item item) {
+    long version = itemList.getContentVersion();
+    if (normalContactCache == null || normalContactCacheVersion != version) {
+      normalContactCache = new IdentityHashMap<>();
+      normalContactCacheVersion = version;
+    }
+    Set<Item> contacts = normalContactCache.get(item);
+    if (contacts == null) {
+      contacts = item.getNormalContacts();
+      if (contacts != null) {
+        normalContactCache.put(item, contacts);
+      }
+    }
+    return contacts;
+  }
+
   public NetRoutingLedger routingLedger() {
     if (routingLedger == null) {
       routingLedger = new NetRoutingLedger(this);
@@ -834,6 +862,23 @@ public class BasicBoard implements Serializable {
   /** Returns the list of all conduction areas on the board. */
   public Collection<ConductionArea> getConductionAreas() {
     return getItemRepository().getConductionAreas();
+  }
+
+  /**
+   * Returns the conduction areas among items that are planes on a power layer, the planes a pad of
+   * a plane net drops into through a via. A teardrop or a pour on a signal layer is not one of
+   * them: it is reached like any other item of its net.
+   */
+  public Set<Item> powerLayerPlanes(Collection<Item> items) {
+    Set<Item> result = new TreeSet<>();
+    for (Item item : items) {
+      if (item instanceof ConductionArea area
+          && area.getComponentId() <= 0
+          && !layerStructure.layers[area.getLayer()].isSignal) {
+        result.add(area);
+      }
+    }
+    return result;
   }
 
   /** Returns the list of all pins on the board. */
@@ -1599,6 +1644,7 @@ public class BasicBoard implements Serializable {
     if (!connectionItems.contains(trace)) {
       return false;
     }
+    keepJunctionVias(connectionItems);
     // Remove tails at the endpoints after removing the cycle,
     // if there was no tail before.
     int currentLayer = trace.getLayer();
@@ -1616,11 +1662,32 @@ public class BasicBoard implements Serializable {
       if (!tailAtEndpointBefore[i]) {
         Trace tail = getTraceTail(endCorners[i], currentLayer, currentNetNumbers);
         if (tail != null) {
-          removeItems(tail.getConnectionItems());
+          Set<Item> tailItems = tail.getConnectionItems();
+          keepJunctionVias(tailItems);
+          removeItems(tailItems);
         }
       }
     }
     return true;
+  }
+
+  /**
+   * getConnectionItems also returns the via at a fork that ends the connection. Such a via still
+   * joins the other items it touches (other traces, or a plane its drill passes through): it is
+   * taken out of connectionItems, or removing the connection cuts them off from each other.
+   */
+  private static void keepJunctionVias(Set<Item> connectionItems) {
+    Set<Item> walked = Set.copyOf(connectionItems);
+    connectionItems.removeIf(item -> item instanceof Via via && touchesItemOutside(via, walked));
+  }
+
+  private static boolean touchesItemOutside(Via via, Set<Item> items) {
+    for (Item contact : via.getNormalContacts()) {
+      if (!items.contains(contact)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private BoardItemRepository getItemRepository() {

@@ -544,15 +544,6 @@ public class Freerouting {
     // NOW we can start logging - log4j2 will initialize with our configuration
     FRLogger.traceEntry("MainApplication.main()");
 
-    try {
-      UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-    } catch (ClassNotFoundException
-        | InstantiationException
-        | UnsupportedLookAndFeelException
-        | IllegalAccessException ex) {
-      FRLogger.error(ex.getLocalizedMessage(), ex);
-    }
-
     // Log system information
     FRLogger.info("Freerouting " + VERSION_NUMBER_STRING);
     FRLogger.info(AgentGuide.logPointer());
@@ -609,6 +600,14 @@ public class Freerouting {
     int height = 0;
     int dpi = 0;
     if (globalSettings.guiSettings.isEnabled) {
+      try {
+        UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+      } catch (ClassNotFoundException
+          | InstantiationException
+          | UnsupportedLookAndFeelException
+          | IllegalAccessException ex) {
+        FRLogger.error(ex.getMessage(), ex);
+      }
       try {
         // Get default screen device
         Toolkit toolkit = Toolkit.getDefaultToolkit();

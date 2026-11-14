@@ -20,7 +20,10 @@ import org.junit.jupiter.params.provider.CsvSource;
  */
 class ConductionAreaContactsTest extends RoutingFixtureTest {
 
-  /** The contact search as it was: every item overlapping the area, filtered by net and layer. */
+  /**
+   * The contact search by brute force: every item overlapping the area, filtered by net and layer;
+   * trace ends and via centres inside a tile, pins whose copper overlaps a tile.
+   */
   private static Set<Item> contactsFromOverlapQuery(ConductionArea area) {
     BasicBoard board = area.board;
     Set<Item> result = new TreeSet<>();
@@ -35,6 +38,15 @@ class ConductionAreaContactsTest extends RoutingFixtureTest {
           if (currentItem instanceof Trace currentTrace) {
             if (currentShape.contains(currentTrace.firstCorner())
                 || currentShape.contains(currentTrace.lastCorner())) {
+              result.add(currentItem);
+            }
+          } else if (currentItem instanceof Pin currentPin) {
+            // A pin is a contact when its copper overlaps the area: a thermal relief leaves the
+            // centre of the pad in a hole of the zone.
+            TileShape pinShape =
+                currentPin.getTreeShapeOnLayer(
+                    board.searchTreeManager.getDefaultTree(), area.getLayer());
+            if (pinShape != null && currentShape.intersection(pinShape).dimension() == 2) {
               result.add(currentItem);
             }
           } else if (currentItem instanceof DrillItem currentDrillItem) {

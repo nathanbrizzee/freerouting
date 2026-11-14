@@ -120,6 +120,22 @@ class RoutingFallbackTest {
   }
 
   @Test
+  void autoNeckAppliesOnlyWhenNeckWidthIsUnset() {
+    RouterSettings settings = new DefaultSettings().getSettings();
+    // Opt-in: not in the default list, so name it.
+    settings.autorouter.fallbackStrategies = "direct-first,continue-auto-neck";
+    List<RoutingFallback.Strategy> parsed = RoutingFallback.parse(settings, null);
+    assertTrue(
+        RoutingFallback.applicable(parsed, settings, false).stream()
+            .anyMatch(s -> "continue-auto-neck".equals(s.name)));
+
+    settings.setNeckWidthUm(150);
+    assertTrue(
+        RoutingFallback.applicable(parsed, settings, false).stream()
+            .noneMatch(s -> "continue-auto-neck".equals(s.name)));
+  }
+
+  @Test
   void outcomeRanksFewerOpensThenFewerNewViolationsThenHigherScore() {
     RoutingFallback.Outcome worse = new RoutingFallback.Outcome("a", 2, 0, 0, 10, 0);
     RoutingFallback.Outcome better = new RoutingFallback.Outcome("b", 1, 0, 0, 1, 0);
@@ -165,5 +181,47 @@ class RoutingFallbackTest {
     assertEquals(Integer.MAX_VALUE, DirectPinRouting.fanoutItemLimit(settings));
     settings.fanout.maxItems = 3;
     assertEquals(3, DirectPinRouting.fanoutItemLimit(settings));
+  }
+
+  @Test
+  void automaticContinuationsPreserveProjectMinTrackWidthFloor() {
+    app.freerouting.core.RoutingJob job = new app.freerouting.core.RoutingJob();
+    job.routerSettings = new DefaultSettings().getSettings();
+    job.routerSettings.setNeckWidthUm(200.0);
+
+    List<RoutingFallback.Strategy> withoutProject =
+        RoutingFallbackRunner.automaticContinuations(job);
+    assertTrue(withoutProject.stream().anyMatch(s -> "continue-no-neck".equals(s.name)));
+
+    job.kicadProject =
+        app.freerouting.io.kicad.KiCadProject.parse(
+            "{\"board\": {\"design_settings\": {\"rules\": {\"min_track_width\": 0.2}}}}",
+            "board.kicad_pro");
+    List<RoutingFallback.Strategy> withProject = RoutingFallbackRunner.automaticContinuations(job);
+    assertTrue(withProject.stream().noneMatch(s -> "continue-no-neck".equals(s.name)));
+  }
+
+  @Test
+  void autoNeckWarningLogsOnlyWhenAutoNeckFallbackIsChosenWithUnsetNeckWidth() {
+    List<app.freerouting.logger.LogEntry> entries = new ArrayList<>();
+    app.freerouting.core.RoutingJob job = new app.freerouting.core.RoutingJob();
+    job.routerSettings = new DefaultSettings().getSettings();
+    job.addLogEntryAddedEventListener(event -> entries.add(event.getLogEntry()));
+
+    // Non-auto-neck strategy does not emit the warning.
+    RoutingFallbackRunner.warnIfAutoNeckFallbackUsed(job, "direct-first");
+    assertTrue(entries.isEmpty());
+
+    // Explicit neck_width_um > 0 does not emit the warning even for continue-auto-neck.
+    job.routerSettings.setNeckWidthUm(150.0);
+    RoutingFallbackRunner.warnIfAutoNeckFallbackUsed(job, "continue-auto-neck");
+    assertTrue(entries.isEmpty());
+
+    // Unset neck_width_um (<= 0) with continue-auto-neck emits a WARNING log.
+    job.routerSettings.setNeckWidthUm(0.0);
+    RoutingFallbackRunner.warnIfAutoNeckFallbackUsed(job, "continue-auto-neck");
+    assertEquals(1, entries.size());
+    assertEquals(app.freerouting.logger.LogEntryType.Warning, entries.get(0).getType());
+    assertTrue(entries.get(0).getMessage().contains("neck_width_um=150.0"));
   }
 }

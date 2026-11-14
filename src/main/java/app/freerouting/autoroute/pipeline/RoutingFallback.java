@@ -66,6 +66,8 @@ public final class RoutingFallback {
       List.of(
           new Strategy("no-neck", false, settings -> settings.setNeckWidthUm(0), false, false),
           new Strategy(
+              "continue-auto-neck", false, settings -> settings.setNeckWidthUm(150), false, false),
+          new Strategy(
               "continue-fine-neck",
               false,
               settings -> settings.setNeckWidthUm(Math.min(settings.getNeckWidthUm(), 100)),
@@ -134,6 +136,9 @@ public final class RoutingFallback {
         continue;
       }
       if ("continue-no-neck".equals(strategy.name) && !necking) {
+        continue;
+      }
+      if ("continue-auto-neck".equals(strategy.name) && necking) {
         continue;
       }
       result.add(strategy);

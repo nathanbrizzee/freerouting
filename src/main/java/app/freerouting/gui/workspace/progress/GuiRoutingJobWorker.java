@@ -390,8 +390,7 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
       Thread.currentThread().interrupt();
     }
 
-    int numThreads =
-        routingJob.routerSettings.maxThreads == null ? 1 : routingJob.routerSettings.maxThreads;
+    int numThreads = routingJob.routerSettings.getOptimizerMaxThreads();
     routingJob.logInfo(
         "Starting optimization on "
             + (numThreads == 1 ? "1 thread" : numThreads + " threads")
@@ -574,7 +573,7 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
               && (routingJob.routerSettings.autorouter.maxPasses == null
                   || routingJob.routerSettings.autorouter.maxPasses >= 0);
       if (this.routerEnabledForRun) {
-        int threadCount = routingJob.routerSettings.maxThreads;
+        int threadCount = routingJob.routerSettings.getAutorouterMaxThreads();
         routingJob.logInfo(
             "Starting routing of '"
                 + routingJob.name
@@ -659,7 +658,7 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
         }
       }
     } catch (Exception e) {
-      routingJob.logError(e.getLocalizedMessage(), e);
+      routingJob.logError(e.getMessage(), e);
     }
 
     routingJob.finishedAt = Instant.now();

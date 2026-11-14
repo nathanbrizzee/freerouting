@@ -188,6 +188,11 @@ The GUI saves its settings to this file, router values included, and every later
       'failed-first': routing the input board again with the N net(s) the best board so far
       (<strategy>) left open routed first.` It is in the default race list (`standard`); without the
       race, add it to `fallback_strategies`.
+      `continue-auto-neck` (opt-in, not in the default list) continues the best board with a
+      150 um neck width when no `neck_width_um` is set, so traces may narrow near pins nobody
+      asked to narrow; it is skipped when a neck width is set. When it gives the chosen board the
+      log warns: `Fallback auto-neckdown (neck_width_um=150.0) was used because routing remained
+      incomplete with no explicit neck_width_um configured.`
       `history` routes it again with `rip_history_cost=1` and `pin-access` with
       `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the race
       (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
@@ -530,7 +535,21 @@ The GUI saves its settings to this file, router values included, and every later
       autorouter pass, for example `--router.autorouter.item_order_seed=42`. The first pass
       retains its existing ordering policy.
     - **`save_intermediate_stages`**: Save board snapshots between passes.
-    - **`ignore_net_classes`**: Net class names the autorouter should skip.
+    - **`ignore_net_classes`**: Net class names the autorouter should skip. KiCad's default class may be given as `kicad_default` or `Default`; a composite KiCad name such as `PWR,Default` may be written as is on the command line.
+    - **`priority_net_classes`**: Net classes routed first: in every pass their connections are
+      routed right after the plane pads and before the other signal nets, which may not rip them up
+      (in the maze search or when last-mile blockers are removed); priority nets may still rip each
+      other. Use it for nets that must stay short or direct, such as differential pairs or analog
+      inputs. Names resolve as for `ignore_net_classes`. CLI:
+      `--router.autorouter.priority_net_classes=ETH_DIFF,ANALOG`.
+    - **`priority_via_costs`**: Via costs of the nets of `priority_net_classes`. Unset: `via_costs`.
+    - **`plane_as_priority`**: For nets with a plane on a power layer, leave each SMD pad out of
+      the fanout and route it to its plane first, so that it drops into the plane through a via of
+      its own instead of being joined to the nearest pad of the net. While it searches, copper of the
+      same net belonging to other packages is an obstacle; pins of its own package are not. Default
+      is `false`. CLI: `--router.autorouter.plane_as_priority=true`.
+    - **`plane_share_gap_um`**: With `plane_as_priority`, two plane pads at most this far apart
+      edge to edge (no room for a via between them) may share one via. Default is `500`.
     - **`max_threads`**: Stage-specific autorouter worker-thread limit. Canonical CLI is
       `--router.autorouter.max_threads`. Bounded by the global `--router.max_threads` ceiling. The
       autorouter pass is single-threaded and does not read it; it is reserved for future
@@ -588,7 +607,7 @@ The GUI saves its settings to this file, router values included, and every later
 - **`trace_pull_tight_accuracy`**: Accuracy for pulling traces tight.
 - **`allowed_via_types`**: Enables or disables the use of different via types.
 - **`via_costs`**: Cost factor for using vias.
-- **`plane_via_costs`**: Cost factor for using vias on plane layers.
+- **`plane_via_costs`**: Cost factor for using vias on plane layers: a via that drops into a plane is priced with this factor, separately from a signal layer change (`via_costs`).
 - **`plane_nets`**: Explicit array of net names to treat as power-plane nets, enabling plane-routing mode and discounted plane via costs for these nets.
 - **`plane_as_obstacle`**: Boolean controlling whether conduction areas (copper pours) act as obstacles blocking foreign traces from passing through. Default is `false` (foreign traces may route through fills).
 - **`start_ripup_costs`**: Cost factor for ripping up existing traces.
@@ -737,6 +756,13 @@ Configures the optional route-optimization stage that runs after autorouting.
     - `2.0 – 2.5` (2.0% – 2.5%): Balanced default. Retains >80% via reductions while pruning low-yield late passes.
     - `3.5 – 5.0` (3.5% – 5.0%): Fast mode. Cuts optimizer time by ~45%, retaining ~65% via cuts.
     - `> 5.5` (> 5.5%): Rapid prototyping. Stops after 1–2 passes; not recommended for production boards.
+- **`keep_increased_ripup_costs`**: Whether the optimizer keeps the increased ripup costs of its
+  first passes after a pass that does not improve the board. By default (`false`) it drops them for
+  the rest of the run, and each later pass rips and reroutes far more items (several times the CPU
+  time of a pass with the increased costs). With `true`, a pass without gain still restarts from the
+  best board, and the next pass keeps the increased costs; after two passes in a row without gain,
+  the optimizer stops. CLI:
+  `--router.optimizer.keep_increased_ripup_costs=true`.
 - **`enable_preflight_guards`**: Whether pre-flight optimization guards are evaluated before starting the
   optimizer loop. If enabled, bypasses the optimizer stage when the board has no vias to eliminate (with trace
   length already near optimal), has an initial score at or near theoretical maximum, or all vias are mandatory

@@ -152,8 +152,7 @@ final class RoutingFallbackRunner {
       continuedFrom = parallel.continuedFrom();
     } else {
       if (continueFirst) {
-        bestAttempt =
-            runContinuations(job, bestAttempt, automaticContinuations(job.routerSettings));
+        bestAttempt = runContinuations(job, bestAttempt, automaticContinuations(job));
         continuedFrom = bestAttempt.board;
       }
       for (RoutingFallback.Strategy strategy : alternatives) {
@@ -181,7 +180,7 @@ final class RoutingFallbackRunner {
                 + " continuing it again.");
       }
     } else {
-      after.addAll(automaticContinuations(job.routerSettings));
+      after.addAll(automaticContinuations(job));
     }
     if (!after.isEmpty() && !budgetSpent(job)) {
       bestAttempt = runContinuations(job, bestAttempt, after);
@@ -196,7 +195,15 @@ final class RoutingFallbackRunner {
             + "': "
             + bestAttempt.outcome
             + ".");
+    warnIfAutoNeckFallbackUsed(job, bestAttempt.outcome.strategy);
     return bestAttempt.router;
+  }
+
+  static void warnIfAutoNeckFallbackUsed(RoutingJob job, String strategy) {
+    if ("continue-auto-neck".equals(strategy) && job.routerSettings.getNeckWidthUm() <= 0) {
+      job.logWarning(
+          "Fallback auto-neckdown (neck_width_um=150.0) was used because routing remained incomplete with no explicit neck_width_um configured.");
+    }
   }
 
   /**
@@ -633,8 +640,7 @@ final class RoutingFallbackRunner {
     long start = System.nanoTime();
     try {
       if (stream.strategy == null) {
-        return stream.runner.runContinuations(
-            stream.job, incumbent, automaticContinuations(job.routerSettings));
+        return stream.runner.runContinuations(stream.job, incumbent, automaticContinuations(job));
       }
       return stream.runner.runAttempt(stream.job, input, stream.strategy, false, inputBaseline);
     } finally {
@@ -858,6 +864,10 @@ final class RoutingFallbackRunner {
       boolean removeUnconnectedVias = !keepFanoutVias && !settings.isFanoutEnabled();
       BatchAutorouter router =
           BatchAutorouter.createAttempt(job, board, settings, removeUnconnectedVias);
+      if (!(job instanceof StreamJob)) {
+        // A parallel stream already prefixes its log lines with its name.
+        router.setStrategyName(strategyName);
+      }
       if (this.listenerSource != null) {
         router.copyListenersFrom(this.listenerSource);
       }
@@ -978,13 +988,18 @@ final class RoutingFallbackRunner {
     return Math.min(threads, streams);
   }
 
-  private static List<RoutingFallback.Strategy> automaticContinuations(RouterSettings settings) {
+  static List<RoutingFallback.Strategy> automaticContinuations(RoutingJob job) {
     List<RoutingFallback.Strategy> result = new ArrayList<>();
     RoutingFallback.Strategy continueStrategy = RoutingFallback.find("continue");
     if (continueStrategy != null) {
       result.add(continueStrategy);
     }
-    if (settings.getNeckWidthUm() > 0) {
+    boolean hasProjectMinTrackWidth =
+        job != null && job.kicadProject != null && job.kicadProject.minTrackWidthUm() != null;
+    if (job != null
+        && job.routerSettings != null
+        && job.routerSettings.getNeckWidthUm() > 0
+        && !hasProjectMinTrackWidth) {
       RoutingFallback.Strategy noNeck = RoutingFallback.find("continue-no-neck");
       if (noNeck != null) {
         result.add(noNeck);

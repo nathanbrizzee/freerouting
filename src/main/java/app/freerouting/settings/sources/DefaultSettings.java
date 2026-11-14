@@ -309,6 +309,7 @@ public class DefaultSettings implements SettingsSource {
     settings.optimizer.boardUpdateStrategy = BoardUpdateStrategy.GLOBAL_OPTIMAL;
     settings.optimizer.itemSelectionStrategy = ItemSelectionStrategy.SEQUENTIAL;
     settings.optimizer.additionalRipupCostFactorAtStart = 10;
+    settings.optimizer.keepIncreasedRipupCosts = false;
     settings.optimizer.traceRipupCostFactor = 0.6f;
     settings.optimizer.maxAutoroutePasses = 6;
     settings.optimizer.maxSearchStepsPerConnection = 1_000_000L;

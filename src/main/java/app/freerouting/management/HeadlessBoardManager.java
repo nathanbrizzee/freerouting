@@ -28,6 +28,8 @@ import app.freerouting.gui.workspace.WorkspaceSettings;
 import app.freerouting.gui.workspace.session.InteractiveActionThread;
 import app.freerouting.io.BoardReadResult;
 import app.freerouting.io.FileFormat;
+import app.freerouting.io.kicad.KiCadDesignRules;
+import app.freerouting.io.kicad.KiCadDesignRulesTranslator;
 import app.freerouting.io.kicad.KiCadJsonReader;
 import app.freerouting.io.specctra.DsnReadOptions;
 import app.freerouting.io.specctra.DsnReader;
@@ -458,6 +460,24 @@ public class HeadlessBoardManager implements BoardManager {
     this.board.rules.setViaInPad(
         Boolean.TRUE.equals(this.routingJob.routerSettings.autorouter.viaInPad),
         Boolean.TRUE.equals(this.routingJob.routerSettings.autorouter.viaTouchingPad));
+  }
+
+  /**
+   * Translates the KiCad custom design rules of the job into clearance classes. Runs before the
+   * other clearance overrides, so that they also reach the classes it adds, and after the net class
+   * exclusions, which the split net classes inherit.
+   */
+  private void applyKiCadDesignRules() {
+    KiCadDesignRules designRules = this.routingJob.kicadDesignRules;
+    if (designRules == null || this.board == null) {
+      return;
+    }
+    KiCadDesignRulesTranslator.Result result =
+        KiCadDesignRulesTranslator.apply(this.board, designRules);
+    for (String warning : result.warnings()) {
+      this.routingJob.logWarning("KiCad design rules: " + warning);
+    }
+    this.routingJob.logInfo(KiCadDesignRulesTranslator.summary(result, designRules.sourceName()));
   }
 
   private void applyHoleClearanceOverride() {
@@ -1072,6 +1092,7 @@ public class HeadlessBoardManager implements BoardManager {
       }
       this.routingJob.routerSettings.applyBoardSpecificOptimizations(this.board);
       this.routingJob.routerSettings.applyNetClassExclusions(this.board);
+      applyKiCadDesignRules();
       applyCopperToEdgeClearanceOverride();
       applyHoleClearanceOverride();
       applyMinTraceWidthOverride();

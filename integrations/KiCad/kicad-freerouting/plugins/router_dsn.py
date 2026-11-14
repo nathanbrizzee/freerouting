@@ -14,7 +14,7 @@ import logging
 import pcbnew
 
 from .config import LOG_DIR
-from .gui_helpers import wx_show_error, wx_safe_invoke
+from .gui_helpers import wx_show_error, wx_safe_invoke, refill_board_zones
 from .process_utils import ProcessDialog, ProcessThread, clean_log_line
 
 
@@ -142,12 +142,21 @@ class DsnRouter:
         gui_enabled = getattr(self.plugin, "gui_enabled", True)
         gui_flag = f"--gui.enabled={'true' if gui_enabled else 'false'}"
 
+        # KiCad writes only the net class clearances into the DSN: hand Freerouting the custom
+        # design rules of the board too, which it translates into clearance classes.
+        design_rules = self._design_rules_file()
+        # Nor does it carry the minimum track width of the board: the project file has it, and
+        # Freerouting does not neck a trace down below it.
+        project = self._board_file_with_suffix(".kicad_pro")
+
         self.plugin.module_command = [
             str(self.plugin.java_path),
             "-jar",
             str(self.plugin.module_path),
             "-de",
             str(self.plugin.module_input),
+            *([str(design_rules)] if design_rules else []),
+            *([str(project)] if project else []),
             "-do",
             str(self.plugin.module_output),
             "-host",
@@ -158,6 +167,23 @@ class DsnRouter:
             f"--logging.file.location={LOG_DIR}",
         ]
         logger.info(f"Built DSN routing command: {' '.join(self.plugin.module_command)}")
+
+    def _design_rules_file(self):
+        """The ``.kicad_dru`` file of the board, or ``None`` if it has none."""
+        return self._board_file_with_suffix(".kicad_dru")
+
+    def _board_file_with_suffix(self, suffix):
+        """The file next to the board with this suffix, or ``None`` if there is none."""
+        from pathlib import Path
+
+        try:
+            board_file = self.plugin.board.GetFileName()
+        except Exception:
+            return None
+        if not board_file:
+            return None
+        candidate = Path(board_file).with_suffix(suffix)
+        return candidate if candidate.is_file() else None
 
     def run(self):
         """Run Freerouting and show a progress dialog.
@@ -271,6 +297,7 @@ class DsnRouter:
 
         if ok:
             logger.info("SES import succeeded.")
+            refill_board_zones(board)
             try:
                 if hasattr(pcbnew, "UpdateUserInterface"):
                     pcbnew.UpdateUserInterface()

@@ -61,6 +61,11 @@ class FallbackRaceTest extends RoutingFixtureTest {
     job.routerSettings.autorouter.fallbackThreads = 3;
     job.routerSettings.autorouter.fallbackRace = true;
     job.routerSettings.autorouter.fallbackRaceStrategies = "seed-1,seed-2";
+    // The default run must still be routing when the stop comes, however fast the passes are:
+    // nothing but the stop ends it.
+    job.routerSettings.autorouter.stagnationPassLimit = 0;
+    job.routerSettings.autorouter.stagnationWorkRatio = 0.0;
+    job.routerSettings.autorouter.maxPasses = 10_000;
     RoutingJob stopped = job;
     Thread stopper =
         new Thread(

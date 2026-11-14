@@ -2,6 +2,7 @@ package app.freerouting.management.jobs;
 
 import app.freerouting.analytics.FRAnalytics;
 import app.freerouting.analytics.model.JobLifecycleStatus;
+import app.freerouting.autoroute.events.BoardUpdatedEventListener;
 import app.freerouting.autoroute.pipeline.BatchAutorouter;
 import app.freerouting.autoroute.pipeline.BatchOptimizer;
 import app.freerouting.autoroute.pipeline.RoutingPipeline;
@@ -119,17 +120,19 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
 
       RoutingPipeline pipeline = RoutingPipeline.createForHeadless(job);
       long[] liveOutputAt = {0};
+      // Writes the output from the board: the statistics of the events are not read.
       pipeline.addBoardUpdatedEventListener(
-          event -> {
-            // Each copy writes the whole session file, and events come up to 4 times a second.
-            // The final output is set after the pipeline, so live copies (for streaming clients)
-            // only need to be fresh enough to watch.
-            long now = System.currentTimeMillis();
-            if (now - liveOutputAt[0] >= LIVE_OUTPUT_INTERVAL_MILLIS) {
-              liveOutputAt[0] = now;
-              RoutingJobOutputWriter.write(job);
-            }
-          });
+          BoardUpdatedEventListener.ignoringStatistics(
+              event -> {
+                // Each copy writes the whole session file, and events come up to 4 times a
+                // second. The final output is set after the pipeline, so live copies (for
+                // streaming clients) only need to be fresh enough to watch.
+                long now = System.currentTimeMillis();
+                if (now - liveOutputAt[0] >= LIVE_OUTPUT_INTERVAL_MILLIS) {
+                  liveOutputAt[0] = now;
+                  RoutingJobOutputWriter.write(job);
+                }
+              }));
       pipeline.addStageListener(
           new RoutingPipeline.StageListener() {
             @Override

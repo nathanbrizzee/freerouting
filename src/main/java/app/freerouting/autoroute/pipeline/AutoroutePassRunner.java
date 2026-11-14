@@ -74,8 +74,18 @@ final class AutoroutePassRunner {
       if (passNo > 1) {
         reorderSingleThreadItems(autorouteItemList, passNo);
       } else {
+        if (router.settings.autorouter != null
+            && Boolean.TRUE.equals(router.settings.autorouter.planeAsPriority)) {
+          // plane_as_priority: the plane pads drop into their planes before the signals take the
+          // room around them (later passes already route plane items first).
+          List<Item> planeItems = new ArrayList<>();
+          autorouteItemList.removeIf(
+              item -> router.isPlaneItem(item, router.board) && planeItems.add(item));
+          autorouteItemList.addAll(0, planeItems);
+        }
         firstNetsFirst(autorouteItemList);
       }
+      priorityItemsFirst(autorouteItemList);
 
       // freerouting.net: the balls of ball grid parts first in the first pass, ring by ring
       // (router.autorouter.ball_escape_order); a retry plan still goes ahead of them.
@@ -90,7 +100,7 @@ final class AutoroutePassRunner {
           BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
       // The optimizer routes each candidate with a listener-less router: no one reads these.
       router.progressStatistics =
-          router.hasBoardUpdatedEventListeners()
+          router.hasBoardStatisticsReaders()
               ? new BoardStatistics(router.board, null, false)
               : null;
       router.progressItemsSinceStatistics = 0;
@@ -110,14 +120,13 @@ final class AutoroutePassRunner {
       routerCounters.routedCount = 0;
 
       long statisticsStart = BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
-      DesignRulesChecker tempDrc = new DesignRulesChecker(router.board, null);
-      tempDrc.calculateAllIncompletes();
-      routerCounters.incompleteCount = tempDrc.getIncompleteCount();
+      // The ledger keeps these counts up to date; a full DRC scan would count every net again.
+      routerCounters.incompleteCount = router.calculateIncompleteCount(router.board);
       if (BatchAutorouter.isBenchmarkProfileEnabled()) {
         router.profileIntermediateStatisticsNanos += System.nanoTime() - statisticsStart;
       }
 
-      logIncompleteDetails(passNo, itemsToGoCount, routerCounters, tempDrc);
+      logIncompleteDetails(passNo, itemsToGoCount, routerCounters);
       router.job.status().passStarted(passNo, itemsToGoCount, routerCounters.incompleteCount);
       router.fireBoardUpdatedEvent(stats, routerCounters, router.board);
 
@@ -125,7 +134,13 @@ final class AutoroutePassRunner {
       int notRouted = 0;
       int routed = 0;
       int skipped = 0;
+      Map<Integer, IntBox> netCandidateBounds = buildPaddedNetBounds(autorouteItemList);
+      Map<FailedConnectionPair, IntBox> zeroRipupFailedPairs = new LinkedHashMap<>();
       Set<Integer> keptAwayNetsAttemptedInPass = new TreeSet<>();
+      Map<Integer, NetPassProfile> netProfiles =
+          BatchAutorouter.isBenchmarkProfileEnabled() ? new LinkedHashMap<>() : null;
+      List<ItemPassProfile> slowItemProfiles =
+          BatchAutorouter.isBenchmarkProfileEnabled() ? new ArrayList<>() : null;
       for (Item currentItem : autorouteItemList) {
         if (router.thread.isStopAutoRouterRequested() || router.searchStepsLeft == 0) {
           break;
@@ -177,16 +192,58 @@ final class AutoroutePassRunner {
           long itemStart = System.nanoTime();
           long routeItemStart = BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
           PerformanceProfiler.start("autoroute_item");
-          final AutorouteAttemptResult autorouterResult =
-              router.autorouteItem(
-                  currentItem,
-                  currentItem.getNetNumber(i),
-                  rippedItemList,
-                  rippedItemCosts,
-                  passNo);
+          int currentNetNo = currentItem.getNetNumber(i);
+          Net currentRouteNet = router.board.rules.nets.get(currentNetNo);
+          FailedConnectionPair failedPairKey = null;
+          if (currentRouteNet != null && !currentRouteNet.containsPlane()) {
+            failedPairKey = FailedConnectionPair.of(currentItem, currentNetNo);
+          }
+          final AutorouteAttemptResult autorouterResult;
+          if (failedPairKey != null && zeroRipupFailedPairs.containsKey(failedPairKey)) {
+            autorouterResult =
+                new AutorouteAttemptResult(
+                    AutorouteAttemptState.FAILED,
+                    "Skipped reverse attempt in same pass (pair already failed with 0 ripups).");
+          } else {
+            autorouterResult =
+                router.autorouteItem(
+                    currentItem, currentNetNo, rippedItemList, rippedItemCosts, passNo);
+          }
           PerformanceProfiler.end("autoroute_item");
+          if (!rippedItemList.isEmpty()) {
+            invalidateZeroRipupPairs(zeroRipupFailedPairs, rippedItemList);
+          } else if (failedPairKey != null
+              && autorouterResult.state == AutorouteAttemptState.FAILED) {
+            zeroRipupFailedPairs.put(failedPairKey, netCandidateBounds.get(currentNetNo));
+          }
           if (BatchAutorouter.isBenchmarkProfileEnabled()) {
-            router.profileAutorouteItemNanos += System.nanoTime() - routeItemStart;
+            long itemElapsedNanos = System.nanoTime() - routeItemStart;
+            router.profileAutorouteItemNanos += itemElapsedNanos;
+            int netNo = currentItem.getNetNumber(i);
+            Net routeNet = router.board.rules.nets.get(netNo);
+            String netName = routeNet != null ? routeNet.name : "net#" + netNo;
+            NetPassProfile np =
+                netProfiles.computeIfAbsent(netNo, k -> new NetPassProfile(netNo, netName));
+            np.totalNanos += itemElapsedNanos;
+            np.attempts++;
+            np.ripped += rippedItemList.size();
+            if (autorouterResult.state == AutorouteAttemptState.ROUTED) {
+              np.routed++;
+            } else if (autorouterResult.state == AutorouteAttemptState.FAILED
+                || autorouterResult.state == AutorouteAttemptState.INSERT_ERROR) {
+              np.failed++;
+            } else {
+              np.skipped++;
+            }
+            slowItemProfiles.add(
+                new ItemPassProfile(
+                    itemElapsedNanos,
+                    netNo,
+                    netName,
+                    currentItem.getClass().getSimpleName(),
+                    currentItem.getId(),
+                    autorouterResult.state,
+                    rippedItemList.size()));
           }
           logSlowItem(
               passNo,
@@ -235,6 +292,7 @@ final class AutoroutePassRunner {
               List<Item> tracesToRip = failedNetRipItems(router.board, currentItem, netNo);
               if (!tracesToRip.isEmpty()) {
                 router.board.removeItems(tracesToRip);
+                invalidateZeroRipupPairs(zeroRipupFailedPairs, tracesToRip);
               }
             }
             if (itemsToGoCount <= 5 || failureCount >= 3) {
@@ -278,7 +336,7 @@ final class AutoroutePassRunner {
       long finalBoardStatisticsStart =
           BatchAutorouter.isBenchmarkProfileEnabled() ? System.nanoTime() : 0;
       final BoardStatistics boardStatistics =
-          router.hasBoardUpdatedEventListeners() ? router.board.getStatistics() : null;
+          router.hasBoardStatisticsReaders() ? router.board.getStatistics() : null;
       if (BatchAutorouter.isBenchmarkProfileEnabled()) {
         router.profileBoardStatisticsNanos += System.nanoTime() - finalBoardStatisticsStart;
         router.profileIntermediateStatisticsNanos += System.nanoTime() - finalStatisticsStart;
@@ -312,6 +370,9 @@ final class AutoroutePassRunner {
       PerformanceProfiler.recordPass(
           passNo, routerCounters.incompleteCount, passDuration, currentRipupCost);
       router.logBenchmarkProfile(passNo);
+      if (BatchAutorouter.isBenchmarkProfileEnabled()) {
+        logPassBreakdownProfile(passNo, netProfiles, slowItemProfiles);
+      }
 
       router.airLine = null;
       return routed > 0 || notRouted > 0;
@@ -385,6 +446,65 @@ final class AutoroutePassRunner {
             + " net(s) in first_nets first.");
   }
 
+  static Map<Integer, IntBox> buildPaddedNetBounds(List<Item> autorouteItemList) {
+    Map<Integer, IntBox> bounds = new LinkedHashMap<>();
+    for (Item item : autorouteItemList) {
+      IntBox box = item.boundingBox();
+      for (int i = 0; i < item.netCount(); i++) {
+        int netNo = item.getNetNumber(i);
+        bounds.merge(netNo, box, IntBox::union);
+      }
+    }
+    for (Map.Entry<Integer, IntBox> entry : bounds.entrySet()) {
+      IntBox box = entry.getValue();
+      int pad = Math.max(100_000, Math.max(box.width(), box.height()) / 2);
+      entry.setValue(box.offset(pad));
+    }
+    return bounds;
+  }
+
+  static void invalidateZeroRipupPairs(
+      Map<FailedConnectionPair, IntBox> zeroRipupFailedPairs,
+      java.util.Collection<Item> rippedItems) {
+    if (zeroRipupFailedPairs.isEmpty() || rippedItems.isEmpty()) {
+      return;
+    }
+    zeroRipupFailedPairs
+        .entrySet()
+        .removeIf(
+            entry -> {
+              IntBox region = entry.getValue();
+              if (region == null) {
+                return true;
+              }
+              for (Item ripped : rippedItems) {
+                if (ripped.boundingBox().intersects(region)) {
+                  return true;
+                }
+              }
+              return false;
+            });
+  }
+
+  static int componentPinCount(RoutingBoard board, Item item) {
+    int componentId = item.getComponentId();
+    if (componentId <= 0 || board == null || board.components == null) {
+      return 0;
+    }
+    var component = board.components.get(componentId);
+    if (component == null || component.getPackage() == null) {
+      return 0;
+    }
+    return component.getPackage().pinCount();
+  }
+
+  static Comparator<Item> deterministicItemComparator(RoutingBoard board) {
+    return Comparator.comparingInt((Item item) -> item.netCount() > 0 ? item.getNetNumber(0) : 0)
+        .thenComparing(
+            Comparator.comparingInt((Item item) -> componentPinCount(board, item)).reversed())
+        .thenComparingInt(Item::getId);
+  }
+
   private void reorderSingleThreadItems(List<Item> autorouteItemList, int passNo) {
     List<Item> planeItems = new ArrayList<>();
     List<Item> signalItems = new ArrayList<>();
@@ -400,9 +520,7 @@ final class AutoroutePassRunner {
       return;
     }
 
-    Comparator<Item> deterministicItemComparator =
-        Comparator.comparingInt((Item item) -> item.netCount() > 0 ? item.getNetNumber(0) : 0)
-            .thenComparingInt(Item::getId);
+    Comparator<Item> deterministicItemComparator = deterministicItemComparator(router.board);
 
     Integer orderSeed =
         router.settings.autorouter != null ? router.settings.autorouter.itemOrderSeed : null;
@@ -451,6 +569,43 @@ final class AutoroutePassRunner {
     autorouteItemList.clear();
     autorouteItemList.addAll(planeItems);
     autorouteItemList.addAll(signalItems);
+  }
+
+  /**
+   * Moves the items of the priority net classes (router.autorouter.priority_net_classes) ahead of
+   * the other signal items, after the plane items, keeping the order within each group. Nothing
+   * moves on a board without priority classes.
+   */
+  private void priorityItemsFirst(List<Item> autorouteItemList) {
+    List<Item> planeItems = new ArrayList<>();
+    List<Item> priorityItems = new ArrayList<>();
+    List<Item> otherItems = new ArrayList<>();
+    for (Item item : autorouteItemList) {
+      if (router.isPlaneItem(item, router.board)) {
+        planeItems.add(item);
+      } else if (isRoutedFirst(item)) {
+        priorityItems.add(item);
+      } else {
+        otherItems.add(item);
+      }
+    }
+    if (priorityItems.isEmpty()) {
+      return;
+    }
+    autorouteItemList.clear();
+    autorouteItemList.addAll(planeItems);
+    autorouteItemList.addAll(priorityItems);
+    autorouteItemList.addAll(otherItems);
+  }
+
+  private boolean isRoutedFirst(Item item) {
+    for (int i = 0; i < item.netCount(); i++) {
+      Net net = router.board.rules.nets.get(item.getNetNumber(i));
+      if (net != null && net.isRoutedFirst()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -598,8 +753,7 @@ final class AutoroutePassRunner {
     this.stagnationCount = 0;
   }
 
-  private void logIncompleteDetails(
-      int passNo, int itemsToGoCount, RouterCounters counters, DesignRulesChecker drc) {
+  private void logIncompleteDetails(int passNo, int itemsToGoCount, RouterCounters counters) {
     if (counters.incompleteCount <= 0) {
       return;
     }
@@ -612,7 +766,7 @@ final class AutoroutePassRunner {
             + itemsToGoCount
             + " items to route");
     for (int netNumber = 1; netNumber <= router.board.rules.nets.maxNetNumber(); netNumber++) {
-      int netIncompletes = drc.getIncompleteCount(netNumber);
+      int netIncompletes = router.board.routingLedger().incompleteCount(netNumber);
       if (netIncompletes > 0) {
         Net net = router.board.rules.nets.get(netNumber);
         String netName = net != null ? net.name : "net#" + netNumber;
@@ -785,7 +939,10 @@ final class AutoroutePassRunner {
     router.progressItemsSinceStatistics++;
     if (router.shouldFireBoardUpdate()) {
       long now = System.currentTimeMillis();
-      if (router.progressItemsSinceStatistics >= BatchAutorouter.PROGRESS_STATISTICS_ITEM_INTERVAL
+      // Built only for listeners that read them, and at most every few seconds.
+      if (router.hasBoardStatisticsReaders()
+          && router.progressItemsSinceStatistics
+              >= BatchAutorouter.PROGRESS_STATISTICS_ITEM_INTERVAL
           && now - router.progressStatisticsBuiltAtMillis
               >= BatchAutorouter.PROGRESS_STATISTICS_MIN_INTERVAL_MILLIS) {
         long progressStatisticsStart =
@@ -901,5 +1058,124 @@ final class AutoroutePassRunner {
         "Incompletes " + (before ? "before" : "after") + " remove_tails=" + incompleteCount,
         "Autorouter pass #" + passNo,
         new Point[0]);
+  }
+
+  private void logPassBreakdownProfile(
+      int passNo,
+      Map<Integer, NetPassProfile> netProfiles,
+      List<ItemPassProfile> slowItemProfiles) {
+    if (netProfiles != null && !netProfiles.isEmpty()) {
+      List<NetPassProfile> sortedNets = new ArrayList<>(netProfiles.values());
+      sortedNets.sort(Comparator.comparingLong((NetPassProfile n) -> n.totalNanos).reversed());
+      StringBuilder sb = new StringBuilder();
+      sb.append("BENCHMARK_PROFILE_NETS pass=").append(passNo);
+      int limit = Math.min(10, sortedNets.size());
+      for (int idx = 0; idx < limit; idx++) {
+        NetPassProfile np = sortedNets.get(idx);
+        sb.append(
+            String.format(
+                java.util.Locale.US,
+                " | #%d net=%s(%d) ms=%.1f att=%d ok=%d fail=%d skip=%d rip=%d",
+                idx + 1,
+                np.netName,
+                np.netNo,
+                np.totalNanos / 1_000_000.0,
+                np.attempts,
+                np.routed,
+                np.failed,
+                np.skipped,
+                np.ripped));
+      }
+      FRLogger.info(sb.toString());
+    }
+    if (slowItemProfiles != null && !slowItemProfiles.isEmpty()) {
+      slowItemProfiles.sort(
+          Comparator.comparingLong((ItemPassProfile p) -> p.elapsedNanos).reversed());
+      StringBuilder sb = new StringBuilder();
+      sb.append("BENCHMARK_PROFILE_SLOW_ITEMS pass=").append(passNo);
+      int limit = Math.min(10, slowItemProfiles.size());
+      for (int idx = 0; idx < limit; idx++) {
+        ItemPassProfile ip = slowItemProfiles.get(idx);
+        sb.append(
+            String.format(
+                java.util.Locale.US,
+                " | #%d %s#%d net=%s(%d) ms=%.1f state=%s rip=%d",
+                idx + 1,
+                ip.itemType,
+                ip.itemId,
+                ip.netName,
+                ip.netNo,
+                ip.elapsedNanos / 1_000_000.0,
+                ip.state,
+                ip.ripped));
+      }
+      FRLogger.info(sb.toString());
+    }
+  }
+
+  private static final class NetPassProfile {
+    final int netNo;
+    final String netName;
+    long totalNanos;
+    int attempts;
+    int routed;
+    int failed;
+    int skipped;
+    int ripped;
+
+    NetPassProfile(int netNo, String netName) {
+      this.netNo = netNo;
+      this.netName = netName;
+    }
+  }
+
+  private static final class ItemPassProfile {
+    final long elapsedNanos;
+    final int netNo;
+    final String netName;
+    final String itemType;
+    final int itemId;
+    final AutorouteAttemptState state;
+    final int ripped;
+
+    ItemPassProfile(
+        long elapsedNanos,
+        int netNo,
+        String netName,
+        String itemType,
+        int itemId,
+        AutorouteAttemptState state,
+        int ripped) {
+      this.elapsedNanos = elapsedNanos;
+      this.netNo = netNo;
+      this.netName = netName;
+      this.itemType = itemType;
+      this.itemId = itemId;
+      this.state = state;
+      this.ripped = ripped;
+    }
+  }
+
+  record FailedConnectionPair(int netNo, Set<Integer> sideA, Set<Integer> sideB) {
+    static FailedConnectionPair of(Item item, int netNo) {
+      Set<Item> connected = item.getConnectedSet(netNo);
+      Set<Item> unconnected = item.getUnconnectedSet(netNo);
+      if (connected.isEmpty() || unconnected.isEmpty()) {
+        return null;
+      }
+      Set<Integer> a = new TreeSet<>();
+      for (Item it : connected) {
+        a.add(it.getId());
+      }
+      Set<Integer> b = new TreeSet<>();
+      for (Item it : unconnected) {
+        b.add(it.getId());
+      }
+      int minA = a.iterator().next();
+      int minB = b.iterator().next();
+      return minA <= minB
+          ? new FailedConnectionPair(netNo, a, b)
+          : new FailedConnectionPair(netNo, b, a);
+    }
   }
 }
