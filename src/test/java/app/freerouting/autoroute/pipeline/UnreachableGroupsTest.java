@@ -71,6 +71,20 @@ class UnreachableGroupsTest extends RoutingFixtureTest {
         0, new DesignRulesChecker(routed.board, null).getAllAirlines().length, "both nets route");
   }
 
+  /**
+   * A pin on the top and one on the bottom joined only through a via that passes a ground plane:
+   * vias are drilled through a plane, so the plane must not wall the via off.
+   */
+  @Test
+  void aViaThroughAPlaneIsAWayOut() {
+    RoutingJob job = getRoutingJob("UnreachablePlaneVia.dsn", new TestingSettings());
+    BoardLoader.loadBoardIfNeeded(job);
+    UnreachableGroups check =
+        UnreachableGroups.check(
+            job.board, job.routerSettings, UnreachableGroups.DEFAULT_CELL_BUDGET);
+    assertEquals(0, check.unreachableConnectionCount(), check.describe(job.board));
+  }
+
   @Test
   void theRunSkipsTheWalledPinAndRoutesTheRest() {
     TestingSettings settings = new TestingSettings();

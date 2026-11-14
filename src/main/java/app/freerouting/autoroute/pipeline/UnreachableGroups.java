@@ -48,6 +48,11 @@ import java.util.TreeMap;
  *       only by a stage (pairs, direct pin routes).
  * </ul>
  *
+ * <p>Nets alike in what the grid measures (clearance class, trace width, layers, via rule) share
+ * one painted grid: each cell records the one net whose copper alone covers it (blocking every
+ * other net) or that it blocks every net, so a net pays only for its flood. Copper on several nets
+ * is left out of the shared grid, which errs towards reachable.
+ *
  * <p>Deterministic: the result depends only on the board and the settings. The work is bounded by a
  * cell budget; nets left unchecked when it runs out count as reachable.
  */
@@ -84,6 +89,7 @@ final class UnreachableGroups {
    */
   static UnreachableGroups check(RoutingBoard board, RouterSettings settings, long cellBudget) {
     UnreachableGroups result = new UnreachableGroups();
+    Map<String, Grid> grids = new HashMap<>();
     Map<Integer, List<Pin>> pinsByNet = new TreeMap<>();
     for (Pin pin : board.getPins()) {
       if (pin.netCount() == 1) {
@@ -122,7 +128,7 @@ final class UnreachableGroups {
         result.skippedNets++;
         continue;
       }
-      NetCheck netCheck = new NetCheck(board, settings, net, groups);
+      NetCheck netCheck = new NetCheck(board, settings, net, groups, grids);
       int[] root = netCheck.run();
       result.cellsUsed += netCheck.cellsUsed;
       result.checkedNets++;
@@ -268,21 +274,56 @@ final class UnreachableGroups {
     return true;
   }
 
+  /** A probe net number no item holds, to ask whether an item obstructs traces of other nets. */
+  private static final int NO_NET = Integer.MIN_VALUE;
+
+  /** Cell code: no immovable copper. */
+  private static final int FREE = 0;
+
+  /** Cell code: blocked for every net. */
+  private static final int ALL = -1;
+
+  /**
+   * The painted obstacles for one kind of net. Per active layer and per via a cell holds {@link
+   * #FREE}, {@link #ALL}, or the one net whose copper alone covers it, which blocks every net but
+   * that one.
+   */
+  private static final class Grid {
+    double cell;
+    int cols;
+    int rows;
+    double originX;
+    double originY;
+    int[][] traces;
+    final List<int[]> viaSpans = new ArrayList<>();
+    final List<int[]> viaLayers = new ArrayList<>();
+    long cellsUsed;
+
+    static boolean blocks(int code, int net) {
+      return code == ALL || (code != FREE && code != net);
+    }
+
+    static int merge(int code, int add) {
+      return code == FREE || code == add ? add : ALL;
+    }
+  }
+
   /** The grid and flood for one net. */
   private static final class NetCheck {
     private final RoutingBoard board;
     private final int net;
     private final List<Set<Item>> groups;
     private final AutorouteControl ctrl;
+    private final Map<String, Grid> grids;
     private final List<Integer> layers = new ArrayList<>();
     private final int[] layerIndex;
+    private Grid grid;
     private double cell;
     private double halfDiagonal;
     private int cols;
     private int rows;
     private double originX;
     private double originY;
-    private boolean[][] blocked;
     private int checkHalfWidth;
     private int[] label;
     private int[] parent;
@@ -291,10 +332,16 @@ final class UnreachableGroups {
     private int sets;
     long cellsUsed;
 
-    NetCheck(RoutingBoard board, RouterSettings settings, int net, List<Set<Item>> groups) {
+    NetCheck(
+        RoutingBoard board,
+        RouterSettings settings,
+        int net,
+        List<Set<Item>> groups,
+        Map<String, Grid> grids) {
       this.board = board;
       this.net = net;
       this.groups = groups;
+      this.grids = grids;
       this.ctrl = new AutorouteControl(board, net, settings);
       this.layerIndex = new int[ctrl.layerCount];
       java.util.Arrays.fill(layerIndex, -1);
@@ -306,7 +353,10 @@ final class UnreachableGroups {
       }
     }
 
-    /** Returns each group's cluster root (the smallest group index joined to it), or null. */
+    /**
+     * Returns each group's cluster root (the smallest group index joined to it), or null. Paints
+     * the grid of the net's kind first when no earlier net of that kind did.
+     */
     int[] run() {
       IntBox box = board.getBoundingBox();
       if (layers.isEmpty() || box == null || box.isEmpty()) {
@@ -318,6 +368,32 @@ final class UnreachableGroups {
       }
       int minHalf = board.rules.getMinAllowedTraceHalfWidth();
       checkHalfWidth = Math.max(1, minHalf > 0 ? Math.min(classHalf, minHalf) : classHalf / 2);
+      boolean vias = ctrl.viasAllowed && ctrl.viaRule != null && layers.size() > 1;
+      String key =
+          ctrl.traceClearanceClassIndex
+              + "/"
+              + checkHalfWidth
+              + "/"
+              + layers
+              + "/"
+              + (vias ? ctrl.viaRule.name : "-");
+      grid = grids.get(key);
+      if (grid == null) {
+        grid = paintGrid(box, vias);
+        cellsUsed += grid.cellsUsed;
+        grids.put(key, grid);
+      }
+      cell = grid.cell;
+      cols = grid.cols;
+      rows = grid.rows;
+      originX = grid.originX;
+      originY = grid.originY;
+      return flood();
+    }
+
+    /** Paints the immovable copper for every net of this kind. */
+    private Grid paintGrid(IntBox box, boolean vias) {
+      Grid g = new Grid();
       int smallestNeed = Integer.MAX_VALUE;
       for (int layer : layers) {
         smallestNeed =
@@ -336,16 +412,27 @@ final class UnreachableGroups {
       rows = (int) Math.ceil(height / cell) + 1;
       originX = box.ll.x;
       originY = box.ll.y;
+      g.cell = cell;
+      g.cols = cols;
+      g.rows = rows;
+      g.originX = originX;
+      g.originY = originY;
       int cells = cols * rows;
-      blocked = new boolean[layers.size()][cells];
+      g.traces = new int[layers.size()][cells];
+      // Each obstacle with the one net it spares, or ALL when it spares none. Copper on several
+      // nets is left out, which can only make the check more lenient.
       List<Item> obstacles = new ArrayList<>();
+      List<Integer> codes = new ArrayList<>();
       for (Item item : board.getItems()) {
-        if (!(item instanceof ComponentOutline) && !item.containsNet(net) && isImmovable(item)) {
-          obstacles.add(item);
+        if (item instanceof ComponentOutline || !isImmovable(item) || item.netCount() > 1) {
+          continue;
         }
+        obstacles.add(item);
+        codes.add(item.netCount() == 1 ? item.getNetNumber(0) : ALL);
       }
-      for (Item item : obstacles) {
-        if (!isTraceObstacle(item)) {
+      for (int o = 0; o < obstacles.size(); o++) {
+        Item item = obstacles.get(o);
+        if (item instanceof ViaObstacleArea || !item.isTraceObstacle(NO_NET)) {
           continue;
         }
         for (int li = 0; li < layers.size(); li++) {
@@ -354,58 +441,49 @@ final class UnreachableGroups {
               board.clearanceValue(ctrl.traceClearanceClassIndex, item.clearanceClassIndex(), layer)
                   + checkHalfWidth
                   - halfDiagonal;
-          paint(item, layer, need, blocked[li]);
+          g.cellsUsed += paint(item, layer, need, g.traces[li], codes.get(o));
         }
       }
-      List<boolean[]> viaSpans = new ArrayList<>();
-      List<int[]> viaLayers = new ArrayList<>();
-      if (ctrl.viasAllowed && ctrl.viaRule != null && layers.size() > 1) {
+      if (vias) {
         for (int v = 0; v < ctrl.viaRule.viaCount(); v++) {
           ViaInfo via = ctrl.viaRule.getVia(v);
           Padstack padstack = via.getPadstack();
-          boolean[] free = new boolean[cells];
-          java.util.Arrays.fill(free, true);
+          int[] span = new int[cells];
           for (int layer = padstack.fromLayer(); layer <= padstack.toLayer(); layer++) {
             ConvexShape shape = padstack.getShape(layer);
             if (shape == null) {
               continue;
             }
             double radius = 0.5 * shape.minWidth();
-            boolean[] taken = new boolean[cells];
-            for (Item item : obstacles) {
+            for (int o = 0; o < obstacles.size(); o++) {
+              Item item = obstacles.get(o);
+              if (item.isDrillable(NO_NET)) {
+                continue; // a plane that is no obstacle, a wire keepout: vias go through
+              }
               double need =
                   board.clearanceValue(
                           via.getClearanceClassIndex(), item.clearanceClassIndex(), layer)
                       + radius
                       - halfDiagonal;
-              paint(item, layer, need, taken);
+              g.cellsUsed += paint(item, layer, need, span, codes.get(o));
             }
-            for (int i = 0; i < cells; i++) {
-              free[i] &= !taken[i];
-            }
-            cellsUsed += cells;
+            g.cellsUsed += cells;
           }
-          viaSpans.add(free);
-          viaLayers.add(new int[] {padstack.fromLayer(), padstack.toLayer()});
+          g.viaSpans.add(span);
+          g.viaLayers.add(new int[] {padstack.fromLayer(), padstack.toLayer()});
         }
       }
-      return flood(viaSpans, viaLayers);
+      return g;
     }
 
-    private boolean isTraceObstacle(Item item) {
-      if (item instanceof ViaObstacleArea) {
-        return false;
-      }
-      if (item instanceof ConductionArea area) {
-        return area.isTraceObstacle(net);
-      }
-      return item.isTraceObstacle(net);
-    }
-
-    /** Marks the cells closer than {@code need} to the item's shapes on the layer. */
-    private void paint(Item item, int layer, double need, boolean[] mask) {
+    /**
+     * Merges {@code code} into the cells closer than {@code need} to the item's shapes on the
+     * layer; returns the cells visited.
+     */
+    private long paint(Item item, int layer, double need, int[] mask, int code) {
+      long visited = 0;
       if (need <= 0) {
-        return;
+        return visited;
       }
       for (int i = 0; i < item.tileShapeCount(); i++) {
         if (item.shapeLayer(i) != layer) {
@@ -420,20 +498,27 @@ final class UnreachableGroups {
         for (int r = r0; r <= r1; r++) {
           for (int c = c0; c <= c1; c++) {
             int index = r * cols + c;
-            cellsUsed++;
-            if (!mask[index]
+            visited++;
+            if (mask[index] != ALL
+                && mask[index] != code
                 && shape.distance(new FloatPoint(originX + c * cell, originY + r * cell)) < need) {
-              mask[index] = true;
+              mask[index] = Grid.merge(mask[index], code);
             }
           }
         }
       }
+      return visited;
     }
 
-    /** Floods from every group at once and joins the groups whose floods meet. */
-    private int[] flood(List<boolean[]> viaSpans, List<int[]> viaLayers) {
+    /**
+     * Floods from every group at once and joins the groups whose floods meet. A state already
+     * labelled is always entered, so the groups' own cells, which the shared grid may mark as
+     * blocked, still join the floods that reach them.
+     */
+    private int[] flood() {
       int cells = cols * rows;
       int n = layers.size();
+      int[][] traces = grid.traces;
       label = new int[n * cells];
       java.util.Arrays.fill(label, -1);
       parent = new int[groups.size()];
@@ -448,9 +533,7 @@ final class UnreachableGroups {
         for (Item item : groups.get(g)) {
           for (int li = 0; li < n; li++) {
             for (int index : inside(item, layers.get(li))) {
-              int state = li * cells + index;
-              blocked[li][index] = false;
-              visit(state, g);
+              visit(li * cells + index, g);
             }
           }
         }
@@ -469,22 +552,25 @@ final class UnreachableGroups {
           if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) {
             continue;
           }
-          int next = nr * cols + nc;
-          if (blocked[li][next]) {
-            continue;
+          int next = li * cells + nr * cols + nc;
+          if (label[next] >= 0 || !Grid.blocks(traces[li][nr * cols + nc], net)) {
+            visit(next, g);
           }
-          visit(li * cells + next, g);
         }
         int layer = layers.get(li);
-        for (int v = 0; v < viaSpans.size(); v++) {
-          int[] span = viaLayers.get(v);
-          if (layer < span[0] || layer > span[1] || !viaSpans.get(v)[index]) {
+        for (int v = 0; v < grid.viaSpans.size(); v++) {
+          int[] span = grid.viaLayers.get(v);
+          if (layer < span[0] || layer > span[1] || Grid.blocks(grid.viaSpans.get(v)[index], net)) {
             continue;
           }
           for (int other = span[0]; other <= span[1]; other++) {
             int oli = layerIndex[other];
-            if (oli >= 0 && oli != li && !blocked[oli][index]) {
-              visit(oli * cells + index, g);
+            if (oli < 0 || oli == li) {
+              continue;
+            }
+            int next = oli * cells + index;
+            if (label[next] >= 0 || !Grid.blocks(traces[oli][index], net)) {
+              visit(next, g);
             }
           }
         }

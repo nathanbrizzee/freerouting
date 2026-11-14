@@ -258,8 +258,10 @@ The GUI saves its settings to this file, router values included, and every later
       the whole board on a grid, takes a trace at the narrowest width the router may give it (a
       pin neck: `min_trace_width_um`, else half the net class width), shrinks every obstacle by
       half a cell so a real path always shows as free cells, changes layers wherever one of the
-      net's vias clears every layer of its span, and treats copper the router or the pair stage
-      may move as absent. Default `false`; on in the `standard` and `quick` profiles. Log line:
+      net's vias clears every layer of its span of what a via may not be drilled through (planes
+      that are no obstacle, wire keepouts and the net's own copper do not count), and treats
+      copper the router or the pair stage may move as absent. Nets of one kind (clearance class,
+      trace width, layers, via rule) share one painted grid, so the check costs one flood per net. Default `false`; on in the `standard` and `quick` profiles. Log line:
       `Unreachable connections: N connection(s) on M net(s) can never be made past copper the
       router cannot move (...); the passes skip them. K net(s) checked, C cells.` followed by one
       pin of each walled-off group (`U1-1 (A)`). CLI: `--router.autorouter.skip_unreachable=false`
