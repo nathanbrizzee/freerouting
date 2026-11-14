@@ -148,6 +148,15 @@ The primary way to configure Freerouting is through a JSON settings file. This f
         until the planner lands it routes exactly like `freerouting-router`.
     - **`max_passes`**: Maximum autorouter passes. `0` means no limit.
     - **`stagnation_pass_limit`**: Consecutive passes without score improvement before the autorouter stops. Default is `10`. `0` (or negative) disables stagnation detection and allows routing to proceed up to `max_passes`. Equivalent CLI flag: `--router.autorouter.stagnation_pass_limit=<int>` (or `-spl <int>`).
+    - **`stagnation_work_ratio`**: Stops the passes for lack of progress measured in search work
+      instead of passes: when the fewest open connections has not fallen for at least two passes and
+      the search steps spent since it was reached exceed this multiple of the steps it took to reach
+      it. A board whose passes take minutes then stops in proportion to its own size, and step
+      counts, unlike time, are the same on every machine. The finishing stages (fallbacks, grid
+      finisher, optimizer) still run. Default `-1` (off); `0` or negative turns it off. Log line:
+      `Stopping the passes after pass #N: no fewer open connections than U (pass #B) in S search
+      steps since, more than R times the T steps that reached it (stagnation_work_ratio).` CLI:
+      `--router.autorouter.stagnation_work_ratio=<ratio>`.
     - **`max_items`**: Maximum items attempted in the autorouter stage.
     - **`fallback_strategies`**: Comma-separated attempts tried in order when the pass loop stops
       with open connections or new violations. The default is

@@ -108,6 +108,7 @@ Options worth knowing (all `--router.` on the command line):
 | `autorouter.force_via_in_pad=true` | Allows vias inside SMD pads even when the DSN forbids them (`attach off`). | Only if the board house builds filled and capped vias. Some boards finish only with it. |
 | `autorouter.rip_history_cost=1` | Makes connections that keep ripping each other look for other paths. | The pass lines show the open count swinging between the same values late in the run. It hurts boards that are still converging. |
 | `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `standard`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
+| `autorouter.stagnation_work_ratio=<r>` | Stops the passes when the fewest open has not fallen for `r` times the search work that reached it (at least two passes). Off by default. | Long boards whose late passes gain nothing; the finishing stages still run. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
 | `autorouter.differential_pairs=off` | On by default: pairs declared in the DSN (`(pair (nets P N (gap g) (skew s)))`, both optional, in the file's units) or found by name (`_P/_N`, `D+/D-`; a bare `P/N` suffix needs `dsn_pairs.py`) are routed first as two coupled traces, with a via pair at an end whose pads are on another layer, held fixed until the last stage. | Turn it off to compare, or when a name-detected pair is not really a pair. A pair that cannot be coupled is left to the ordinary router; the `Pair ...: left to the router: ...` line says why. |
@@ -171,6 +172,8 @@ reading, in the order they appear:
   between the same values means connections are ripping each other.
 - `Auto-routing pass #N: Search work: ...` and `... Rip-up: ...` How much searching the pass did,
   how much failed, and which net pairs rip each other.
+- `Stopping the passes after pass #N: no fewer open connections than U ...` The work-based stop
+  (`stagnation_work_ratio`) ended the passes; the finishing stages follow.
 - `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and one `Pair
   <name> (<pin> to <pin>): routed on layer L, lengths A and B mm, skew S mm (target T mm)` or `... left to the
   router: <reason>` line per pair connection. A routed line ends with `, tuned from S mm` when the shorter

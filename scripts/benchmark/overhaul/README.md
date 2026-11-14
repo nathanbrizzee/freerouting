@@ -25,7 +25,13 @@ https://github.com/antmicro/sdi-mipi-bridge-hw (the `.kicad_pcb` at the reposito
 `run-set.sh` falls back to bash's `time` when there is no `/usr/bin/time`; it cannot see the Java
 process's CPU there, so read CPU from the job's own log line.
 - `compare.py`, `capcurve.py`, `pcbench_table.py`, `summarize.py`: tables from the run folders.
+- `stopreplay.py <run folder> [--ratios 0.5,1,2]`: replays `autorouter.stagnation_work_ratio` over
+  finished logs and prints where each ratio would stop the passes, the open count there against the
+  run's best, and the pass time kept.
 - `dsn_blind.py`: adds blind and buried vias to a DSN's via rule, for the BGA tests.
 
-Run external Python with `python3 -I`. At most about four JVMs of 4-6 GB fit on a 31 GB machine. Compare jars
+Every run also reads the user settings file (`%APPDATA%reeroutingreerouting.json` on Windows,
+written by the GUI); router values there override the defaults for every board. Check that its
+`router` sections are empty, or read `settings_snapshot` in a run's `.json`, before a benchmark
+round. Run external Python with `python3 -I`. At most about four JVMs of 4-6 GB fit on a 31 GB machine. Compare jars
 side by side, not one after the other: times depend on machine load, step counts do not.

@@ -215,6 +215,7 @@ public class DefaultSettings implements SettingsSource {
     settings.sessionRoutesMovable = false;
     settings.autorouter.maxPasses = 0;
     settings.autorouter.stagnationPassLimit = DEFAULT_STAGNATION_PASS_LIMIT;
+    settings.autorouter.stagnationWorkRatio = -1.0;
     settings.autorouter.maxItems = Integer.MAX_VALUE;
     settings.tracePullTightAccuracy = 500;
     settings.viasAllowed = true;

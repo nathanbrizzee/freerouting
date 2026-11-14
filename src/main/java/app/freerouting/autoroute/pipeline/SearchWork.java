@@ -23,6 +23,11 @@ final class SearchWork {
   private long routedTotal;
   private int alreadyConnected;
 
+  /** The search steps of every connection search recorded since the last reset. */
+  long totalSteps() {
+    return this.totalSteps;
+  }
+
   void reset() {
     this.routedCount = 0;
     this.searches = 0;

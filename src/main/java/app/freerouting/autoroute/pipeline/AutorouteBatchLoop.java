@@ -315,6 +315,16 @@ final class AutorouteBatchLoop {
     float globalBestScore = Float.NEGATIVE_INFINITY; // best score seen across all passes
     int passOfBestScore = 0; // pass where globalBestScore was achieved
     int incompleteCountAtBestScore = 0; // incomplete count when globalBestScore was recorded
+    // The work-based stop (autorouter.stagnation_work_ratio): search steps of all passes so far,
+    // and the fewest open connections with the pass and the steps that reached it.
+    long cumulativeSteps = 0;
+    int fewestOpen = Integer.MAX_VALUE;
+    int passOfFewestOpen = 0;
+    long stepsAtFewestOpen = 0;
+    final double stagnationWorkRatio =
+        router.settings.autorouter != null && router.settings.autorouter.stagnationWorkRatio != null
+            ? router.settings.autorouter.stagnationWorkRatio
+            : -1.0;
     final int stagnationPassLimit =
         (router.settings.autorouter != null
                 && router.settings.autorouter.stagnationPassLimit != null)
@@ -536,6 +546,39 @@ final class AutorouteBatchLoop {
 
       if (Boolean.TRUE.equals(router.settings.autorouter.saveIntermediateStages)) {
         fireBoardSnapshotEvent(router.board);
+      }
+
+      if (!isOptimizerAutorouter) {
+        cumulativeSteps += router.passSearchWork.totalSteps();
+        int openNow = boardStatisticsAfter.connections.incompleteCount;
+        if (openNow < fewestOpen) {
+          fewestOpen = openNow;
+          passOfFewestOpen = currentPass;
+          stepsAtFewestOpen = cumulativeSteps;
+        }
+        if (workStagnated(
+            stagnationWorkRatio,
+            continueAutorouting,
+            openNow,
+            currentPass,
+            passOfFewestOpen,
+            cumulativeSteps,
+            stepsAtFewestOpen)) {
+          job.logInfo(
+              String.format(
+                  java.util.Locale.ROOT,
+                  "Stopping the passes after pass #%d: no fewer open connections than %d (pass"
+                      + " #%d) in %d search steps since, more than %.2f times the %d steps that"
+                      + " reached it (stagnation_work_ratio).",
+                  currentPass,
+                  fewestOpen,
+                  passOfFewestOpen,
+                  cumulativeSteps - stepsAtFewestOpen,
+                  stagnationWorkRatio,
+                  stepsAtFewestOpen));
+          stopFor(BatchAutorouter.StopReason.STAGNATION);
+          break;
+        }
       }
 
       // Stagnation detection: abort when the normalized score hasn't improved by
@@ -834,5 +877,30 @@ final class AutorouteBatchLoop {
     }
     router.job.status().stopped(reason.name());
     router.thread.requestStopAutoRouter();
+  }
+
+  /** Passes after the fewest open connections the work-based stop waits for at least. */
+  static final int WORK_STAGNATION_MIN_PASSES = 2;
+
+  /**
+   * Whether the passes should stop for lack of progress measured in search work: connections are
+   * still open, the fewest open has not fallen for at least {@link #WORK_STAGNATION_MIN_PASSES}
+   * passes, and the steps searched since it was reached exceed {@code ratio} times the steps it
+   * took to reach it. Search steps, unlike time, are the same on every machine. Off with a ratio of
+   * zero or less.
+   */
+  static boolean workStagnated(
+      double ratio,
+      boolean continueAutorouting,
+      int openNow,
+      int currentPass,
+      int passOfFewestOpen,
+      long cumulativeSteps,
+      long stepsAtFewestOpen) {
+    return ratio > 0
+        && continueAutorouting
+        && openNow > 0
+        && currentPass - passOfFewestOpen >= WORK_STAGNATION_MIN_PASSES
+        && cumulativeSteps - stepsAtFewestOpen > ratio * stepsAtFewestOpen;
   }
 }

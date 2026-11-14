@@ -39,6 +39,18 @@ public class AutorouterSettings implements Serializable, Cloneable {
               + " (0 disables stagnation stop)")
   public Integer stagnationPassLimit;
 
+  /**
+   * Stops the passes when the fewest open connections has not fallen for this many times the search
+   * work it took to reach it (counted in search steps, at least two passes after it). Zero or
+   * negative turns the rule off.
+   */
+  @SerializedName("stagnation_work_ratio")
+  @Schema(
+      description =
+          "Stop the passes when no connection was gained for this multiple of the search work that"
+              + " reached the best count (0 or negative: off)")
+  public Double stagnationWorkRatio;
+
   /** Maximum items attempted in the autorouter stage. */
   @SerializedName("max_items")
   @Schema(description = "Maximum items attempted in the autorouter stage")
