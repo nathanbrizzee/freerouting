@@ -14,6 +14,7 @@ import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.StoppableThread;
 import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.datastructures.TimeLimit;
+import app.freerouting.drc.NetWidths;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
@@ -85,6 +86,7 @@ final class DirectPinRouting {
             routeOnLayer(board, settings, thread, pin, net, layer, false);
         if (result.state != AutorouteAttemptState.ROUTED
             && settings.getNeckWidthUm() > 0
+            && NetWidths.mayNeckRun(board, net, settings.neckMaxClassWidthUm)
             && !stopped(thread)) {
           result = routeOnLayer(board, settings, thread, pin, net, layer, true);
         }

@@ -13,6 +13,7 @@ import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.datastructures.TimeLimit;
+import app.freerouting.drc.NetWidths;
 import app.freerouting.drc.OpenConnections;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
@@ -590,6 +591,11 @@ final class AutorouteConnectionRouter {
       }
     }
     if (!narrowerSomewhere) {
+      return null;
+    }
+    // A class made wider than the signal width (usually for current) is not narrowed along the
+    // run: the connection stays open and the end report names it (NetWidths).
+    if (!NetWidths.mayNeckRun(router.board, routeNetNo, router.settings.neckMaxClassWidthUm)) {
       return null;
     }
 

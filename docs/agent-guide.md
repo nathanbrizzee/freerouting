@@ -104,7 +104,8 @@ Options worth knowing (all `--router.` on the command line):
 | Option | What it does | When to use it |
 |---|---|---|
 | `autorouter.pad_neck=true` | At the end, for connections still open, lets a trace narrow below the pad width near a pin whose neighbours sit too close for a full-width trace. Kept only if the board gets better. | Hints or `Pad necks:` lines show pins closed in by their own pads, often supply pins on fine-pitch parts. The log lists every neck used, for review against the current the net carries. |
-| `min_trace_width_um=<um>` | Narrowest trace the router may create. The DSN does not carry it. | Set it to the board's minimum track width (KiCad: Board Setup, Constraints) whenever necking is possible. |
+| `min_trace_width_um=<um>` | Narrowest trace the router may create. The DSN does not carry it. It is also the width the default `continue-auto-neck` fallback narrows signal nets to (150 um when unset). | Set it to the board's minimum track width (KiCad: Board Setup, Constraints) whenever necking is possible. |
+| `neck_max_class_width_um=<um>` | The widest net class that may be routed narrower than its class along a connection. Wider classes (made wide for current) only narrow into a pad; otherwise the connection stays open. Default: the width of the class most nets belong to. | `Wide net left open:` lines name a wide net that only a narrower trace would close. Raise it only when the person confirms the net can carry its current at the narrower width; otherwise report the connection for a design change. |
 | `autorouter.force_via_in_pad=true` | Allows vias inside SMD pads even when the DSN forbids them (`attach off`). | Only if the board house builds filled and capped vias. Some boards finish only with it. |
 | `autorouter.rip_history_cost=1` | Makes connections that keep ripping each other look for other paths. | The pass lines show the open count swinging between the same values late in the run. It hurts boards that are still converging. |
 | `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `standard`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
@@ -155,6 +156,8 @@ The fields an agent needs:
 | `placement_hints` | Open ends grouped by component, most first, with a `hint` sentence: a design limit at the part's own pads, or other parts and routes closing it in. |
 | `crowded_regions` | Up to five areas the open connections cross, ranked by copper fill times crossings: corner (`x_mm`, `y_mm`), `width_mm`, `height_mm`, `copper_fill` (0 to 1), `pins`, `components`, `open_connections_crossing`. |
 | `verdict` | One sentence that splits the open connections three ways (section 6). |
+| `narrowed_traces` | Nets with traces narrower than their class along the run (not just into a pad): `net`, `net_class`, `class_width_mm`, `narrowest_mm`, `length_mm`, `traces`, `wide_class`. A person should check each against the current the net carries. |
+| `wide_nets_left_open` | One line per net whose class is wider than the signal width and has open connections: the router did not narrow it along the run (`neck_max_class_width_um`). |
 
 ## 6. Reading the log
 
@@ -217,8 +220,11 @@ reading, in the order they appear:
   net fits in the pad either; the connection stays open. Move the part or the fixed copper, or fan
   the pin out by hand.
 - `Routing fallback ...` lines: when the pass loop stalls, other strategies are tried
-  (`fanout-retry`, `short-escape`, `direct-first`, `open-escape`, `no-fanout`, seeds), and
-  `Routing fallback chose '<name>'` says which board was kept.
+  (`fanout-retry`, `short-escape`, `direct-first`, `open-escape`, `no-fanout`,
+  `continue-auto-neck`, seeds), and `Routing fallback chose '<name>'` says which board was kept.
+- `Fallback auto-neckdown (neck_width_um=W) was used ...` (warning) The kept board came from
+  `continue-auto-neck`: signal nets that failed at their class width were narrowed to W. See the
+  `Narrowed trace:` lines.
 - `Grid finisher: N open connection(s), T tried, C closed ...` The fine-grid finisher's result.
 - `Pad necks: ...`, `Pad neck continuation: ... kept / not better` The pad-neck step's plan and
   result.
@@ -231,6 +237,12 @@ reading, in the order they appear:
   nearby parts close in; C whose ends can be left ..., held by the space between them`
 - `Pad neck used: <pin> (<net>) W mm trace on a P mm pad, class width C mm` Every narrowed trace
   in the saved board, for review.
+- `Narrowed trace: <net> (class C, W mm) at N mm over L mm in K trace(s)` (warning) A net routed
+  narrower than its class along the run, not just into a pad. A note follows when the class is
+  wider than the signal width.
+- `Wide net left open: <net> (class C, W mm): K open; classes wider than S mm are not narrowed
+  along the run` (warning) A net whose class is wide, usually for current, left open rather than
+  narrowed.
 
 What the verdict's three numbers mean, and what to do:
 
@@ -250,7 +262,9 @@ Give the person what they need to decide the next step, in this order:
 3. For each open connection: net, pins, and why it is open (exit `closed` by what, or crowded
    space). Group them by part, as the placement hints do.
 4. The crowded regions with their coordinates in mm and the parts in them, as places to spread out.
-5. Any `Pad neck used:` lines, which a person should check against the net's current.
+5. Any `Pad neck used:` and `Narrowed trace:` lines, which a person should check against the net's
+   current, and any `Wide net left open:` lines: a wide net the router would not narrow, which
+   needs a design change or a person's decision (`neck_max_class_width_um`).
 6. What you recommend: another run (which profile or option, and why), or a design change.
 
 Do not report the design's pre-existing clearance violations as routing errors.

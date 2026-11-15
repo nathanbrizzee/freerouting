@@ -23,7 +23,14 @@ class RoutingFallbackTest {
       names.add(strategy.name);
     }
     assertEquals(
-        List.of("fanout-retry", "short-escape", "direct-first", "open-escape", "no-fanout"), names);
+        List.of(
+            "fanout-retry",
+            "short-escape",
+            "direct-first",
+            "open-escape",
+            "no-fanout",
+            "continue-auto-neck"),
+        names);
   }
 
   @Test
@@ -53,7 +60,8 @@ class RoutingFallbackTest {
         "one fallback thread: no race");
     settings.autorouter.fallbackThreads = 0;
     assertEquals(
-        List.of("direct-first", "no-fanout", "seed-1", "failed-first"), stageNames(settings));
+        List.of("direct-first", "no-fanout", "seed-1", "continue-auto-neck", "failed-first"),
+        stageNames(settings));
     settings.autorouter.fallbackStrategies = "none";
     assertTrue(stageNames(settings).isEmpty(), "none turns the race off too");
   }
@@ -115,15 +123,16 @@ class RoutingFallbackTest {
   void fanoutStrategiesDoNotApplyWhenFanoutDoesNotRun() {
     RouterSettings settings = new DefaultSettings().getSettings();
     List<RoutingFallback.Strategy> parsed = RoutingFallback.parse(settings, null);
-    assertTrue(RoutingFallback.applicable(parsed, settings, false).isEmpty());
-    assertEquals(5, RoutingFallback.applicable(parsed, settings, true).size());
+    // Only continue-auto-neck runs without fanout.
+    assertEquals(
+        List.of("continue-auto-neck"),
+        RoutingFallback.applicable(parsed, settings, false).stream().map(s -> s.name).toList());
+    assertEquals(6, RoutingFallback.applicable(parsed, settings, true).size());
   }
 
   @Test
   void autoNeckAppliesOnlyWhenNeckWidthIsUnset() {
     RouterSettings settings = new DefaultSettings().getSettings();
-    // Opt-in: not in the default list, so name it.
-    settings.autorouter.fallbackStrategies = "direct-first,continue-auto-neck";
     List<RoutingFallback.Strategy> parsed = RoutingFallback.parse(settings, null);
     assertTrue(
         RoutingFallback.applicable(parsed, settings, false).stream()
@@ -133,6 +142,19 @@ class RoutingFallbackTest {
     assertTrue(
         RoutingFallback.applicable(parsed, settings, false).stream()
             .noneMatch(s -> "continue-auto-neck".equals(s.name)));
+  }
+
+  @Test
+  void autoNeckWidthIsTheMinimumTraceWidthElse150Um() {
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.minTraceWidthUm = null;
+    RoutingFallback.find("continue-auto-neck").apply(settings);
+    assertEquals(150.0, settings.getNeckWidthUm());
+
+    settings = new DefaultSettings().getSettings();
+    settings.minTraceWidthUm = 127.0;
+    RoutingFallback.find("continue-auto-neck").apply(settings);
+    assertEquals(127.0, settings.getNeckWidthUm());
   }
 
   @Test

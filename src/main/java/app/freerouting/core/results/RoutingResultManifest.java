@@ -7,6 +7,7 @@ import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.core.scoring.BoardStatisticsBounds;
 import app.freerouting.drc.Congestion;
+import app.freerouting.drc.NetWidths;
 import app.freerouting.drc.OpenConnections;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.util.gson.GsonProvider;
@@ -91,6 +92,20 @@ public final class RoutingResultManifest {
   /** The fullest regions the open connections cross, with the parts in them. */
   @SerializedName("crowded_regions")
   public List<Congestion.Region> crowdedRegions;
+
+  /**
+   * Nets with traces narrower than their class away from their pins (a neck along the run, not the
+   * stretch into a pad), for review against the current they carry.
+   */
+  @SerializedName("narrowed_traces")
+  public List<NetWidths.Narrowed> narrowedTraces;
+
+  /**
+   * Open connections of nets whose class is wider than the signal width, one line per net: these
+   * are never narrowed along the run, so a connection only a narrower trace would close stays open.
+   */
+  @SerializedName("wide_nets_left_open")
+  public List<String> wideNetsLeftOpen;
 
   /** One sentence on what holds the open connections; absent when the board is complete. */
   @SerializedName("verdict")
@@ -258,6 +273,11 @@ public final class RoutingResultManifest {
       manifest.crowdedRegions =
           Congestion.regions(job.board, manifest.openConnections, CROWDED_REGIONS);
       manifest.verdict = OpenConnections.verdict(manifest.openConnections);
+      Double maxClassWidthUm =
+          job.routerSettings != null ? job.routerSettings.neckMaxClassWidthUm : null;
+      manifest.narrowedTraces = NetWidths.narrowed(job.board, maxClassWidthUm);
+      manifest.wideNetsLeftOpen =
+          NetWidths.wideOpen(job.board, manifest.openConnections, maxClassWidthUm);
       if (job.routerSettings != null && job.routerSettings.scoring != null) {
         manifest.normalizedScore = manifest.boardStatistics.getRouterScore(job.routerSettings);
         if (manifest.phases.optimizer.before != null || manifest.phases.optimizer.after != null) {

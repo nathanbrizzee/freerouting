@@ -127,6 +127,15 @@ public class RouterSettings implements Serializable, Cloneable {
   public Double neckWidthUm;
 
   /**
+   * The widest net class, in micrometres, whose connections may be routed narrower than the class
+   * along their run (the necked retry, a fallback neck). A wider class was made wide on purpose,
+   * usually for current: its connections only neck at a pin and otherwise stay open. Absent or 0:
+   * the width of the net class most nets belong to.
+   */
+  @SerializedName("neck_max_class_width_um")
+  public Double neckMaxClassWidthUm;
+
+  /**
    * Measure a pin's or via's copper (a circle, a pad polygon) where the search tree's octagons
    * overlap, in the clearance query, the via checks, via shoves and moves, and the clearance
    * checker, instead of refusing the pair on the octagons.
@@ -844,6 +853,7 @@ public class RouterSettings implements Serializable, Cloneable {
     result.planeNets = this.planeNets != null ? this.planeNets.clone() : null;
     result.planeAsObstacle = this.planeAsObstacle;
     result.neckWidthUm = this.neckWidthUm;
+    result.neckMaxClassWidthUm = this.neckMaxClassWidthUm;
     result.exactCopper = this.exactCopper;
     result.strictDrc = this.strictDrc;
     result.tracePullTightAccuracy = this.tracePullTightAccuracy;

@@ -127,7 +127,7 @@ The GUI saves its settings to this file, router values included, and every later
 - **`enabled`**: Enables or disables the graphical user interface (GUI). If set to `false`, Freerouting will run in
   headless mode.
 - **`input_directory`**: Specifies the default directory for opening design files.
-- **`dialog_confirmation_timeout`**: Sets the timeout in seconds for dialog confirmations. Default is `5`. `0` skips the auto-start dialog, so a GUI launched by a script with `-de` and `-do` starts routing at once (CLI: `-dct 0`). Such a GUI run behaves like a headless one for an agent: it honours `job_timeout`, `max_search_steps`, `status_file`, `stop_file` and `result_json`, ends its log with the same report (the job's state, open connections, placement hints, crowded regions, verdict and pad necks used), saves the output and exits with the headless exit code (0 when the job completed or timed out and the output was written, 1 otherwise).
+- **`dialog_confirmation_timeout`**: Sets the timeout in seconds for dialog confirmations. Default is `5`. `0` skips the auto-start dialog, so a GUI launched by a script with `-de` and `-do` starts routing at once (CLI: `-dct 0`). Such a GUI run behaves like a headless one for an agent: it honours `job_timeout`, `max_search_steps`, `status_file`, `stop_file` and `result_json`, ends its log with the same report (the job's state, open connections, placement hints, crowded regions, verdict, pad necks used, nets narrowed along the run and wide nets left open), saves the output and exits with the headless exit code (0 when the job completed or timed out and the output was written, 1 otherwise).
 
 #### **`router` Section**
 
@@ -178,7 +178,8 @@ The GUI saves its settings to this file, router values included, and every later
     - **`max_items`**: Maximum items attempted in the autorouter stage.
     - **`fallback_strategies`**: Comma-separated attempts tried in order when the pass loop stops
       with open connections or new violations. The default is
-      `fanout-retry,short-escape,direct-first,open-escape,no-fanout`; `none` turns the fallback off.
+      `fanout-retry,short-escape,direct-first,open-escape,no-fanout,continue-auto-neck`; `none`
+      turns the fallback off.
       Most of these route the board again from the start, so each one costs about as much as the
       default run. `seed-N` (N a positive integer) routes the input board again with the item order
       of every pass shuffled by `item_order_seed` N; a different order gives a different board.
@@ -188,11 +189,16 @@ The GUI saves its settings to this file, router values included, and every later
       'failed-first': routing the input board again with the N net(s) the best board so far
       (<strategy>) left open routed first.` It is in the default race list (`standard`); without the
       race, add it to `fallback_strategies`.
-      `continue-auto-neck` (opt-in, not in the default list) continues the best board with a
-      150 um neck width when no `neck_width_um` is set, so traces may narrow near pins nobody
-      asked to narrow; it is skipped when a neck width is set. When it gives the chosen board the
-      log warns: `Fallback auto-neckdown (neck_width_um=150.0) was used because routing remained
-      incomplete with no explicit neck_width_um configured.`
+      `continue-auto-neck` routes the input board again with a neck width when none is set:
+      `min_trace_width_um` when that is set, else 150 um. A connection that fails at its class
+      width is then retried at the neck width along its whole run, but only on nets whose class is
+      not wider than the signal width (`neck_max_class_width_um`): a class made wide for current
+      stays at its width, and a connection of it that only a narrower trace would close stays
+      open. It is skipped when a neck width is set, since the necked retry then runs in every
+      attempt. It is in both default lists. When it gives the chosen board the log warns:
+      `Fallback auto-neckdown (neck_width_um=W) was used because routing remained incomplete with
+      no explicit neck_width_um configured. ...`, and the end report lists every narrowed net
+      (`Narrowed trace:`).
       `history` routes it again with `rip_history_cost=1` and `pin-access` with
       `pin_access_cost=1`, so a race can keep their board where they win. When `history` helps: added to the race
       (`fallback_race_strategies=direct-first,no-fanout,seed-1,history`) it won on EncoderBoard
@@ -353,7 +359,8 @@ The GUI saves its settings to this file, router values included, and every later
       either way but no longer finished early). CLI: `--router.autorouter.pin_access_cost=1`.
     - **`fallback_race_strategies`**: The strategies a race starts, used in place of
       `fallback_strategies` when `fallback_race` is on and `fallback_threads` is other than `1`.
-      Default `direct-first,no-fanout,seed-1,failed-first` (`failed-first` does not race: it runs
+      Default `direct-first,no-fanout,seed-1,continue-auto-neck,failed-first` (`continue-auto-neck`
+      races only when no neck width is set; `failed-first` does not race: it runs
       after the race, only while connections are open). `none` in `fallback_strategies` turns the
       race off too. With `failed-first` added, six boards that end with open connections (20-minute
       cap, optimizer off) went Unifying 27 -> 22 and EncoderBoard 1 -> 0 (clean), the other four
@@ -623,6 +630,27 @@ The GUI saves its settings to this file, router values included, and every later
   to the board's minimum track width (in KiCad: Board Setup, Constraints); Specctra DSN files do
   not carry that value. Absent or 0: no floor, so a pin taper goes down to the pad width and a
   fanout neck to half the trace width. Equivalent CLI flag: `--router.min_trace_width_um=<um>`.
+- **`neck_width_um`**: When a connection fails at its net class width, it is retried once with
+  the trace width capped at this width (in micrometres) along its whole run, and with
+  `autorouter.start_necked` the net's later connections start at it. Only nets whose class is not
+  wider than `neck_max_class_width_um` are retried like that. Never below `min_trace_width_um`.
+  Absent or 0: no necked retry. A KiCad `.kicad_pro` given with `-de` sets it to the board's
+  minimum track width. CLI: `--router.neck_width_um=<um>`.
+- **`neck_max_class_width_um`**: The widest net class, in micrometres, whose connections may be
+  routed narrower than the class along their run (the necked retry of `neck_width_um`, the
+  `continue-auto-neck` fallback, the necked direct pin route). A wider class was made wide on
+  purpose, usually for current, and a trace narrowed along its run is a defect no clearance check
+  sees: its connections only narrow in the stretch into a pad and otherwise stay open. Absent or
+  0: the width of the net class most nets belong to (on a tie, the narrower). On a signal board
+  nearly every net is in that class; on a power board the wider supply and load classes are
+  protected without any setting. Set it to a large value to allow any class to neck. The end
+  report lists the nets narrowed along the run (`Narrowed trace: <net> (class C, W mm) at N mm
+  over L mm in K trace(s)`, with a note when the class is wider than the signal width, which
+  happens only through traces the input board already had) and the open connections of wide
+  classes (`Wide net left open: <net> (class C, W mm): K open; classes wider than S mm are not
+  narrowed along the run`), both as warnings and in the result file (`narrowed_traces`,
+  `wide_nets_left_open`). The stretch into pads (a trace every point of which lies within the
+  neck-down distance of a pin of the net) is not listed. CLI: `--router.neck_max_class_width_um=<um>`.
 - **`copper_to_edge_clearance_um`**: Clearance between copper and the board outline, in
   micrometers. Default `250`. The default is a guess: it leaves an outline clearance class the DSN
   sets untouched, and it never demands more than the closest pin already has, because a pin nearer

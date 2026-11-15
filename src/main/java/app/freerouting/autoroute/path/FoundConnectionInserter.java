@@ -12,6 +12,7 @@ import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.model.items.Via;
 import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.core.library.Padstack;
+import app.freerouting.drc.NetWidths;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
@@ -743,6 +744,16 @@ public final class FoundConnectionInserter {
         && !reachesNeckdownZone(fromPoint, targetPoint, layer, endPin)) {
       return false;
     }
+    // A class wider than the signal width (usually for current) narrows only in the stretch into
+    // a pad: the whole segment must lie within the neck-down distance of the pin (NetWidths).
+    if (!withinNeckdownZone(fromPoint, targetPoint, layer, startPin)
+        && !withinNeckdownZone(fromPoint, targetPoint, layer, endPin)
+        && !NetWidths.mayNeckRun(
+            board,
+            ctrl.netNumber,
+            ctrl.settings != null ? ctrl.settings.neckMaxClassWidthUm : null)) {
+      return false;
+    }
     int baseHalfWidth = ctrl.traceHalfWidth[layer];
     LinkedHashSet<Integer> candidateHalfWidths = new LinkedHashSet<>();
     if (startPin != null && startPin.isOnLayer(layer)) {
@@ -833,6 +844,16 @@ public final class FoundConnectionInserter {
     FloatPoint pinCenter = pin.getCenter().toFloat();
     double zone = pinNeckDownDistance(pin, layer);
     return pinCenter.distance(a.toFloat()) < zone || pinCenter.distance(b.toFloat()) < zone;
+  }
+
+  /** Whether both ends of the segment from a to b lie within the neck-down distance of pin. */
+  private boolean withinNeckdownZone(Point a, Point b, int layer, Pin pin) {
+    if (pin == null || !pin.isOnLayer(layer)) {
+      return false;
+    }
+    FloatPoint pinCenter = pin.getCenter().toFloat();
+    double zone = pinNeckDownDistance(pin, layer);
+    return pinCenter.distance(a.toFloat()) < zone && pinCenter.distance(b.toFloat()) < zone;
   }
 
   /** The distance from the centre of {@code pin} within which a trace is necked down to it. */

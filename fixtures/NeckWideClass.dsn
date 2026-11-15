@@ -1,0 +1,28 @@
+(pcb neck_wide_class
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal))
+    (boundary (rect pcb 0 0 30000 20000))
+    (keepout (rect F.Cu 14000 0 16000 5000))
+    (keepout (rect F.Cu 14000 5700 16000 15000))
+    (keepout (rect F.Cu 14000 15700 16000 20000))
+    (rule (width 400) (clearance 200)))
+  (placement
+    (component PAD1
+      (place S1 5000 5350 front 0)
+      (place S2 25000 5350 front 0)
+      (place P1 5000 15350 front 0)
+      (place P2 25000 15350 front 0)))
+  (library
+    (image PAD1
+      (pin Pad_1200_um 1 0 0))
+    (padstack Pad_1200_um (shape (rect F.Cu -600 -600 600 600)) (attach off)))
+  (network
+    (net S (pins S1-1 S2-1))
+    (net P (pins P1-1 P2-1))
+    (class kicad_default S
+      (rule (width 400) (clearance 200)))
+    (class POWER P
+      (rule (width 1000) (clearance 200))))
+  (wiring))

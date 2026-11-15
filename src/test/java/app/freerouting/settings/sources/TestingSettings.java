@@ -131,6 +131,11 @@ public class TestingSettings implements SettingsSource {
     this.settings.neckWidthUm = neckWidthUm;
   }
 
+  /** Sets the widest net class narrowed along the run ({@code neck_max_class_width_um}). */
+  public void setNeckMaxClassWidthUm(double widthUm) {
+    this.settings.neckMaxClassWidthUm = widthUm;
+  }
+
   /** Enables or disables automatic neckdown at pins for the test run. */
   public void setAutomaticNeckdown(boolean enabled) {
     this.settings.automaticNeckdown = enabled;

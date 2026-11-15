@@ -6,6 +6,7 @@ import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.StoppableThread;
 import app.freerouting.core.results.RoutingResultManifest;
 import app.freerouting.drc.Congestion;
+import app.freerouting.drc.NetWidths;
 import app.freerouting.drc.OpenConnections;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.util.TextManager;
@@ -164,7 +165,8 @@ public final class JobRunSupport {
 
   /**
    * Logs the end of a job: its state and elapsed time, then, when connections are open, the open
-   * connections, placement hints, crowded regions and verdict, and the pad necks the board uses.
+   * connections, placement hints, crowded regions and verdict, the pad necks the board uses, the
+   * nets narrowed along the run and the open connections of wide nets.
    */
   public static void logReport(RoutingJob job, String details) {
     double seconds =
@@ -199,6 +201,14 @@ public final class JobRunSupport {
     }
     for (String neck : PadNecks.used(job.board)) {
       job.logInfo("Pad neck used: " + neck);
+    }
+    Double maxClassWidthUm =
+        job.routerSettings != null ? job.routerSettings.neckMaxClassWidthUm : null;
+    for (NetWidths.Narrowed narrowed : NetWidths.narrowed(job.board, maxClassWidthUm)) {
+      job.logWarning("Narrowed trace: " + narrowed);
+    }
+    for (String line : NetWidths.wideOpen(job.board, open, maxClassWidthUm)) {
+      job.logWarning("Wide net left open: " + line);
     }
   }
 

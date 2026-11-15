@@ -134,11 +134,11 @@ public class DefaultSettings implements SettingsSource {
   // The alternatives that have improved boards (fanout-retry, short-escape) come first, because the
   // fallback work budget may end the stage before the later ones run.
   public static final String DEFAULT_FALLBACK_STRATEGIES =
-      "fanout-retry,short-escape,direct-first,open-escape,no-fanout";
+      "fanout-retry,short-escape,direct-first,open-escape,no-fanout,continue-auto-neck";
   // A race of three gave the same boards as a race of eight on eight hard PCBench boards, for a
   // third of the CPU time, and more on L6, where eight attempts slowed the default run.
   public static final String DEFAULT_FALLBACK_RACE_STRATEGIES =
-      "direct-first,no-fanout,seed-1,failed-first";
+      "direct-first,no-fanout,seed-1,continue-auto-neck,failed-first";
   public static final double DEFAULT_FALLBACK_WORK_RATIO = 1.0;
   public static final int DEFAULT_FALLBACK_THREADS = 1;
 

@@ -202,7 +202,11 @@ final class RoutingFallbackRunner {
   static void warnIfAutoNeckFallbackUsed(RoutingJob job, String strategy) {
     if ("continue-auto-neck".equals(strategy) && job.routerSettings.getNeckWidthUm() <= 0) {
       job.logWarning(
-          "Fallback auto-neckdown (neck_width_um=150.0) was used because routing remained incomplete with no explicit neck_width_um configured.");
+          "Fallback auto-neckdown (neck_width_um="
+              + RoutingFallback.autoNeckWidthUm(job.routerSettings)
+              + ") was used because routing remained incomplete with no explicit neck_width_um"
+              + " configured. Nets whose class is wider than the signal width were not narrowed"
+              + " along the run; see the Narrowed trace lines.");
     }
   }
 
@@ -377,6 +381,7 @@ final class RoutingFallbackRunner {
             + "': "
             + bestAttempt.outcome
             + ".");
+    warnIfAutoNeckFallbackUsed(job, bestAttempt.outcome.strategy);
     return bestAttempt.router;
   }
 

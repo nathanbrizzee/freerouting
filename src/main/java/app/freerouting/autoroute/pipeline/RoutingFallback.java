@@ -61,12 +61,30 @@ public final class RoutingFallback {
    */
   public static final String FAILED_FIRST = "failed-first";
 
+  /** The neck width of {@code continue-auto-neck} when no minimum trace width is set. */
+  public static final double AUTO_NECK_WIDTH_UM = 150;
+
+  /**
+   * The neck width {@code continue-auto-neck} routes with: {@code min_trace_width_um} when set,
+   * else {@link #AUTO_NECK_WIDTH_UM}. Only nets whose class is not wider than the signal width are
+   * narrowed along the run ({@code neck_max_class_width_um}).
+   */
+  public static double autoNeckWidthUm(RouterSettings settings) {
+    return settings.minTraceWidthUm != null && settings.minTraceWidthUm > 0
+        ? settings.minTraceWidthUm
+        : AUTO_NECK_WIDTH_UM;
+  }
+
   /** The strategies a settings value may name, in catalog order. */
   public static final List<Strategy> KNOWN =
       List.of(
           new Strategy("no-neck", false, settings -> settings.setNeckWidthUm(0), false, false),
           new Strategy(
-              "continue-auto-neck", false, settings -> settings.setNeckWidthUm(150), false, false),
+              "continue-auto-neck",
+              false,
+              settings -> settings.setNeckWidthUm(autoNeckWidthUm(settings)),
+              false,
+              false),
           new Strategy(
               "continue-fine-neck",
               false,
