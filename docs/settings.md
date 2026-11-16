@@ -175,6 +175,25 @@ The GUI saves its settings to this file, router values included, and every later
       `Stopping the passes after pass #N: no fewer open connections than U (pass #B) in S search
       steps since, more than R times the T steps that reached it (stagnation_work_ratio).` CLI:
       `--router.autorouter.stagnation_work_ratio=<ratio>`.
+    - **`stagnation_gain_ratio`**: Stops the passes when they gain too slowly: from pass 8, when the
+      last two passes cut the fewest open connections by less than this fraction of what it was
+      before them (`0.2` is a fifth). It ends a run whose passes each take minutes and still gain a
+      little, so the fallbacks that route the board again in another order (`failed-first`, the race
+      lanes) get their turn within hours, not days; the best board of all is kept. Passes, like
+      search steps, are the same on every machine. Each lane of the fallback race applies it to its
+      own passes. Default `-1` (off); `0.2` in the `standard` and `quick` profiles. Log line:
+      `Stopping the passes after pass #N: the last 2 passes cut the fewest open connections from A
+      to B, less than 20% (stagnation_gain_ratio).` CLI:
+      `--router.autorouter.stagnation_gain_ratio=<ratio>`.
+    - **`pass_max_steps`**: A limit on the search steps the passes may spend. At the end of the
+      first pass after which the passes have spent this many steps with connections still open,
+      they stop. The race of fallback strategies waits for its slowest lane, and a lane that keeps
+      gaining never meets the other stops, so on a board whose passes take minutes this bounds the
+      first stage; the fallbacks and the best board of all follow. Each lane counts its own steps.
+      Default `0` (no limit); `250000000` in the `standard` and `quick` profiles, which no
+      benchmark board other than the 1000-connection one comes near (at most 57 million). Log line:
+      `Stopping the passes after pass #N: they spent S search steps, the limit (pass_max_steps) is
+      L; K connections are open.` CLI: `--router.autorouter.pass_max_steps=<steps>`.
     - **`max_items`**: Maximum items attempted in the autorouter stage.
     - **`fallback_strategies`**: Comma-separated attempts tried in order when the pass loop stops
       with open connections or new violations. The default is
@@ -824,6 +843,15 @@ Configures the optional route-optimization stage that runs after autorouting.
   When it runs out the candidate stops routing and is judged as it stands, so it is kept only if
   it is still better. Default `4000000`; zero or below means no total budget. CLI:
   `--router.optimizer.max_search_steps_per_candidate=<steps>`.
+- **`max_steps`**: The most maze search steps the optimizer stage may use in all, counted over the
+  candidates it has read (a candidate's steps depend only on its board, so the stop is the same on
+  every run). The optimizer reads every candidate of a pass and keeps the best, so on a board of
+  about a thousand connections one pass can cost a billion steps and hours; the pass stops reading
+  once the limit is used, keeps the best candidate so far, and the optimizer ends. Default `0` (no
+  limit); `500000000` in the `standard` and `quick` profiles: the other benchmark boards use at most
+  118 million steps in the whole stage. Log lines: `Optimizer pass #N: S search steps so far in the
+  optimizer stage.` and `Stopping optimization pass #N early: the optimizer used S search steps, the
+  limit (optimizer.max_steps) is L.` CLI: `--router.optimizer.max_steps=<steps>`.
 - **`board_update_strategy`**: How the optimizer applies its changes. `GLOBAL_OPTIMAL` works out
   the candidate updates and applies the single best one, and is the only strategy left; `-us`
   with any value selects it.

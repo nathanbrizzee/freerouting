@@ -109,6 +109,14 @@ public class OptimizerSettings implements Serializable, Cloneable {
   @SerializedName("max_search_steps_per_candidate")
   public Long maxSearchStepsPerCandidate;
 
+  /**
+   * The most maze search steps the optimizer stage may use in all. At the end of the first pass
+   * after which it has used this many, the optimizer stops and keeps the best board so far. A value
+   * of zero or below means no limit.
+   */
+  @SerializedName("max_steps")
+  public Long maxSteps;
+
   // -------------------------------
 
   /**

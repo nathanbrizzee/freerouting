@@ -217,6 +217,8 @@ public class DefaultSettings implements SettingsSource {
     settings.autorouter.maxPasses = 0;
     settings.autorouter.stagnationPassLimit = DEFAULT_STAGNATION_PASS_LIMIT;
     settings.autorouter.stagnationWorkRatio = -1.0;
+    settings.autorouter.stagnationGainRatio = -1.0;
+    settings.autorouter.passMaxSteps = 0L;
     settings.autorouter.skipFailedPairsInPass = false;
     settings.autorouter.maxItems = Integer.MAX_VALUE;
     settings.tracePullTightAccuracy = 500;
@@ -305,6 +307,7 @@ public class DefaultSettings implements SettingsSource {
     settings.optimizer.algorithm = "freerouting-optimizer";
     settings.optimizer.maxPasses = 100;
     settings.optimizer.maxItems = Integer.MAX_VALUE;
+    settings.optimizer.maxSteps = 0L;
     settings.optimizer.maxThreads = null;
     settings.optimizer.optimizationImprovementThreshold = DEFAULT_OPTIMIZER_IMPROVEMENT_THRESHOLD;
     settings.optimizer.boardUpdateStrategy = BoardUpdateStrategy.GLOBAL_OPTIMAL;

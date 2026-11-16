@@ -111,6 +111,9 @@ Options worth knowing (all `--router.` on the command line):
 | `autorouter.grid_finisher=true` | Fine-grid search for each connection left open. On in `standard`. | With `autorouter.grid_finisher_ripup=true` it may lift up to four other connections. |
 | `autorouter.skip_unreachable=false` | On in `standard`: after pass 1, connections that pads, keepouts, planes, the board edge or locked tracks wall off are logged (`Unreachable connections: N ...`, one pin per group) and not searched again. | The listed pins are design problems no router fixes: move a part, open a keepout, add a layer. Turn it off only to compare. |
 | `autorouter.stagnation_work_ratio=<r>` | Stops the passes when the fewest open has not fallen for `r` times the search work that reached it (from pass 8, at least two passes after the best). `1` in `standard` and `quick`; `-1` turns it off. | Long boards whose late passes gain nothing; the finishing stages still run. |
+| `autorouter.stagnation_gain_ratio=<r>` | Stops the passes when the last two cut the fewest open by less than the fraction `r` of what it was (from pass 8). `0.2` in `standard` and `quick`; `-1` turns it off. | Slow boards whose passes take minutes and gain a little each; the fallbacks that route the board again in another order then get their turn. |
+| `optimizer.max_steps=<n>` | Stops the optimizer stage once it has used `n` search steps (a pass stops reading candidates and keeps the best so far). `500000000` in `standard` and `quick`, `0` for no limit. | Boards of about a thousand connections where one optimizer pass takes hours. |
+| `autorouter.pass_max_steps=<n>` | Stops the passes once they have spent `n` search steps (checked at the end of a pass; per race lane). `250000000` in `standard` and `quick`, `0` for no limit. | Boards whose passes take many minutes: bounds the first stage so the fallbacks get their turn. |
 | `autorouter.first_nets=NET1,NET2` | Routes the named nets first from the first pass on. | Nets that keep losing their space to others; adding `failed-first` to `autorouter.fallback_race_strategies` (`standard`, which races) or `autorouter.fallback_strategies` (no race) does it for the nets the best board left open. |
 | `max_search_steps=<n>` | Caps the search work of the whole job, independent of machine speed. | Repeatable comparisons; keep `job_timeout` as a safety net. |
 | `fanout.strategy=planned` | Gives every SMD pin an escape via before routing. | Dense boards whose pins get closed in early; worse on roomy boards. |
@@ -196,6 +199,10 @@ reading, in the order they appear:
   board left open routed first (in the default race list; without the race, add `failed-first` to `autorouter.fallback_strategies`).
 - `Stopping the passes after pass #N: no fewer open connections than U ...` The work-based stop
   (`stagnation_work_ratio`) ended the passes; the finishing stages follow.
+- `Stopping the passes after pass #N: the last 2 passes cut the fewest open connections from A to B ...` The gain-based stop
+  (`stagnation_gain_ratio`) ended the passes; the fallbacks and finishing stages follow.
+- `Stopping the passes after pass #N: they spent S search steps, the limit (pass_max_steps) is L ...`
+  The step limit ended the passes; the fallbacks and finishing stages follow.
 - `Differential pairs: N found, M of K pair connection(s) routed as coupled traces.` and one `Pair
   <name> (<pin> to <pin>): routed on layer L, lengths A and B mm, skew S mm (target T mm)` or `... left to the
   router: <reason>` line per pair connection. A routed line ends with `, tuned from S mm` when the shorter

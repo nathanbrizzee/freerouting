@@ -56,6 +56,14 @@ public final class BatchOptimizer extends NamedAlgorithm {
   protected RoutingJob job;
   protected int totalItemsOptimized;
   protected Long deadlineMs;
+
+  /**
+   * The search steps of the candidates whose results the optimizer has read, over all passes. A
+   * candidate's steps depend only on the board it starts from, and the results are read in order,
+   * so the sum is the same on every run.
+   */
+  private long optimizerSteps;
+
   protected boolean isTimedOut;
   protected RoutingBoard bestBoard;
   protected float bestScore;
@@ -398,6 +406,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
     double scoreImprovement = -1;
     int currentPass = 0;
     int passesWithoutGainInARow = 0;
+    final long maxSteps = optimizerMaxSteps();
     try {
       while ((this.settings.optimizer.maxPasses == null
               || currentPass < this.settings.optimizer.maxPasses)
@@ -481,6 +490,25 @@ public final class BatchOptimizer extends NamedAlgorithm {
                 passStats.getRouterScore(job.routerSettings),
                 passStats.connections.incompleteCount,
                 passStats.clearanceViolations.totalCount));
+
+        final long stepsUsed = this.optimizerSteps;
+        job.logInfo(
+            String.format(
+                Locale.US,
+                "Optimizer pass #%d: %d search steps so far in the optimizer stage.",
+                currentPass,
+                stepsUsed));
+        if (stepLimitReached(maxSteps, stepsUsed)) {
+          job.logInfo(
+              String.format(
+                  Locale.US,
+                  "Stopping optimizer after pass #%d: it used %d search steps, the limit"
+                      + " (optimizer.max_steps) is %d.",
+                  currentPass,
+                  stepsUsed,
+                  maxSteps));
+          break;
+        }
 
         boolean passHadGain = hasPassGain(rejectionReason, scoreBeforePass, scoreAfterPass);
 
@@ -948,6 +976,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
           CandidateResult res = future.get();
           this.totalItemsOptimized++;
           if (res != null) {
+            this.optimizerSteps += res.steps;
             this.workerCpuNanos.addAndGet(res.cpuUsedNanos);
             this.workerAllocBytes.addAndGet(res.allocUsedBytes);
             this.resultMap.put(res.result.itemId(), res.result);
@@ -975,6 +1004,17 @@ public final class BatchOptimizer extends NamedAlgorithm {
                 break;
               }
             }
+          }
+          if (stepLimitReached(optimizerMaxSteps(), this.optimizerSteps)) {
+            job.logInfo(
+                String.format(
+                    Locale.US,
+                    "Stopping optimization pass #%d early: the optimizer used %d search steps, the"
+                        + " limit (optimizer.max_steps) is %d.",
+                    passNo,
+                    this.optimizerSteps,
+                    optimizerMaxSteps()));
+            break;
           }
         } catch (InterruptedException e) {
           stoppedOrTimedOut = true;
@@ -1251,6 +1291,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
     final long cpuUsedNanos;
     final long allocUsedBytes;
 
+    /** The search steps the candidate used. */
+    long steps;
+
     CandidateResult(
         ItemRouteResult result,
         RoutingBoard board,
@@ -1312,11 +1355,24 @@ public final class BatchOptimizer extends NamedAlgorithm {
    * started as a thread; the search steps go to the job's thread as before.
    */
   static final class CandidateStop extends StoppableThread {
+    private static final ThreadLocal<long[]> STEPS_ON_THIS_THREAD =
+        ThreadLocal.withInitial(() -> new long[1]);
+
     private final StoppableThread job;
     private volatile boolean cancelled;
 
     CandidateStop(StoppableThread job) {
       this.job = job;
+    }
+
+    /** Starts counting the search steps of the candidate about to run on this thread. */
+    static void startCounting() {
+      STEPS_ON_THIS_THREAD.get()[0] = 0;
+    }
+
+    /** The search steps counted on this thread since {@link #startCounting()}. */
+    static long stepsCounted() {
+      return STEPS_ON_THIS_THREAD.get()[0];
     }
 
     void cancel() {
@@ -1338,6 +1394,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
     @Override
     public void addSearchSteps(long steps) {
+      STEPS_ON_THIS_THREAD.get()[0] += steps;
       if (this.job != null) {
         this.job.addSearchSteps(steps);
       }
@@ -1420,6 +1477,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
         return new CandidateResult(new ItemRouteResult(itemId), null, null, 0, 0);
       }
 
+      CandidateStop.startCounting();
       long cpuStart = -1;
       long allocStart = -1;
       ThreadMXBean mxBean = null;
@@ -1482,10 +1540,11 @@ public final class BatchOptimizer extends NamedAlgorithm {
         boolean improved = result.improved() && keepBoard;
         workerBoardState.finish(improved);
         snapshotFinished = true;
-        if (improved) {
-          return new CandidateResult(result, workerBoard, position, cpuUsed, allocUsed);
-        }
-        return new CandidateResult(result, null, position, cpuUsed, allocUsed);
+        CandidateResult candidateResult =
+            new CandidateResult(
+                result, improved ? workerBoard : null, position, cpuUsed, allocUsed);
+        candidateResult.steps = CandidateStop.stepsCounted();
+        return candidateResult;
       } finally {
         if (!snapshotFinished) {
           workerBoardState.finish(false);
@@ -1651,6 +1710,17 @@ public final class BatchOptimizer extends NamedAlgorithm {
       OptimizerSettings optimizerSettings, int passesWithoutGainInARow) {
     return !increasedRipupCostsAfterPassWithoutGain(optimizerSettings)
         || passesWithoutGainInARow < 2;
+  }
+
+  private long optimizerMaxSteps() {
+    return this.settings.optimizer != null && this.settings.optimizer.maxSteps != null
+        ? this.settings.optimizer.maxSteps
+        : 0;
+  }
+
+  /** Whether the optimizer stage has used its search step limit; off with a limit of 0 or less. */
+  static boolean stepLimitReached(long limit, long stepsUsed) {
+    return limit > 0 && stepsUsed >= limit;
   }
 
   /**

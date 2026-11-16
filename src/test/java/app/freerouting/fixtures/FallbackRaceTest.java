@@ -65,6 +65,8 @@ class FallbackRaceTest extends RoutingFixtureTest {
     // nothing but the stop ends it.
     job.routerSettings.autorouter.stagnationPassLimit = 0;
     job.routerSettings.autorouter.stagnationWorkRatio = 0.0;
+    job.routerSettings.autorouter.stagnationGainRatio = 0.0;
+    job.routerSettings.autorouter.passMaxSteps = 0L;
     job.routerSettings.autorouter.maxPasses = 10_000;
     RoutingJob stopped = job;
     Thread stopper =

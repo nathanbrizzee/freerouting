@@ -101,6 +101,18 @@ public final class RouterProfiles {
     // The passes stop once the search work since the fewest open connections exceeds the work that
     // reached it (from pass 8): replayed over the benchmark logs, no board lost a connection.
     defaults.autorouter.stagnationWorkRatio = 1.0;
+    // A board that still gains, but slowly, would otherwise spend hours on passes that each take
+    // minutes: from pass 8 the passes also stop once the last two cut the fewest open connections
+    // by less than a fifth. The fallbacks that follow route the board again in another order.
+    defaults.autorouter.stagnationGainRatio = 0.2;
+    // The race waits for its slowest lane, and a lane that gains quickly never meets the rules
+    // above. No pass loop may spend more than this many search steps: on the 1000-connection
+    // benchmark board that is about eight passes, two hours; on the others, no stop at all.
+    defaults.autorouter.passMaxSteps = PASS_MAX_STEPS;
+    // The optimizer reads every candidate of a pass and keeps the best one: on the 1000-connection
+    // board one pass cost 1.6 billion steps and 2.5 hours for two connections, where the other
+    // benchmark boards use at most 118 million steps in all.
+    defaults.optimizer.maxSteps = OPTIMIZER_MAX_STEPS;
     // The alternative strategies race beside the default run, each within its share of the step
     // budget, on up to one thread per core and no more than the heap holds (each attempt has a
     // board of its own; see RoutingFallbackRunner.fallbackThreads).
@@ -110,4 +122,10 @@ public final class RouterProfiles {
 
   /** Maze search steps per connection in pass 1 of {@code standard}, and after a failure. */
   static final long STANDARD_SEARCH_STEPS = 2_000_000L;
+
+  /** The search steps a pass loop may spend in the standard profile ({@code pass_max_steps}). */
+  static final long PASS_MAX_STEPS = 250_000_000L;
+
+  /** The search steps the optimizer stage may use in the standard profile ({@code max_steps}). */
+  static final long OPTIMIZER_MAX_STEPS = 500_000_000L;
 }

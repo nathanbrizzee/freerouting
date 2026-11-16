@@ -231,7 +231,15 @@ final class RoutingFallbackRunner {
         new RoutingFallback.Strategy(
             RoutingFallback.FAILED_FIRST,
             false,
-            settings -> settings.autorouter.firstNets = names,
+            settings -> {
+              settings.autorouter.firstNets = names;
+              // A second try at the whole board gets half the step limit of the first: it starts
+              // with a best board in hand, and on a board whose passes take minutes it costs hours.
+              Long limit = settings.autorouter.passMaxSteps;
+              if (limit != null && limit > 0) {
+                settings.autorouter.passMaxSteps = Math.max(1, limit / 2);
+              }
+            },
             false,
             false);
     job.logInfo(

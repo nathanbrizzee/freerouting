@@ -28,6 +28,8 @@ import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.RouterSettings;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -321,6 +323,17 @@ final class AutorouteBatchLoop {
     int fewestOpen = Integer.MAX_VALUE;
     int passOfFewestOpen = 0;
     long stepsAtFewestOpen = 0;
+    // The fewest open connections after each pass (index 0 is the start), for the gain-based stop.
+    final List<Integer> fewestOpenAfterPass = new ArrayList<>();
+    fewestOpenAfterPass.add(Integer.MAX_VALUE);
+    final long passMaxSteps =
+        router.settings.autorouter != null && router.settings.autorouter.passMaxSteps != null
+            ? router.settings.autorouter.passMaxSteps
+            : 0L;
+    final double stagnationGainRatio =
+        router.settings.autorouter != null && router.settings.autorouter.stagnationGainRatio != null
+            ? router.settings.autorouter.stagnationGainRatio
+            : -1.0;
     final double stagnationWorkRatio =
         router.settings.autorouter != null && router.settings.autorouter.stagnationWorkRatio != null
             ? router.settings.autorouter.stagnationWorkRatio
@@ -568,6 +581,44 @@ final class AutorouteBatchLoop {
           fewestOpen = openNow;
           passOfFewestOpen = currentPass;
           stepsAtFewestOpen = cumulativeSteps;
+        }
+        while (fewestOpenAfterPass.size() <= currentPass) {
+          fewestOpenAfterPass.add(fewestOpen);
+        }
+        fewestOpenAfterPass.set(currentPass, fewestOpen);
+        if (stepLimitReached(passMaxSteps, continueAutorouting, openNow, cumulativeSteps)) {
+          job.logInfo(
+              String.format(
+                  java.util.Locale.ROOT,
+                  "Stopping the passes after pass #%d: they spent %d search steps, the limit"
+                      + " (pass_max_steps) is %d; %d connections are open.",
+                  currentPass,
+                  cumulativeSteps,
+                  passMaxSteps,
+                  openNow));
+          stopFor(BatchAutorouter.StopReason.STAGNATION);
+          break;
+        }
+        if (currentPass > GAIN_WINDOW_PASSES
+            && gainStagnated(
+                stagnationGainRatio,
+                continueAutorouting,
+                currentPass,
+                cumulativeSteps,
+                fewestOpenAfterPass.get(currentPass - GAIN_WINDOW_PASSES),
+                fewestOpen)) {
+          job.logInfo(
+              String.format(
+                  java.util.Locale.ROOT,
+                  "Stopping the passes after pass #%d: the last %d passes cut the fewest open"
+                      + " connections from %d to %d, less than %.0f%% (stagnation_gain_ratio).",
+                  currentPass,
+                  GAIN_WINDOW_PASSES,
+                  fewestOpenAfterPass.get(currentPass - GAIN_WINDOW_PASSES),
+                  fewestOpen,
+                  100 * stagnationGainRatio));
+          stopFor(BatchAutorouter.StopReason.STAGNATION);
+          break;
         }
         if (workStagnated(
             stagnationWorkRatio,
@@ -890,6 +941,51 @@ final class AutorouteBatchLoop {
     }
     router.job.status().stopped(reason.name());
     router.thread.requestStopAutoRouter();
+  }
+
+  /**
+   * Whether the passes have spent their search step limit ({@code pass_max_steps}) with connections
+   * still open. Checked at the end of a pass, so the stop is the same on every machine. Off with a
+   * limit of zero or less.
+   */
+  static boolean stepLimitReached(
+      long limit, boolean continueAutorouting, int openNow, long cumulativeSteps) {
+    return limit > 0 && continueAutorouting && openNow > 0 && cumulativeSteps >= limit;
+  }
+
+  /** The passes the gain-based stop looks back over. */
+  static final int GAIN_WINDOW_PASSES = 2;
+
+  /**
+   * The search steps the passes must have spent before the gain-based stop may end them. On the
+   * benchmark boards a lane has spent at most 23 million steps by pass 8 and its passes take
+   * seconds, where stopping early only loses a connection; on the 1000-connection board whose
+   * passes take 10 to 25 minutes it is 190 to 235 million.
+   */
+  static final long GAIN_MIN_STEPS = 100_000_000L;
+
+  /**
+   * Whether the passes should stop because they gain too slowly: connections are still open, this
+   * is pass {@link #WORK_STAGNATION_FIRST_PASS} or later, the passes have spent {@link
+   * #GAIN_MIN_STEPS} search steps, and the last {@link #GAIN_WINDOW_PASSES} passes cut the fewest
+   * open connections from {@code openBefore} to {@code openNow}, by less than {@code ratio} of
+   * {@code openBefore}. Off with a ratio of zero or less. Passes are the same on every machine, so
+   * the stop is deterministic.
+   */
+  static boolean gainStagnated(
+      double ratio,
+      boolean continueAutorouting,
+      int currentPass,
+      long cumulativeSteps,
+      int openBefore,
+      int openNow) {
+    return ratio > 0
+        && continueAutorouting
+        && cumulativeSteps >= GAIN_MIN_STEPS
+        && openNow > 0
+        && openBefore != Integer.MAX_VALUE
+        && currentPass >= WORK_STAGNATION_FIRST_PASS
+        && openBefore - openNow < ratio * openBefore;
   }
 
   /** Passes after the fewest open connections the work-based stop waits for at least. */
