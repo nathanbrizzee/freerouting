@@ -4,7 +4,8 @@ For the maintainers of Freerouting. This is the write-up behind a fork branch th
 of upstream `master` (`5aa1b24`). It lists every change, what each one was measured to do, what was tried and
 dropped, and what is still open, so that a pull request can be cut from it in pieces.
 
-- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.6.jar`.
+- Fork: `nathanbrizzee/freerouting`, branch `router-overhaul`. Release jar: `freerouting-2.5.0-nb.6.jar`; local builds after it are
+  described under "Changes since 2.5.0-nb.6".
 - Baseline for every comparison: the released v2.5.0 jar (built from `b647a2f`), and upstream `master` for the
   code.
 - The branch is large (184 files, +17.5k / -0.5k lines, 51 new test files, about half of it docs), so section 7
@@ -201,6 +202,36 @@ measured GUI run spent 3 of 162 sampled seconds drawing. New GUI text exists in 
 - **Upstream master merged again** (197 commits, the 2.6.0-RC10 line): a stagnation-loop fix, a pad-clearance fix (#1047), the AWT-free geometry layer, the optimizer rank score, `-mt` as a stage ceiling, hole-to-hole and via-in-pad handling, exact rational SES import and the freerouting.net part 3 improvements (exit stubs, ball escape order, two-layer BGA start). 34 files conflicted; where both sides had fixed the same thing the upstream form was kept, and what we had added beside it was kept too (rip history and pin-access costs, blind and buried via spans, the fanout-escape guard, movable session routes, the progress-counting stagnation test, the step-budget search limit). A fixed via in a pad of its own net is not a clearance violation, and a `class_class` rule for all layers only raises shared item classes, so clearance 0 between twin classes still holds. On the 24 PCBench boards plus one (2-minute cap, optimizer on) the merged tree finished 16 boards clean with 1,286 open connections, our nb.2 jar 15 with 1,229 and upstream master alone 12 with 1,433.
 - **Differential pair routing** (`router.autorouter.differential_pairs`, on by default except in `classic`). A pair declared in the DSN with `(pair (nets P N (gap g)))`, or found by net name, is routed before everything else as two coupled traces: the pads at each end escape together to the coupled gap, one wide virtual trace is searched along the pair's centre line, and the members are that line offset to either side, with a via pair at an end whose pads are on another layer. A pair is kept only if the board checker finds no clearance violation in its copper; otherwise nothing is left behind and the ordinary router takes it, with the reason in the log. The pair copper is fixed until the last stage. `scripts/kicad/dsn_pairs.py` adds the pairs, the class's differential pair gap and width to a KiCad DSN, since KiCad's exporter writes none. Not done: polarity swaps, length tuning (the skew of a routed pair is reported, up to 1.3 mm on the CM5 test board), BGA breakouts. On the CM5 test board (6 layers, 32 pairs) 13 of 18 pair connections route as pairs and the board then finishes with 6 open in 45 s against 8 open in 245 s without pairs; on the 24 PCBench boards nothing got worse (16 clean, 1,313 open).
 
+### Changes since 2.5.0-nb.6 (local builds from 2026-11-11)
+
+- **Optimizer memory and cost.** Search trees share their scratch stacks per thread, not per tree (a per-tree
+  stack kept every searched board copy alive and ran the optimizer out of heap on a partial board); the optimizer
+  routes the winning candidate again instead of holding board copies, keeps the best board when the heap runs
+  out, and caps each candidate's search steps.
+- **Give-up rules, all counted in search steps, never time.** The work-based pass stop is on in `standard` (from
+  pass 8); `stagnation_gain_ratio` (0.2) ends the passes when the last two cut the fewest open by less than a
+  fifth; `pass_max_steps` (250 million, half for `failed-first`) bounds a pass loop; the optimizer's `max_steps`
+  (500 million) is checked per candidate. On the 1000-connection board the run went from 6.5 h (35 open) to
+  4 h 27 min (36 open).
+- **Less wasted work.** Connections walled off by immovable copper are found once and not searched again
+  (`skip_unreachable`); a capacity estimate is logged before the passes; routing runs one thread-priority step
+  below normal with a core kept free; the router stamp is written only to `freerouting.json`.
+- **`failed-first` fallback** (routes last pass's failed connections first) in the default race list; `first_nets`
+  is opt-in.
+- **Neck policy.** A class wider than the signal width (`neck_max_class_width_um`, default the width of the class
+  most nets belong to) is never narrowed along the run, in the necked retry, the necked direct pin route or
+  the micro neckdown; the end report lists narrowed traces and wide nets left open. `continue-auto-neck` is in both
+  default lists. A short stub is the exception (`neck_stub_max_um`, default 1500 um): a wide net's connection
+  between items no farther apart may neck to reach the via beside a pad, and the route is undone when its narrowed
+  copper is longer than twice the limit.
+- **Fractured pours (bug fix).** The walk over the items joined through a pour that foreign copper cuts into
+  islands entered the pour once and expanded only the islands already reached, so connected sets depended on
+  where the walk started: a pad and a via joined through an inner plane were reported open and routed again. Each
+  island is now entered from the item that reached it. On four private boards the open connections fell from
+  11, 22, 18 and 38 to 5, 0, 0 and 7.
+- Upstream master merged a third time (199 commits, to PR #1134); the per-commit outcome is in
+  `docs/research/upstream-merges.md`.
+
 ### Changes since 2.5.0-nb.5
 
 From the second real-board test (the six-layer board with four Ethernet pairs and a USB pair):
@@ -263,6 +294,10 @@ Each has a row in the progress log with numbers. In short:
 - Stall stopping rule (stop after r times the steps to the best): loses Starling, reworkctf, Unifying and EncoderBoard, whose gains come after a flat stretch. A cap on the fallback's steps would save about 15 of 40 minutes on one board. Neither built.
 - Race inside `standard`: 1,230 open against 759 at 3.9x the CPU at the set's caps. Kept in `thorough` only.
 - Hard-wired `force_via_in_pad`: the mppt-1210 case above.
+- Routing the plane pads first (`plane_as_priority`) and a longer stub reach (`neck_stub_max_um=2500`) for the
+  supply pads that signals close in: reach alone changed nothing (7 open both times on the board concerned). With
+  plane pads first and `neck_width_um=150` it ended at 4 open in half the time, but it moved one ground open
+  rather than closing it and necked eight signal nets to 0.15 mm, so it is not in any profile.
 
 ## 5. How it was tested
 
@@ -320,6 +355,9 @@ written: 1,075 tests in 238 classes, 0 failures, 0 errors, 3 skipped. `spotlessC
   the parser still reads pair rules and ignores them.
 - Boards where the remaining open connections are caused by placement (pins closed in by neighbouring parts,
   design-blocked pins) cannot be finished by the router; the verdict says which connections these are.
+- Large copper (a 0.5 mm or wider class made wide for current: rails, high-current ground pads) is left open
+  when only a narrower trace would close it; the router does not narrow it along the run, and such connections
+  are routed by hand.
 - The two logicbone boards need hours; the BGA planner does not choose the escape direction per layer.
 - The run-to-run noise of boards cut by a time cap is a few connections (about 10% in CPU between runs on the same
   jar before the determinism fixes, much less after).
