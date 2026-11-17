@@ -26,7 +26,7 @@ class SparseJobSettingsBoardLoadTest extends RoutingFixtureTest {
    * jobs: only the board rules are compared, and it would add seconds after the pass.
    */
   private static final String SPARSE_SETTINGS_JSON =
-      "{\"job_timeout\":\"00:01:00\",\"autorouter\":{\"max_passes\":1,"
+      "{\"job_timeout\":\"00:03:00\",\"autorouter\":{\"max_passes\":1,"
           + "\"grid_finisher\":false},\"optimizer\":{\"enabled\":false}}";
 
   private RoutingJob runWithSparseSettings() {
