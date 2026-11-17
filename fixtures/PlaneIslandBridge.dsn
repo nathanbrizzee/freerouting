@@ -1,0 +1,97 @@
+(pcb PlaneIslandBridge.dsn
+  (parser
+    (string_quote ")
+    (space_in_quoted_tokens on)
+    (host_cad "KiCad's Pcbnew")
+    (host_version "10.0.0")
+  )
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu
+      (type signal)
+      (property
+        (index 0)
+      )
+    )
+    (layer In1.Cu
+      (type power)
+      (property
+        (index 1)
+      )
+    )
+    (layer In2.Cu
+      (type power)
+      (property
+        (index 2)
+      )
+    )
+    (layer B.Cu
+      (type signal)
+      (property
+        (index 3)
+      )
+    )
+    (boundary
+      (path pcb 0  0 0  40000 0  40000 -20000  0 -20000  0 0)
+    )
+    (plane GND (polygon F.Cu 0  0 0  40000 0  40000 -20000  0 -20000))
+    (plane GND (polygon In1.Cu 0  0 0  40000 0  40000 -20000  0 -20000))
+    (via "Via[0-3]_600:300_um")
+    (rule
+      (width 200)
+      (clearance 200)
+    )
+  )
+  (placement
+    (component pad1
+      (place PA 8000 -10000 front 0)
+      (place PB 32000 -10000 front 0)
+    )
+    (component pad2
+      (place PC 20000 -700 front 0)
+      (place PD 20000 -19300 front 0)
+    )
+  )
+  (library
+    (image pad1
+      (pin PAD 1 0 0)
+    )
+    (image pad2
+      (pin PAD 1 0 0)
+    )
+    (padstack PAD
+      (shape (rect F.Cu -600 -600 600 600))
+      (attach off)
+    )
+    (padstack "Via[0-3]_600:300_um"
+      (shape (circle F.Cu 600))
+      (shape (circle In1.Cu 600))
+      (shape (circle In2.Cu 600))
+      (shape (circle B.Cu 600))
+      (attach off)
+    )
+  )
+  (network
+    (net GND
+      (pins PA-1 PB-1)
+    )
+    (net WALL
+      (pins PC-1 PD-1)
+    )
+    (class kicad_default GND WALL
+      (circuit
+        (use_via "Via[0-3]_600:300_um")
+      )
+      (rule
+        (width 200)
+        (clearance 200)
+      )
+    )
+  )
+  (wiring
+    (wire (path F.Cu 1000  20000 -700  20000 -19300)(net WALL)(type protect))
+    (via "Via[0-3]_600:300_um" 12000 -10000 (net GND)(type protect))
+    (via "Via[0-3]_600:300_um" 28000 -10000 (net GND)(type protect))
+  )
+)

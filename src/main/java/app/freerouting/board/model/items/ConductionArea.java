@@ -431,6 +431,43 @@ public class ConductionArea extends ObstacleArea implements Connectable {
     return this.cachedFractureResult;
   }
 
+  /**
+   * Walks into this area from {@code from}, an item in contact with it, the way copper does: a
+   * fractured area is one piece of copper per island, so {@code from} reaches only the items of its
+   * own island. The area itself is added to {@code result} once, but each island is entered on its
+   * own: an area an earlier step of the walk already reached must not hide the islands the walk
+   * only comes to later (a via of another island, joined to the first through an inner plane).
+   *
+   * @return false if the area is not fractured or does not know {@code from}: the ordinary walk
+   *     applies
+   */
+  boolean walkIslandOf(Item from, Set<Item> result, int netNumber, boolean stopAtPlane) {
+    if (this.board == null) {
+      return false;
+    }
+    FastPlaneConnectivityGrid.PlaneFractureResult fractureResult = getFractureResult();
+    if (fractureResult == null || !fractureResult.isFractured) {
+      return false;
+    }
+    List<Item> island = null;
+    for (List<Item> items : fractureResult.islandItems.values()) {
+      if (items.contains(from)) {
+        island = items;
+        break;
+      }
+    }
+    if (island == null) {
+      return false;
+    }
+    result.add(this);
+    for (Item item : island) {
+      if (item != this && (netNumber <= 0 || item.containsNet(netNumber)) && result.add(item)) {
+        item.getConnectedSetRecu(result, netNumber, stopAtPlane);
+      }
+    }
+    return true;
+  }
+
   @Override
   void getConnectedSetRecu(Set<Item> result, int netNumber, boolean stopAtPlane) {
     if (this.board == null) {

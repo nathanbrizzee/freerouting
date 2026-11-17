@@ -877,6 +877,10 @@ public abstract class Item
       if (netNumber > 0 && !currentContact.containsNet(netNumber)) {
         continue;
       }
+      if (currentContact instanceof ConductionArea area
+          && area.walkIslandOf(this, result, netNumber, stopAtPlane)) {
+        continue;
+      }
       if (result.add(currentContact)) {
         currentContact.getConnectedSetRecu(result, netNumber, stopAtPlane);
       }
