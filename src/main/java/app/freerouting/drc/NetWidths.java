@@ -1,19 +1,23 @@
 package app.freerouting.drc;
 
 import app.freerouting.board.facade.BasicBoard;
+import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.model.structure.Unit;
 import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.geometry.planar.FloatPoint;
+import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetClass;
 import com.google.gson.annotations.SerializedName;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -86,6 +90,68 @@ public final class NetWidths {
     return !isWide(board, netNo, signalHalfWidth(board, maxClassWidthUm));
   }
 
+  /**
+   * The items of {@code dests} no farther than {@code stubMaxUm} (edge to edge, by bounding box)
+   * from some item of {@code starts}: the ends a wide net's stub may reach. Empty when the limit is
+   * not above 0.
+   */
+  public static Set<Item> withinStub(
+      BasicBoard board, Set<Item> starts, Set<Item> dests, Double stubMaxUm) {
+    Set<Item> result = new LinkedHashSet<>();
+    if (stubMaxUm == null || stubMaxUm <= 0 || starts == null || dests == null) {
+      return result;
+    }
+    double limit = stubLimit(board, stubMaxUm);
+    List<TileShape> startShapes = new ArrayList<>();
+    for (Item start : starts) {
+      for (int k = 0; k < start.tileShapeCount(); k++) {
+        TileShape shape = start.getTileShape(k);
+        if (shape != null) {
+          startShapes.add(shape);
+        }
+      }
+    }
+    for (Item dest : dests) {
+      boolean near = false;
+      for (int k = 0; k < dest.tileShapeCount() && !near; k++) {
+        TileShape destShape = dest.getTileShape(k);
+        for (int m = 0; destShape != null && m < startShapes.size() && !near; m++) {
+          near = shapeDistance(startShapes.get(m), destShape) <= limit;
+        }
+      }
+      if (near) {
+        result.add(dest);
+      }
+    }
+    return result;
+  }
+
+  /** The distance between two convex shapes: 0 when they meet, else the nearest corner gap. */
+  static double shapeDistance(TileShape a, TileShape b) {
+    if (a.intersects(b)) {
+      return 0;
+    }
+    double best = Double.MAX_VALUE;
+    for (int i = 0; i < a.borderLineCount(); i++) {
+      best = Math.min(best, b.distance(a.cornerApprox(i)));
+    }
+    for (int i = 0; i < b.borderLineCount(); i++) {
+      best = Math.min(best, a.distance(b.cornerApprox(i)));
+    }
+    return best;
+  }
+
+  /** Whether narrowed copper of this length (board units) is no longer than a wide stub allows. */
+  public static boolean isStub(BasicBoard board, double length, Double stubMaxUm) {
+    return stubMaxUm != null && stubMaxUm > 0 && length <= 2 * stubLimit(board, stubMaxUm);
+  }
+
+  /** The stub limit in board units. */
+  static double stubLimit(BasicBoard board, double stubMaxUm) {
+    int resolution = Math.max(1, board.communication.resolution);
+    return Unit.scale(stubMaxUm * resolution, Unit.UM, board.communication.unit);
+  }
+
   /** A net with traces narrower than its class away from its pins, in millimetres. */
   public record Narrowed(
       @SerializedName("net") String net,
@@ -116,6 +182,16 @@ public final class NetWidths {
    * fixed are left out: the router did not lay them.
    */
   public static List<Narrowed> narrowed(BasicBoard board, Double maxClassWidthUm) {
+    return narrowed(board, maxClassWidthUm, null);
+  }
+
+  /**
+   * As {@link #narrowed(BasicBoard, Double)}, also leaving out the traces of wide-class nets that
+   * are no longer than a stub ({@code neck_stub_max_um}).
+   */
+  public static List<Narrowed> narrowed(
+      BasicBoard board, Double maxClassWidthUm, Double stubMaxUm) {
+    double stubLimit = stubMaxUm != null && stubMaxUm > 0 ? stubLimit(board, stubMaxUm) : 0;
     int signalHalfWidth = signalHalfWidth(board, maxClassWidthUm);
     double toMm =
         Unit.scale(1.0, board.communication.unit, Unit.MM)
@@ -138,6 +214,11 @@ public final class NetWidths {
         continue;
       }
       if (padEntry(board, trace, pinsByNet.getOrDefault(netNo, List.of()))) {
+        continue;
+      }
+      if (stubLimit > 0
+          && trace.getLength() <= stubLimit
+          && isWide(board, netNo, signalHalfWidth)) {
         continue;
       }
       double[] sums =

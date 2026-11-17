@@ -275,7 +275,11 @@ public final class RoutingResultManifest {
       manifest.verdict = OpenConnections.verdict(manifest.openConnections);
       Double maxClassWidthUm =
           job.routerSettings != null ? job.routerSettings.neckMaxClassWidthUm : null;
-      manifest.narrowedTraces = NetWidths.narrowed(job.board, maxClassWidthUm);
+      manifest.narrowedTraces =
+          NetWidths.narrowed(
+              job.board,
+              maxClassWidthUm,
+              job.routerSettings != null ? job.routerSettings.neckStubMaxUm : null);
       manifest.wideNetsLeftOpen =
           NetWidths.wideOpen(job.board, manifest.openConnections, maxClassWidthUm);
       if (job.routerSettings != null && job.routerSettings.scoring != null) {

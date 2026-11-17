@@ -103,6 +103,9 @@ public class DefaultSettings implements SettingsSource {
    */
   public static final double DEFAULT_NECK_WIDTH_UM = 0.0;
 
+  /** The longest stub a wide net class may neck down (neck_stub_max_um). */
+  public static final double DEFAULT_NECK_STUB_MAX_UM = 1500.0;
+
   /** Default minimum amplitude for trace length tuning meanders in millimeters. */
   public static final double DEFAULT_MEANDER_MIN_AMPLITUDE_MM = 0.2;
 
@@ -273,6 +276,7 @@ public class DefaultSettings implements SettingsSource {
     settings.planeNets = new String[0];
     settings.planeAsObstacle = false;
     settings.neckWidthUm = DEFAULT_NECK_WIDTH_UM;
+    settings.neckStubMaxUm = DEFAULT_NECK_STUB_MAX_UM;
     settings.exactCopper = true;
     settings.strictDrc = false;
     settings.fixKicadFootprints = false;

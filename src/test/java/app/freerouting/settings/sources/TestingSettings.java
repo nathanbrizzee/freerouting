@@ -136,6 +136,11 @@ public class TestingSettings implements SettingsSource {
     this.settings.neckMaxClassWidthUm = widthUm;
   }
 
+  /** Sets the longest stub a wide net class may neck down ({@code neck_stub_max_um}). */
+  public void setNeckStubMaxUm(double lengthUm) {
+    this.settings.neckStubMaxUm = lengthUm;
+  }
+
   /** Enables or disables automatic neckdown at pins for the test run. */
   public void setAutomaticNeckdown(boolean enabled) {
     this.settings.automaticNeckdown = enabled;

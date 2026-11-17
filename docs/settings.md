@@ -579,7 +579,10 @@ The GUI saves its settings to this file, router values included, and every later
       the fanout and route it to its plane first, so that it drops into the plane through a via of
       its own instead of being joined to the nearest pad of the net. While it searches, copper of the
       same net belonging to other packages is an obstacle; pins of its own package are not. Default
-      is `false`. CLI: `--router.autorouter.plane_as_priority=true`.
+      is `false`. On one board with supply pads closed in by signal routes, it with
+      `neck_width_um=150` ended at 4 open in half the time (7 without), but it necked signal nets
+      and moved one ground open to another pad; it did not help without the neck. CLI:
+      `--router.autorouter.plane_as_priority=true`.
     - **`plane_share_gap_um`**: With `plane_as_priority`, two plane pads at most this far apart
       edge to edge (no room for a via between them) may share one via. Default is `500`.
     - **`max_threads`**: Stage-specific autorouter worker-thread limit. Canonical CLI is
@@ -659,7 +662,8 @@ The GUI saves its settings to this file, router values included, and every later
   routed narrower than the class along their run (the necked retry of `neck_width_um`, the
   `continue-auto-neck` fallback, the necked direct pin route). A wider class was made wide on
   purpose, usually for current, and a trace narrowed along its run is a defect no clearance check
-  sees: its connections only narrow in the stretch into a pad and otherwise stay open. Absent or
+  sees: its connections only narrow in the stretch into a pad and, within `neck_stub_max_um`, in a
+  short stub, and otherwise stay open. Absent or
   0: the width of the net class most nets belong to (on a tie, the narrower). On a signal board
   nearly every net is in that class; on a power board the wider supply and load classes are
   protected without any setting. Set it to a large value to allow any class to neck. The end
@@ -670,6 +674,16 @@ The GUI saves its settings to this file, router values included, and every later
   narrowed along the run`), both as warnings and in the result file (`narrowed_traces`,
   `wide_nets_left_open`). The stretch into pads (a trace every point of which lies within the
   neck-down distance of a pin of the net) is not listed. CLI: `--router.neck_max_class_width_um=<um>`.
+- **`neck_stub_max_um`**: The longest stub, in micrometres, that a net whose class is wider than
+  the signal width may route narrower than its class. A connection between two items of the net no
+  farther apart (edge to edge) than this, typically a pad and the via beside it that drops into a
+  plane, is retried at the neck width, and only toward the items within that reach. The route is kept
+  only when its narrowed copper is no longer than twice this limit (a wall between the two ends
+  makes a long way round); otherwise it is undone. A longer connection of a wide class stays open
+  as before. A stub of a millimetre at 0.15 mm into a plane
+  is normal practice, and it is not listed as `Narrowed trace:` (traces of a wide class no longer
+  than this are left out of that list). Default `1500`. `0` turns the exception off. CLI:
+  `--router.neck_stub_max_um=<um>`.
 - **`copper_to_edge_clearance_um`**: Clearance between copper and the board outline, in
   micrometers. Default `250`. The default is a guess: it leaves an outline clearance class the DSN
   sets untouched, and it never demands more than the closest pin already has, because a pin nearer

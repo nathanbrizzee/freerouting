@@ -204,7 +204,11 @@ public final class JobRunSupport {
     }
     Double maxClassWidthUm =
         job.routerSettings != null ? job.routerSettings.neckMaxClassWidthUm : null;
-    for (NetWidths.Narrowed narrowed : NetWidths.narrowed(job.board, maxClassWidthUm)) {
+    for (NetWidths.Narrowed narrowed :
+        NetWidths.narrowed(
+            job.board,
+            maxClassWidthUm,
+            job.routerSettings != null ? job.routerSettings.neckStubMaxUm : null)) {
       job.logWarning("Narrowed trace: " + narrowed);
     }
     for (String line : NetWidths.wideOpen(job.board, open, maxClassWidthUm)) {

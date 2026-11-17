@@ -136,6 +136,15 @@ public class RouterSettings implements Serializable, Cloneable {
   public Double neckMaxClassWidthUm;
 
   /**
+   * The longest stub, in micrometres, that a net whose class is wider than the signal width may
+   * route narrower than its class: a connection between two items of the net no farther apart than
+   * this, such as a pad and its via, retried at the neck width. Longer connections of a wide class
+   * stay open ({@link #neckMaxClassWidthUm}). 0 turns the exception off.
+   */
+  @SerializedName("neck_stub_max_um")
+  public Double neckStubMaxUm;
+
+  /**
    * Measure a pin's or via's copper (a circle, a pad polygon) where the search tree's octagons
    * overlap, in the clearance query, the via checks, via shoves and moves, and the clearance
    * checker, instead of refusing the pair on the octagons.
@@ -854,6 +863,7 @@ public class RouterSettings implements Serializable, Cloneable {
     result.planeAsObstacle = this.planeAsObstacle;
     result.neckWidthUm = this.neckWidthUm;
     result.neckMaxClassWidthUm = this.neckMaxClassWidthUm;
+    result.neckStubMaxUm = this.neckStubMaxUm;
     result.exactCopper = this.exactCopper;
     result.strictDrc = this.strictDrc;
     result.tracePullTightAccuracy = this.tracePullTightAccuracy;

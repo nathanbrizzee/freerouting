@@ -594,9 +594,23 @@ final class AutorouteConnectionRouter {
       return null;
     }
     // A class made wider than the signal width (usually for current) is not narrowed along the
-    // run: the connection stays open and the end report names it (NetWidths).
-    if (!NetWidths.mayNeckRun(router.board, routeNetNo, router.settings.neckMaxClassWidthUm)) {
-      return null;
+    // run: the connection stays open and the end report names it (NetWidths). A stub is the
+    // exception: a connection between items no farther apart than neck_stub_max_um, such as a pad
+    // and the via beside it, may neck, and only to the items within that reach.
+    boolean stubOnly =
+        !NetWidths.mayNeckRun(router.board, routeNetNo, router.settings.neckMaxClassWidthUm);
+    byte[] stubSnapshot = null;
+    int maxItemIdBeforeNeck = router.board.communication.idGenerator.maxGeneratedId();
+    if (stubOnly) {
+      routeDestSet =
+          NetWidths.withinStub(
+              router.board, routeStartSet, routeDestSet, router.settings.neckStubMaxUm);
+      if (routeDestSet.isEmpty()) {
+        return null;
+      }
+      // The ends are close, the path between them may not be (a wall in between): the board is
+      // restored when the narrowed copper of the route is longer than a stub.
+      stubSnapshot = router.board.serialize(false);
     }
 
     AutorouteControl neckControl =
@@ -631,6 +645,25 @@ final class AutorouteConnectionRouter {
     }
     if (neckResult.state != AutorouteAttemptState.ROUTED) {
       return planned ? neckResult : null;
+    }
+
+    if (stubOnly && stubSnapshot != null) {
+      double narrowedLength = 0;
+      for (Item item : router.board.getConnectableItems(routeNetNo)) {
+        if (item.getId() > maxItemIdBeforeNeck
+            && item instanceof Trace trace
+            && trace.getHalfWidth()
+                < router.board.rules.getTraceHalfWidth(routeNetNo, trace.getLayer())) {
+          narrowedLength += trace.getLength();
+        }
+      }
+      if (!NetWidths.isStub(router.board, narrowedLength, router.settings.neckStubMaxUm)) {
+        RoutingBoard restored = (RoutingBoard) BasicBoard.deserialize(stubSnapshot);
+        restored.clearanceBaseline = router.board.clearanceBaseline;
+        router.board = restored;
+        return new AutorouteAttemptResult(
+            AutorouteAttemptState.FAILED, "neck_stub: the narrowed route is longer than a stub");
+      }
     }
 
     router.neckedRouteNets.add(routeNetNo);
