@@ -10,6 +10,23 @@ This document covers how to build, test, and release Freerouting from source.
 - **Gradle 9.x** (or simply use the included `./gradlew` / `.\gradlew.bat` wrapper)
 - Internet connection (dependencies download automatically)
 
+### Setting up a new machine
+
+`scripts/setup/setup.py` checks these tools and installs what is missing on Windows 11 (winget) and
+Ubuntu/Debian (apt); macOS works through Homebrew on a best-effort basis. It needs only Python 3.8+:
+
+```bash
+python3 scripts/setup/setup.py --check-only   # report only (Windows: py scripts\setup\setup.py ...)
+python3 scripts/setup/setup.py                # install what is missing, install the git hooks, warm up Gradle
+python3 scripts/setup/setup.py --dry-run --platform linux   # print the commands it would run
+```
+
+It covers git, the GitHub CLI, a JDK 25 (Temurin; on Ubuntu from apt when the release has
+`openjdk-25-jdk`, else the Adoptium tarball under `~/.local/share/jdks/`), the Python packages for the
+hooks and the i18n scripts (`pre-commit`, `requests`), `pre-commit install`, and one run of
+`gradlew --version` so Gradle is downloaded before the first build. `--with-kicad` adds KiCad, which only the DSN
+export scripts need. It never edits shell profiles: where `JAVA_HOME` should be set it prints the line.
+
 ### Command-line builds
 
 Open a terminal in the repository root:

@@ -16,7 +16,8 @@ Open bug reports from the user's boards are rows in the roadmap's section 4 tabl
 
 ## Commands
 
-Java 25 and Gradle 9 (use the wrapper). Run from the repo root.
+Java 25 and Gradle 9 (use the wrapper). Run from the repo root. A new machine (Windows or Ubuntu) is set up with
+`python scripts/setup/setup.py` (see `docs/developer.md`, "Setting up a new machine").
 
 ```
 ./gradlew test                 # fast/default unit tests (excludes @Tag("slow"))
