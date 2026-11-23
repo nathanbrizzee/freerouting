@@ -6,8 +6,14 @@
 # the machine is busy. No -mt flag: since add21ca5e "-mt 0" turns the optimizer off, and the
 # set runs on defaults (optimizer on, CPU count - 1 threads), as earlier sets effectively did.
 set -euo pipefail
-export JAVA_HOME=${JAVA_HOME:-$HOME/.local/jdk-25}
-export PATH=$JAVA_HOME/bin:$PATH
+# Without JAVA_HOME, use the JDK that scripts/setup/setup.py unpacks on Linux, else the java on the PATH.
+if [ -z "${JAVA_HOME:-}" ] && [ -x "$HOME/.local/share/jdks/temurin-25/bin/java" ]; then
+  JAVA_HOME=$HOME/.local/share/jdks/temurin-25
+fi
+if [ -n "${JAVA_HOME:-}" ]; then
+  export JAVA_HOME
+  export PATH=$JAVA_HOME/bin:$PATH
+fi
 
 here=$(cd "$(dirname "$0")" && pwd)
 fixtures=${FIXTURES:-$here/../../../fixtures}
@@ -16,6 +22,7 @@ boards=("$@")
 if [ ${#boards[@]} -eq 0 ]; then
   boards=(Issue508-DAC2020_bm01 Issue508-DAC2020_bm05 Issue313-FastTest Issue143-rpi_splitter Issue070-Autorouter_FQ101_PCB_2022-05-13)
 fi
+read -r -a extra <<< "${EXTRA:-}"
 timeout=${TIMEOUT:-00:30:00}
 heap=${HEAP:-4g}
 out=$here/runs/$label
@@ -29,7 +36,7 @@ for b in "${boards[@]}"; do
   name=$(basename "$dsn" .dsn)
   start=$(date +%s.%N)
   cmd=(java -Xmx"$heap" -jar "$jar" -de "$dsn" -do "$out/$name.ses" --gui.enabled=false
-    --router.job_timeout="$timeout" --router.result_json="$out/$name.json" ${EXTRA:-})
+    --router.job_timeout="$timeout" --router.result_json="$out/$name.json" "${extra[@]}")
   if [ -x /usr/bin/time ]; then
     /usr/bin/time -o "$out/$name.time" -f "%U %S" "${cmd[@]}" > "$out/$name.log" 2>&1 || true
   else

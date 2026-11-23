@@ -21,7 +21,9 @@ What it covers:
   * Python packages: pre-commit (the repository hooks) and requests (scripts/i18n). The hooks are installed
     into the checkout with `pre-commit install`.
   * One warm-up of the Gradle wrapper (`gradlew --version`), so the first real build does not stall on downloads.
-  * Optional with --with-kicad: KiCad (scripts/benchmark/overhaul/export_dsn.py uses its bundled Python).
+  * Optional with --with-kicad: KiCad (scripts/benchmark/overhaul/export_dsn.py imports its pcbnew module). On
+    Ubuntu it comes from the KiCad project's PPA (ppa:kicad/kicad-10.0-releases), because Ubuntu's own
+    repositories carry an older series; the system `python3` then imports pcbnew.
 
 It does not install an IDE, Docker, Node or any Claude tooling, and it never edits shell profiles or the
 registry: where JAVA_HOME matters it prints the line to add.
@@ -52,6 +54,8 @@ TOOLS = [
 KICAD = ("KiCad", ("kicad-cli", "kicad"), "KiCad.KiCad", ["kicad"], "--cask kicad")
 PY_PACKAGES = [("pre-commit", "pre_commit"), ("requests", "requests")]
 
+KICAD_PPA = "ppa:kicad/kicad-10.0-releases"
+
 STATE = {"platform": None, "dry": False, "yes": False}
 
 
@@ -69,6 +73,17 @@ def is_linux():
 
 def is_mac():
     return plat() == "macos"
+
+
+def is_ubuntu():
+    """Ubuntu (not plain Debian), by /etc/os-release; a --dry-run on another host assumes Ubuntu."""
+    if STATE["dry"] and not sys.platform.startswith("linux"):
+        return True
+    try:
+        with open("/etc/os-release") as f:
+            return re.search(r"^ID(_LIKE)?=.*ubuntu", f.read(), re.M) is not None
+    except OSError:
+        return False
 
 
 def detect_platform():
@@ -118,6 +133,11 @@ def os_install(label, winget_id, apt, brew):
     if is_linux():
         if not STATE["dry"] and shutil.which("apt-get") is None:
             return False
+        if label.startswith("KiCad") and is_ubuntu():
+            # Ubuntu's own repositories carry an older KiCad; the project's PPA has the 10.x series
+            # (noble, 26.04 and 26.10 are published there).
+            run(sudo(["apt-get", "install", "-y", "software-properties-common"]))
+            run(sudo(["add-apt-repository", "-y", KICAD_PPA]))
         run(sudo(["apt-get", "update"]))
         return run(sudo(["apt-get", "install", "-y"] + apt))
     return False
